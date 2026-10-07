@@ -1,5 +1,5 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
-import { Overview } from "@/components/dashboard/Overview";
+import { AdminDashboard } from "@/components/dashboard/AdminDashboard";
 import { ROLE_HOME } from "@/lib/auth";
 
 export const Route = createFileRoute("/_app/admin")({
@@ -14,5 +14,5 @@ export const Route = createFileRoute("/_app/admin")({
       { property: "og:description", content: "Manage the HireHub platform." },
     ],
   }),
-  component: Overview,
+  component: AdminDashboard,
 });
