@@ -8,6 +8,13 @@
       "when": 1791364444322,
       "tag": "0000_hirehub_core_schema",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1791365441298,
+      "tag": "0001_signup_role_choice",
+      "breakpoints": true
     }
   ]
 }
