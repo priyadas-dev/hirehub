@@ -12,9 +12,9 @@ import { useAuth, type Role } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/auth")({
-  validateSearch: (s: Record<string, unknown>) => ({
-    redirect: typeof s.redirect === "string" ? s.redirect : undefined,
-    mode: s.mode === "signup" ? ("signup" as const) : undefined,
+  validateSearch: (s: Record<string, unknown>): { redirect?: string; mode?: "signup" } => ({
+    ...(typeof s["redirect"] === "string" ? { redirect: s["redirect"] } : {}),
+    ...(s["mode"] === "signup" ? { mode: "signup" as const } : {}),
   }),
   head: () => ({
     meta: [
@@ -43,7 +43,7 @@ function AuthPage() {
   const search = Route.useSearch();
   const [mode, setMode] = useState<"signin" | "signup">(search.mode === "signup" ? "signup" : "signin");
   const [role, setRole] = useState<Role>("seeker");
-  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [errors, setErrors] = useState<Partial<Record<string, string>>>({});
   const [busy, setBusy] = useState(false);
   const { signIn } = useAuth();
   const navigate = useNavigate();
@@ -118,9 +118,9 @@ function AuthPage() {
               </div>
             </fieldset>
 
-            {mode === "signup" && <Field id="name" label="Full name" autoComplete="name" error={errors.name} />}
-            <Field id="email" label="Email" type="email" autoComplete="email" error={errors.email} />
-            <Field id="password" label="Password" type="password" autoComplete={mode === "signin" ? "current-password" : "new-password"} error={errors.password} />
+            {mode === "signup" && <Field id="name" label="Full name" autoComplete="name" error={errors["name"]} />}
+            <Field id="email" label="Email" type="email" autoComplete="email" error={errors["email"]} />
+            <Field id="password" label="Password" type="password" autoComplete={mode === "signin" ? "current-password" : "new-password"} error={errors["password"]} />
 
             <Button type="submit" variant="signal" size="lg" className="w-full" disabled={busy}>
               {busy && <Loader2 className="animate-spin" />}
@@ -151,7 +151,7 @@ function AuthPage() {
   );
 }
 
-function Field({ id, label, error, ...props }: { id: string; label: string; error?: string } & React.InputHTMLAttributes<HTMLInputElement>) {
+function Field({ id, label, error, ...props }: { id: string; label: string; error?: string | undefined } & React.InputHTMLAttributes<HTMLInputElement>) {
   return (
     <div className="space-y-1.5">
       <Label htmlFor={id}>{label}</Label>
