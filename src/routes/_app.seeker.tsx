@@ -1,5 +1,5 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
-import { Overview } from "@/components/dashboard/Overview";
+import { SeekerDashboard } from "@/components/dashboard/SeekerDashboard";
 import { ROLE_HOME } from "@/lib/auth";
 
 export const Route = createFileRoute("/_app/seeker")({
@@ -14,5 +14,5 @@ export const Route = createFileRoute("/_app/seeker")({
       { property: "og:description", content: "Track your job applications on HireHub." },
     ],
   }),
-  component: Overview,
+  component: SeekerDashboard,
 });

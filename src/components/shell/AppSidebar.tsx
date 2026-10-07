@@ -46,7 +46,7 @@ export function AppSidebar({ role }: { role: Role }) {
       <SidebarNav role={role} />
       <div className="mt-auto rounded-xl border bg-card p-4 shadow-xs">
         <p className="text-sm font-medium">Your journey starts here</p>
-        <p className="mt-1 text-xs text-muted-foreground">Jobs, applications and insights will appear in this workspace.</p>
+        <p className="mt-1 text-xs text-muted-foreground">Items marked Soon open in upcoming releases.</p>
       </div>
     </aside>
   );
