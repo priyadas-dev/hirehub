@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Logo } from "@/components/brand/Logo";
-import { ROLE_LABEL, useAuth, type SessionUser } from "@/lib/auth";
+import { ROLE_HOME, ROLE_LABEL, useAuth, type SessionUser } from "@/lib/auth";
 import { SidebarNav } from "./AppSidebar";
 
 function initials(name: string) {
@@ -47,8 +47,8 @@ function UserMenu({ user }: { user: SessionUser }) {
         <DropdownMenuItem onSelect={() => toast("Settings are coming soon")}><Settings /> Settings</DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem
-          onSelect={() => {
-            signOut();
+          onSelect={async () => {
+            await signOut();
             toast.success("Signed out");
             navigate({ to: "/auth", replace: true });
           }}
@@ -72,7 +72,7 @@ export function AppHeader({ user }: { user: SessionUser }) {
         </SheetTrigger>
         <SheetContent side="left" className="w-72 bg-sidebar p-5">
           <SheetTitle className="sr-only">Navigation</SheetTitle>
-          <Logo to="/dashboard" className="mb-8 px-2" />
+          <Logo to={ROLE_HOME[user.role]} className="mb-8 px-2" />
           <SidebarNav role={user.role} onNavigate={() => setOpen(false)} />
         </SheetContent>
       </Sheet>

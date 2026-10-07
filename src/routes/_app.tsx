@@ -5,16 +5,18 @@ import { readSession, useAuth } from "@/lib/auth";
 
 export const Route = createFileRoute("/_app")({
   ssr: false,
-  beforeLoad: ({ location }) => {
-    if (!readSession()) throw redirect({ to: "/auth", search: { redirect: location.href } });
+  beforeLoad: async ({ location }) => {
+    const session = await readSession();
+    if (!session) throw redirect({ to: "/auth", search: { redirect: location.href } });
+    return { session };
   },
   component: AppLayout,
 });
 
 function AppLayout() {
   const { user } = useAuth();
-  const u = user ?? readSession();
-  if (!u) return null;
+  const { session } = Route.useRouteContext();
+  const u = user ?? session;
   return (
     <div className="flex min-h-screen bg-background">
       <AppSidebar role={u.role} />
