@@ -12,7 +12,10 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as AuthRouteImport } from './routes/auth'
+import { Route as AppAdminRouteImport } from './routes/_app.admin'
 import { Route as AppDashboardRouteImport } from './routes/_app.dashboard'
+import { Route as AppRecruiterRouteImport } from './routes/_app.recruiter'
+import { Route as AppSeekerRouteImport } from './routes/_app.seeker'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -28,35 +31,67 @@ const AuthRoute = AuthRouteImport.update({
   path: '/auth',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AppAdminRoute = AppAdminRouteImport.update({
+  id: '/admin',
+  path: '/admin',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppDashboardRoute = AppDashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppRecruiterRoute = AppRecruiterRouteImport.update({
+  id: '/recruiter',
+  path: '/recruiter',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppSeekerRoute = AppSeekerRouteImport.update({
+  id: '/seeker',
+  path: '/seeker',
   getParentRoute: () => AppRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/admin': typeof AppAdminRoute
   '/dashboard': typeof AppDashboardRoute
+  '/recruiter': typeof AppRecruiterRoute
+  '/seeker': typeof AppSeekerRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/admin': typeof AppAdminRoute
   '/dashboard': typeof AppDashboardRoute
+  '/recruiter': typeof AppRecruiterRoute
+  '/seeker': typeof AppSeekerRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/_app': typeof AppRouteWithChildren
   '/auth': typeof AuthRoute
+  '/_app/admin': typeof AppAdminRoute
   '/_app/dashboard': typeof AppDashboardRoute
+  '/_app/recruiter': typeof AppRecruiterRoute
+  '/_app/seeker': typeof AppSeekerRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/auth' | '/dashboard'
+  fullPaths: '/' | '/auth' | '/admin' | '/dashboard' | '/recruiter' | '/seeker'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/auth' | '/dashboard'
-  id: '__root__' | '/' | '/_app' | '/auth' | '/_app/dashboard'
+  to: '/' | '/auth' | '/admin' | '/dashboard' | '/recruiter' | '/seeker'
+  id:
+    | '__root__'
+    | '/'
+    | '/_app'
+    | '/auth'
+    | '/_app/admin'
+    | '/_app/dashboard'
+    | '/_app/recruiter'
+    | '/_app/seeker'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -88,6 +123,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_app/admin': {
+      id: '/_app/admin'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof AppAdminRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/dashboard': {
       id: '/_app/dashboard'
       path: '/dashboard'
@@ -95,15 +137,35 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppDashboardRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/recruiter': {
+      id: '/_app/recruiter'
+      path: '/recruiter'
+      fullPath: '/recruiter'
+      preLoaderRoute: typeof AppRecruiterRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/seeker': {
+      id: '/_app/seeker'
+      path: '/seeker'
+      fullPath: '/seeker'
+      preLoaderRoute: typeof AppSeekerRouteImport
+      parentRoute: typeof AppRoute
+    }
   }
 }
 
 interface AppRouteChildren {
+  AppAdminRoute: typeof AppAdminRoute
   AppDashboardRoute: typeof AppDashboardRoute
+  AppRecruiterRoute: typeof AppRecruiterRoute
+  AppSeekerRoute: typeof AppSeekerRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
+  AppAdminRoute: AppAdminRoute,
   AppDashboardRoute: AppDashboardRoute,
+  AppRecruiterRoute: AppRecruiterRoute,
+  AppSeekerRoute: AppSeekerRoute,
 }
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)

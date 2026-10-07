@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { ArrowLeft, Briefcase, Loader2, Search, ShieldCheck } from "lucide-react";
+import { ArrowLeft, Briefcase, Loader2, MailCheck, Search } from "lucide-react";
 import { toast } from "sonner";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
@@ -8,7 +8,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Logo } from "@/components/brand/Logo";
 import { StatusTracker } from "@/components/status/StatusTracker";
-import { useAuth, type Role } from "@/lib/auth";
+import { ROLE_HOME, useAuth } from "@/lib/auth";
+import { supabase } from "@/integrations/supabase/client";
+import { lovable } from "@/integrations/lovable/index";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/auth")({
@@ -27,10 +29,10 @@ export const Route = createFileRoute("/auth")({
   component: AuthPage,
 });
 
-const ROLES: { id: Role; label: string; desc: string; icon: typeof Search }[] = [
-  { id: "seeker", label: "Job Seeker", desc: "Find and apply to roles", icon: Search },
+type SignupRole = "job_seeker" | "recruiter";
+const ROLES: { id: SignupRole; label: string; desc: string; icon: typeof Search }[] = [
+  { id: "job_seeker", label: "Job Seeker", desc: "Find and apply to roles", icon: Search },
   { id: "recruiter", label: "Recruiter", desc: "Post jobs, hire talent", icon: Briefcase },
-  { id: "admin", label: "Admin", desc: "Manage the platform", icon: ShieldCheck },
 ];
 
 const schema = z.object({
@@ -42,18 +44,34 @@ const schema = z.object({
 function AuthPage() {
   const search = Route.useSearch();
   const [mode, setMode] = useState<"signin" | "signup">(search.mode === "signup" ? "signup" : "signin");
-  const [role, setRole] = useState<Role>("seeker");
+  const [role, setRole] = useState<SignupRole>("job_seeker");
   const [errors, setErrors] = useState<Partial<Record<string, string>>>({});
-  const [busy, setBusy] = useState(false);
-  const { signIn } = useAuth();
+  const [busy, setBusy] = useState<"form" | "google" | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const { user, refresh } = useAuth();
   const navigate = useNavigate();
 
-  function onSubmit(e: React.FormEvent<HTMLFormElement>) {
+  function goHome(r: keyof typeof ROLE_HOME) {
+    const dest = search.redirect;
+    if (dest && dest.startsWith("/") && !dest.startsWith("//") && !dest.startsWith("/auth")) {
+      window.location.assign(dest);
+      return;
+    }
+    navigate({ to: ROLE_HOME[r], replace: true });
+  }
+
+  // Already signed in (including after returning from Google) → go to role area.
+  useEffect(() => {
+    if (user) goHome(user.role);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
+
+  async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
     const email = String(fd.get("email") ?? "");
     const parsed = schema.safeParse({
-      name: mode === "signup" ? fd.get("name") : email.split("@")[0] || "Member",
+      name: mode === "signup" ? fd.get("name") : "Member",
       email,
       password: fd.get("password"),
     });
@@ -62,13 +80,56 @@ function AuthPage() {
       return;
     }
     setErrors({});
-    setBusy(true);
-    setTimeout(() => {
-      const raw = parsed.data.name;
-      signIn({ name: raw.charAt(0).toUpperCase() + raw.slice(1), email: parsed.data.email, role });
+    setNotice(null);
+    setBusy("form");
+    try {
+      if (mode === "signup") {
+        const { data, error } = await supabase.auth.signUp({
+          email: parsed.data.email,
+          password: parsed.data.password,
+          options: {
+            emailRedirectTo: `${window.location.origin}/auth`,
+            data: { full_name: parsed.data.name, requested_role: role },
+          },
+        });
+        if (error) throw error;
+        if (data.user && data.user.identities?.length === 0) {
+          throw new Error("User already registered");
+        }
+        if (!data.session) {
+          setNotice(`We sent a confirmation link to ${parsed.data.email}. Open it to activate your account, then sign in.`);
+          toast.success("Check your email to confirm your account");
+          setMode("signin");
+          return;
+        }
+      } else {
+        const { error } = await supabase.auth.signInWithPassword({ email: parsed.data.email, password: parsed.data.password });
+        if (error) throw error;
+      }
+      const s = await refresh();
+      if (!s) throw new Error("Could not load your profile");
       toast.success(mode === "signup" ? "Welcome to HireHub" : "Welcome back");
-      navigate({ to: "/dashboard", replace: true });
-    }, 700);
+      goHome(s.role);
+    } catch (err) {
+      toast.error(friendly(err));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function onGoogle() {
+    setBusy("google");
+    try {
+      const result = await lovable.auth.signInWithOAuth("google", { redirect_uri: `${window.location.origin}/auth` });
+      if (result.error) throw result.error;
+      if (result.redirected) return;
+      const s = await refresh();
+      if (s) goHome(s.role);
+    } catch (err) {
+      toast.error("Google sign-in didn't work", { description: friendly(err) });
+    } finally {
+      setBusy(null);
+    }
   }
 
   return (
@@ -100,10 +161,26 @@ function AuthPage() {
             ))}
           </div>
 
-          <form onSubmit={onSubmit} className="mt-6 space-y-5" noValidate>
+          {notice && (
+            <div role="status" className="mt-6 flex gap-3 rounded-xl border border-signal/30 bg-signal-soft p-4 text-sm">
+              <MailCheck className="mt-0.5 size-4 shrink-0 text-signal" />
+              <p>{notice}</p>
+            </div>
+          )}
+
+          <Button type="button" variant="outline" size="lg" className="mt-6 w-full bg-card" onClick={onGoogle} disabled={!!busy}>
+            {busy === "google" ? <Loader2 className="animate-spin" /> : <GoogleIcon />}
+            Continue with Google
+          </Button>
+          <div className="my-6 flex items-center gap-3 text-xs text-muted-foreground">
+            <span className="h-px flex-1 bg-border" /> or with email <span className="h-px flex-1 bg-border" />
+          </div>
+
+          <form onSubmit={onSubmit} className="space-y-5" noValidate>
+            {mode === "signup" && (
             <fieldset>
               <legend className="mb-2 text-sm font-medium">I am a…</legend>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-2 gap-2">
                 {ROLES.map((r) => {
                   const Icon = r.icon;
                   const active = role === r.id;
@@ -117,13 +194,14 @@ function AuthPage() {
                 })}
               </div>
             </fieldset>
+            )}
 
             {mode === "signup" && <Field id="name" label="Full name" autoComplete="name" error={errors["name"]} />}
             <Field id="email" label="Email" type="email" autoComplete="email" error={errors["email"]} />
             <Field id="password" label="Password" type="password" autoComplete={mode === "signin" ? "current-password" : "new-password"} error={errors["password"]} />
 
-            <Button type="submit" variant="signal" size="lg" className="w-full" disabled={busy}>
-              {busy && <Loader2 className="animate-spin" />}
+            <Button type="submit" variant="signal" size="lg" className="w-full" disabled={!!busy}>
+              {busy === "form" && <Loader2 className="animate-spin" />}
               {mode === "signin" ? "Sign in" : "Create account"}
             </Button>
           </form>
@@ -158,5 +236,28 @@ function Field({ id, label, error, ...props }: { id: string; label: string; erro
       <Input id={id} name={id} aria-invalid={!!error} aria-describedby={error ? `${id}-err` : undefined} className="h-11 rounded-lg bg-card focus-visible:ring-signal/30" {...props} />
       {error && <p id={`${id}-err`} className="text-xs text-destructive">{error}</p>}
     </div>
+  );
+}
+
+function friendly(err: unknown): string {
+  const msg = err instanceof Error ? err.message : typeof err === "object" && err && "message" in err ? String((err as { message: unknown }).message) : "";
+  const m = msg.toLowerCase();
+  if (m.includes("invalid login")) return "That email and password don't match. Please try again.";
+  if (m.includes("already registered") || m.includes("already been registered")) return "An account with this email already exists. Try signing in instead.";
+  if (m.includes("email not confirmed")) return "Please confirm your email first — check your inbox for the link.";
+  if (m.includes("password") && (m.includes("weak") || m.includes("pwned") || m.includes("least") || m.includes("characters"))) return "That password is too weak. Use at least 8 characters and avoid common passwords.";
+  if (m.includes("rate limit") || m.includes("too many")) return "Too many attempts. Please wait a minute and try again.";
+  if (m.includes("fetch") || m.includes("network")) return "Can't reach the server. Check your connection and try again.";
+  return msg || "Something went wrong. Please try again.";
+}
+
+function GoogleIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="size-4" aria-hidden>
+      <path fill="#4285F4" d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.4h6.5a5.6 5.6 0 0 1-2.4 3.6v3h3.9c2.2-2.1 3.5-5.1 3.5-8.7z" />
+      <path fill="#34A853" d="M12 24c3.2 0 6-1.1 8-2.9l-3.9-3c-1.1.7-2.5 1.2-4.1 1.2-3.1 0-5.8-2.1-6.7-5H1.3v3.1A12 12 0 0 0 12 24z" />
+      <path fill="#FBBC05" d="M5.3 14.3a7.2 7.2 0 0 1 0-4.6V6.6H1.3a12 12 0 0 0 0 10.8l4-3.1z" />
+      <path fill="#EA4335" d="M12 4.8c1.8 0 3.3.6 4.6 1.8l3.4-3.4A12 12 0 0 0 1.3 6.6l4 3.1c.9-2.9 3.6-4.9 6.7-4.9z" />
+    </svg>
   );
 }
