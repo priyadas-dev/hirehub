@@ -18,7 +18,7 @@ export function LogoMark({ className }: { className?: string }) {
   );
 }
 
-export function Logo({ to = "/", className }: { to?: "/" | "/dashboard"; className?: string }) {
+export function Logo({ to = "/", className }: { to?: string; className?: string }) {
   return (
     <Link to={to} className={cn("inline-flex items-center gap-2.5 rounded-md", className)} aria-label="HireHub home">
       <LogoMark />
