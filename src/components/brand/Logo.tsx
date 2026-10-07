@@ -1,0 +1,28 @@
+import { Link } from "@tanstack/react-router";
+import { cn } from "@/lib/utils";
+
+export function LogoMark({ className }: { className?: string }) {
+  return (
+    <span
+      aria-hidden
+      className={cn(
+        "relative inline-flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground",
+        className,
+      )}
+    >
+      <svg viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
+        <path d="M6 4v16M18 4v16M6 12h12" />
+      </svg>
+      <span className="absolute -right-0.5 -top-0.5 size-2.5 rounded-full border-2 border-background bg-signal" />
+    </span>
+  );
+}
+
+export function Logo({ to = "/", className }: { to?: "/" | "/dashboard"; className?: string }) {
+  return (
+    <Link to={to} className={cn("inline-flex items-center gap-2.5 rounded-md", className)} aria-label="HireHub home">
+      <LogoMark />
+      <span className="text-[17px] font-semibold tracking-tight">HireHub</span>
+    </Link>
+  );
+}
