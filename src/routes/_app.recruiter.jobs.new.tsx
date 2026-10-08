@@ -131,15 +131,20 @@ function PostJobPage() {
       <PageHeader
         eyebrow="Recruiter"
         title="Post a job"
-        description="New listings start as pending until an admin approves them."
+        description="New listings start as pending until an admin approves them. Seekers only see approved roles."
         actions={
-          <Button variant="outline" asChild>
-            <Link to="/recruiter/jobs">Back to jobs</Link>
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" asChild>
+              <Link to="/recruiter/company">Company</Link>
+            </Button>
+            <Button variant="outline" asChild>
+              <Link to="/recruiter/jobs">My jobs</Link>
+            </Button>
+          </div>
         }
       />
 
-      <form className="surface-card max-w-xl space-y-5 p-6" onSubmit={form.handleSubmit((v) => post.mutate(v))}>
+      <form className="surface-card max-w-xl space-y-5 p-5 sm:p-6" onSubmit={form.handleSubmit((v) => post.mutate(v))}>
         <div className="space-y-2">
           <Label>Company</Label>
           <Select value={form.watch("company_id")} onValueChange={(v) => form.setValue("company_id", v, { shouldValidate: true })}>

@@ -1,10 +1,10 @@
 import { useEffect } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Building2 } from "lucide-react";
+import { Building2, PlusSquare } from "lucide-react";
 import { toast } from "sonner";
 import { CardSkeleton, EmptyState, ErrorState, PageHeader } from "@/components/feedback/States";
 import { Button } from "@/components/ui/button";
@@ -80,7 +80,11 @@ function CompanyPage() {
         website: values.website?.trim() || null,
       };
       if (company.data?.id) {
-        const { error } = await supabase.from("companies").update(payload).eq("id", company.data.id).eq("recruiter_id", id);
+        const { error } = await supabase
+          .from("companies")
+          .update(payload)
+          .eq("id", company.data.id)
+          .eq("recruiter_id", id);
         if (error) throw error;
       } else {
         const { error } = await supabase.from("companies").insert({ ...payload, recruiter_id: id });
@@ -101,6 +105,7 @@ function CompanyPage() {
   if (company.isError) return <ErrorState onRetry={() => void company.refetch()} />;
 
   const status = company.data?.status;
+  const exists = !!company.data;
 
   return (
     <div className="space-y-8">
@@ -108,18 +113,42 @@ function CompanyPage() {
         eyebrow="Recruiter"
         title="Company profile"
         description="Set up your company before posting jobs. New companies wait for admin approval."
+        actions={
+          exists ? (
+            <Button variant="signal" asChild>
+              <Link to="/recruiter/jobs/new">
+                <PlusSquare /> Post a job
+              </Link>
+            </Button>
+          ) : undefined
+        }
       />
 
-      {!company.data && (
+      {!exists && (
         <EmptyState
           icon={Building2}
           title="No company yet"
-          description="Add your company details below. You can post jobs once the profile is saved."
+          description="Add your company details below. After saving, you can post jobs for admin approval."
           className="py-8"
         />
       )}
 
-      <form className="surface-card max-w-xl space-y-5 p-6" onSubmit={form.handleSubmit((v) => save.mutate(v))}>
+      {exists && status === "pending" && (
+        <div className="rounded-2xl border border-status-interview/30 bg-status-interview-soft/30 px-4 py-3 text-sm sm:px-5">
+          Your company is pending admin approval. You can still post jobs — they will also wait for review.
+        </div>
+      )}
+
+      {exists && status === "approved" && (
+        <div className="rounded-2xl border border-status-hired/30 bg-status-hired-soft/40 px-4 py-3 text-sm sm:px-5">
+          Company approved. Post roles and move applicants through Applied → Shortlisted → Interview → Hired.
+        </div>
+      )}
+
+      <form
+        className="surface-card max-w-xl space-y-5 p-5 sm:p-6"
+        onSubmit={form.handleSubmit((v) => save.mutate(v))}
+      >
         {status && (
           <p className="text-sm text-muted-foreground">
             Status:{" "}
@@ -145,9 +174,16 @@ function CompanyPage() {
             <p className="text-xs text-destructive">{form.formState.errors.website.message}</p>
           )}
         </div>
-        <Button type="submit" variant="signal" disabled={save.isPending}>
-          {save.isPending ? "Saving…" : company.data ? "Save changes" : "Create company"}
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button type="submit" variant="signal" disabled={save.isPending}>
+            {save.isPending ? "Saving…" : exists ? "Save changes" : "Create company"}
+          </Button>
+          {exists && (
+            <Button type="button" variant="outline" asChild>
+              <Link to="/recruiter/jobs">My job posts</Link>
+            </Button>
+          )}
+        </div>
       </form>
     </div>
   );
