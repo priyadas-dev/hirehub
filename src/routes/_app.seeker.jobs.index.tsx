@@ -56,10 +56,10 @@ function BrowseJobsPage() {
     <div className="space-y-8">
       <PageHeader eyebrow="Job Seeker" title="Browse jobs" description="Only admin-approved roles are listed. Open a job to apply." />
 
-      <div className="flex flex-col gap-3 sm:flex-row">
+      <div className="flex flex-col gap-3 rounded-2xl border bg-card/60 p-3 shadow-xs backdrop-blur-sm sm:flex-row sm:items-center sm:p-3.5">
         <div className="relative flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input className="pl-9" placeholder="Search title or company" value={q} onChange={(e) => setQ(e.target.value)} />
+          <Input className="border-0 bg-transparent pl-9 shadow-none focus-visible:ring-0" placeholder="Search title or company" value={q} onChange={(e) => setQ(e.target.value)} />
         </div>
         <Input className="sm:w-48" placeholder="Location" value={location} onChange={(e) => setLocation(e.target.value)} />
         <Select value={jobType} onValueChange={(v) => setJobType(v as JobType | "all")}>
@@ -78,26 +78,34 @@ function BrowseJobsPage() {
       </div>
 
       {jobs.isLoading ? (
-        <CardSkeleton rows={4} />
+        <div className="grid gap-4 sm:grid-cols-2">
+          <CardSkeleton rows={3} />
+          <CardSkeleton rows={3} />
+        </div>
       ) : jobs.isError ? (
         <ErrorState onRetry={() => void jobs.refetch()} />
       ) : filtered.length ? (
-        <ul className="grid gap-4 sm:grid-cols-2">
+        <ul className="grid stagger-children gap-4 sm:grid-cols-2">
           {filtered.map((j) => (
-            <li key={j.id} className="surface-card interactive-card flex flex-col gap-3 p-5">
-              <div>
-                <h2 className="font-semibold">{j.title}</h2>
-                <p className="text-sm text-muted-foreground">{j.companies?.name ?? "Company"}</p>
+            <li key={j.id} className="surface-card interactive-card group flex flex-col gap-4 p-5 sm:p-6">
+              <div className="flex items-start gap-3">
+                <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-signal-soft text-signal ring-1 ring-signal/10 transition-transform duration-300 group-hover:scale-105">
+                  <Briefcase className="size-4" />
+                </div>
+                <div className="min-w-0">
+                  <h2 className="truncate font-semibold tracking-tight">{j.title}</h2>
+                  <p className="mt-0.5 truncate text-sm text-muted-foreground">{j.companies?.name ?? "Company"}</p>
+                </div>
               </div>
               <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-                <span className="inline-flex items-center gap-1">
+                <span className="inline-flex items-center gap-1 rounded-full border bg-surface/80 px-2 py-0.5">
                   <MapPin className="size-3" /> {j.location ?? "Remote"}
                 </span>
-                <span className="rounded-full border px-2 py-0.5">{JOB_TYPE_LABEL[j.job_type]}</span>
-                {j.salary_range && <span>{j.salary_range}</span>}
-                <span>Posted {fmtDate(j.created_at)}</span>
+                <span className="rounded-full border bg-surface/80 px-2 py-0.5">{JOB_TYPE_LABEL[j.job_type]}</span>
+                {j.salary_range && <span className="rounded-full border bg-surface/80 px-2 py-0.5">{j.salary_range}</span>}
+                <span className="rounded-full border bg-surface/80 px-2 py-0.5">Posted {fmtDate(j.created_at)}</span>
               </div>
-              <Button asChild size="sm" variant="outline" className="mt-auto w-fit">
+              <Button asChild size="sm" variant="outline" className="mt-auto w-fit transition-colors group-hover:border-signal/40 group-hover:text-signal">
                 <Link to="/seeker/jobs/$jobId" params={{ jobId: j.id }}>
                   View & apply
                 </Link>

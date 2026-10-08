@@ -85,16 +85,16 @@ function ApplicationDetailPage() {
         actions={<StatusBadge status={status} />}
       />
 
-      <section className="surface-card space-y-6 p-6 sm:p-8">
+      <section className="surface-card space-y-6 p-5 sm:p-8">
         <div>
-          <h2 className="text-lg font-semibold">Status tracker</h2>
-          <p className="text-sm text-muted-foreground">Follow your progress through the hiring journey.</p>
+          <h2 className="text-lg font-semibold tracking-tight">Status tracker</h2>
+          <p className="mt-0.5 text-sm text-muted-foreground">Follow your progress through the hiring journey.</p>
         </div>
         <StatusTracker status={status} className="mx-auto max-w-2xl" />
       </section>
 
-      <section className="surface-card space-y-4 p-6">
-        <h2 className="text-lg font-semibold">Your submission</h2>
+      <section className="surface-card space-y-4 p-5 sm:p-6">
+        <h2 className="text-lg font-semibold tracking-tight">Your submission</h2>
         <div className="space-y-2 text-sm">
           <p className="font-medium">Cover note</p>
           <p className="whitespace-pre-wrap text-muted-foreground">{a.cover_note || "No cover note."}</p>

@@ -45,12 +45,13 @@ export function RecruiterDashboard() {
 
   return (
     <div className="space-y-10">
-      <header className="relative overflow-hidden rounded-2xl border bg-status-interview-soft/60 p-6 sm:p-8">
-        <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+      <header className="relative overflow-hidden rounded-2xl border bg-status-interview-soft/60 p-5 sm:p-8">
+        <div className="pointer-events-none absolute -right-10 -top-10 size-40 rounded-full bg-status-interview/15 blur-3xl" aria-hidden />
+        <div className="relative flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <p className="text-xs font-medium uppercase tracking-[0.14em] text-status-interview">Recruiter workspace</p>
-            <h1 className="mt-2 font-display text-3xl sm:text-4xl">Welcome back, {user?.name.split(" ")[0] ?? "there"}.</h1>
-            <p className="mt-2 max-w-lg text-sm text-muted-foreground">Post roles, review applicants and move great people forward.</p>
+            <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-status-interview sm:text-xs">Recruiter workspace</p>
+            <h1 className="mt-2 font-display text-[1.85rem] leading-tight tracking-tight sm:text-4xl">Welcome back, {user?.name.split(" ")[0] ?? "there"}.</h1>
+            <p className="mt-2 max-w-lg text-sm leading-relaxed text-muted-foreground">Post roles, review applicants and move great people forward.</p>
           </div>
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" size="lg" asChild>
@@ -66,7 +67,7 @@ export function RecruiterDashboard() {
         </div>
       </header>
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid stagger-children gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Link to="/recruiter/jobs" className="block rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
           <StatCard label="Active jobs" value={c?.active} icon={Briefcase} loading={counts.isLoading} />
         </Link>

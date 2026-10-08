@@ -48,12 +48,12 @@ function MyApplicationsPage() {
       ) : apps.isError ? (
         <ErrorState onRetry={() => void apps.refetch()} />
       ) : apps.data?.length ? (
-        <ul className="surface-card divide-y">
+        <ul className="surface-card divide-y overflow-hidden">
           {apps.data.map((a) => (
-            <li key={a.id} className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <li key={a.id} className="flex flex-col gap-3 px-5 py-4 transition-colors hover:bg-muted/35 sm:flex-row sm:items-center sm:justify-between">
               <div className="min-w-0">
-                <p className="truncate font-medium">{a.jobs?.title ?? "Job"}</p>
-                <p className="text-xs text-muted-foreground">
+                <p className="truncate font-medium tracking-tight">{a.jobs?.title ?? "Job"}</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
                   {a.jobs?.companies?.name ?? "Company"} · Applied {fmtDate(a.created_at)}
                 </p>
               </div>

@@ -23,20 +23,34 @@ export function StatCard({ label, value, icon: Icon, hint, loading, tone = "sign
   tone?: "signal" | "shortlisted" | "interview" | "hired" | "applied";
 }) {
   const toneCls = {
-    signal: "bg-signal-soft text-signal",
-    shortlisted: "bg-status-shortlisted-soft text-status-shortlisted",
-    interview: "bg-status-interview-soft text-status-interview",
-    hired: "bg-status-hired-soft text-status-hired",
-    applied: "bg-status-applied-soft text-status-applied",
+    signal: "bg-signal-soft text-signal ring-signal/10",
+    shortlisted: "bg-status-shortlisted-soft text-status-shortlisted ring-status-shortlisted/10",
+    interview: "bg-status-interview-soft text-status-interview ring-status-interview/10",
+    hired: "bg-status-hired-soft text-status-hired ring-status-hired/10",
+    applied: "bg-status-applied-soft text-status-applied ring-status-applied/10",
+  }[tone];
+  const glowCls = {
+    signal: "bg-signal/20",
+    shortlisted: "bg-status-shortlisted/25",
+    interview: "bg-status-interview/20",
+    hired: "bg-status-hired/25",
+    applied: "bg-status-applied/20",
   }[tone];
   return (
-    <div className="surface-card interactive-card p-5">
-      <div className="flex items-center justify-between">
-        <span className="text-sm text-muted-foreground">{label}</span>
-        <span className={cn("flex size-8 items-center justify-center rounded-lg", toneCls)}><Icon className="size-4" /></span>
+    <div className="surface-card interactive-card group relative overflow-hidden p-5 sm:p-6">
+      <div className={cn("pointer-events-none absolute -right-6 -top-6 size-24 rounded-full opacity-50 blur-2xl transition-opacity group-hover:opacity-80", glowCls)} aria-hidden />
+      <div className="relative flex items-center justify-between gap-3">
+        <span className="text-sm font-medium text-muted-foreground">{label}</span>
+        <span className={cn("flex size-9 items-center justify-center rounded-xl ring-1 transition-transform duration-300 group-hover:scale-105", toneCls)}>
+          <Icon className="size-4" />
+        </span>
       </div>
-      {loading ? <Skeleton className="mt-3 h-10 w-16" /> : <p className="mt-3 font-display text-4xl tabular-nums">{value ?? 0}</p>}
-      {hint && <p className="mt-1 text-xs text-muted-foreground">{hint}</p>}
+      {loading ? (
+        <Skeleton className="mt-4 h-10 w-16" />
+      ) : (
+        <p className="mt-4 font-display text-4xl tabular-nums tracking-tight sm:text-[2.75rem]">{value ?? 0}</p>
+      )}
+      {hint && <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">{hint}</p>}
     </div>
   );
 }
@@ -47,9 +61,9 @@ export function Section({ title, description, action, children, className }: {
   return (
     <section className={cn("space-y-4", className)}>
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-semibold">{title}</h2>
-          {description && <p className="text-sm text-muted-foreground">{description}</p>}
+        <div className="min-w-0">
+          <h2 className="text-lg font-semibold tracking-tight">{title}</h2>
+          {description && <p className="mt-0.5 text-sm text-muted-foreground">{description}</p>}
         </div>
         {action}
       </div>

@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ArrowRight, Briefcase, Search, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Logo } from "@/components/brand/Logo";
+import { Logo, LogoMark } from "@/components/brand/Logo";
 import { StatusTracker } from "@/components/status/StatusTracker";
 import { StatusBadge } from "@/components/status/StatusBadge";
 
@@ -25,59 +25,91 @@ const ROLES = [
 
 function Landing() {
   return (
-    <div className="min-h-screen">
-      <header className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
-        <Logo />
-        <nav className="flex items-center gap-2">
-          <Button variant="ghost" asChild><Link to="/auth">Sign in</Link></Button>
-          <Button asChild><Link to="/auth" search={{ mode: "signup" }}>Get started</Link></Button>
-        </nav>
+    <div className="min-h-screen overflow-x-hidden">
+      <header className="sticky top-0 z-40 border-b border-border/60 bg-background/80 backdrop-blur-md">
+        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
+          <Logo />
+          <nav className="flex items-center gap-1.5 sm:gap-2">
+            <Button variant="ghost" asChild>
+              <Link to="/auth">Sign in</Link>
+            </Button>
+            <Button asChild>
+              <Link to="/auth" search={{ mode: "signup" }}>Get started</Link>
+            </Button>
+          </nav>
+        </div>
       </header>
 
       <section className="relative overflow-hidden">
         <div className="absolute inset-0 bg-grid" aria-hidden />
         <div className="absolute inset-0 bg-hero" aria-hidden />
-        <div className="relative mx-auto max-w-6xl px-4 pb-20 pt-16 text-center sm:px-6 sm:pt-24">
-          <span className="inline-flex animate-fade-up items-center gap-2 rounded-full border bg-card px-3 py-1 text-xs font-medium shadow-xs">
-            <span className="size-1.5 rounded-full bg-signal" /> Hiring, without the noise
+        <div
+          className="pointer-events-none absolute -left-24 top-24 size-72 animate-float rounded-full bg-signal/10 blur-3xl sm:size-96"
+          aria-hidden
+        />
+        <div
+          className="pointer-events-none absolute -right-16 bottom-10 size-64 animate-float rounded-full bg-status-shortlisted/15 blur-3xl [animation-delay:1.2s] sm:size-80"
+          aria-hidden
+        />
+
+        <div className="relative mx-auto max-w-6xl px-4 pb-16 pt-12 text-center sm:px-6 sm:pb-24 sm:pt-20">
+          <div className="mb-8 flex animate-fade-up justify-center">
+            <LogoMark className="size-12 rounded-xl shadow-signal sm:size-14" />
+          </div>
+          <p className="animate-fade-up font-display text-3xl tracking-tight text-foreground sm:text-4xl [animation-delay:40ms]">
+            HireHub
+          </p>
+          <span className="mt-5 inline-flex animate-fade-up items-center gap-2 rounded-full border bg-card/90 px-3.5 py-1.5 text-xs font-medium shadow-xs backdrop-blur-sm [animation-delay:80ms]">
+            <span className="relative flex size-1.5">
+              <span className="absolute inline-flex size-full animate-ping rounded-full bg-signal opacity-60" />
+              <span className="relative size-1.5 rounded-full bg-signal" />
+            </span>
+            Hiring, without the noise
           </span>
-          <h1 className="mx-auto mt-6 max-w-3xl animate-fade-up font-display text-5xl leading-[1.05] sm:text-7xl [animation-delay:80ms]">
-            Where great people meet <em className="text-signal">great work</em>
+          <h1 className="mx-auto mt-6 max-w-3xl animate-fade-up font-display text-[2.65rem] leading-[1.05] tracking-tight sm:mt-8 sm:text-7xl [animation-delay:120ms]">
+            Where great people meet <em className="text-signal not-italic">great work</em>
           </h1>
-          <p className="mx-auto mt-6 max-w-xl animate-fade-up text-lg text-muted-foreground [animation-delay:160ms]">
+          <p className="mx-auto mt-5 max-w-xl animate-fade-up text-base text-muted-foreground sm:mt-6 sm:text-lg [animation-delay:180ms]">
             HireHub brings job seekers and recruiters together in one calm, transparent space — so everyone always knows what happens next.
           </p>
-          <div className="mt-10 flex animate-fade-up flex-wrap justify-center gap-3 [animation-delay:240ms]">
-            <Button variant="signal" size="xl" asChild>
+          <div className="mt-8 flex animate-fade-up flex-col items-stretch justify-center gap-3 sm:mt-10 sm:flex-row sm:flex-wrap sm:items-center [animation-delay:240ms]">
+            <Button variant="signal" size="xl" className="w-full shadow-signal sm:w-auto" asChild>
               <Link to="/auth" search={{ mode: "signup" }}>Create free account <ArrowRight /></Link>
             </Button>
-            <Button variant="outline" size="xl" asChild><Link to="/auth">I have an account</Link></Button>
+            <Button variant="outline" size="xl" className="w-full bg-card/70 backdrop-blur-sm sm:w-auto" asChild>
+              <Link to="/auth">I have an account</Link>
+            </Button>
           </div>
 
-          <div className="mx-auto mt-16 max-w-3xl animate-fade-up surface-card p-6 text-left shadow-lift sm:p-8 [animation-delay:320ms]">
-            <div className="mb-8 flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <div className="flex size-10 items-center justify-center rounded-lg bg-signal-soft font-semibold text-signal">A</div>
-                <div>
-                  <p className="font-semibold">Senior Frontend Engineer</p>
-                  <p className="text-sm text-muted-foreground">Acme Labs · Dhaka · Hybrid</p>
+          <div className="relative mx-auto mt-14 max-w-3xl animate-fade-up sm:mt-16 [animation-delay:320ms]">
+            <div className="absolute -inset-px rounded-2xl bg-gradient-to-br from-signal/25 via-transparent to-status-shortlisted/20 opacity-80" aria-hidden />
+            <div className="relative surface-card p-5 text-left shadow-lift sm:p-8">
+              <div className="mb-6 flex flex-wrap items-center justify-between gap-3 sm:mb-8">
+                <div className="flex min-w-0 items-center gap-3">
+                  <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-signal-soft font-semibold text-signal ring-1 ring-signal/15">
+                    A
+                  </div>
+                  <div className="min-w-0">
+                    <p className="truncate font-semibold">Senior Frontend Engineer</p>
+                    <p className="truncate text-sm text-muted-foreground">Acme Labs · Dhaka · Hybrid</p>
+                  </div>
                 </div>
+                <StatusBadge status="hired" />
               </div>
-              <StatusBadge status="hired" />
+              <StatusTracker status="hired" />
             </div>
-            <StatusTracker status="hired" />
           </div>
         </div>
       </section>
 
-      <section className="mx-auto grid max-w-6xl gap-4 px-4 pb-24 sm:px-6 md:grid-cols-3">
+      <section className="mx-auto grid max-w-6xl stagger-children gap-4 px-4 pb-20 sm:px-6 sm:pb-24 md:grid-cols-3">
         {ROLES.map(({ icon: Icon, title, text }) => (
-          <article key={title} className="surface-card interactive-card p-6">
-            <div className="flex size-10 items-center justify-center rounded-lg bg-surface text-signal ring-1 ring-border">
+          <article key={title} className="surface-card interactive-card group p-6 sm:p-7">
+            <div className="flex size-11 items-center justify-center rounded-xl bg-surface text-signal ring-1 ring-border transition-colors group-hover:bg-signal-soft group-hover:ring-signal/20">
               <Icon className="size-5" />
             </div>
-            <h2 className="mt-5 text-lg font-semibold">{title}</h2>
-            <p className="mt-2 text-sm text-muted-foreground">{text}</p>
+            <h2 className="mt-5 text-lg font-semibold tracking-tight">{title}</h2>
+            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{text}</p>
           </article>
         ))}
       </section>

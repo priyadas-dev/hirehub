@@ -56,14 +56,15 @@ export function AdminDashboard() {
 
   return (
     <div className="space-y-10">
-      <header className="rounded-2xl bg-primary p-6 text-primary-foreground sm:p-8">
-        <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+      <header className="relative overflow-hidden rounded-2xl bg-primary p-5 text-primary-foreground sm:p-8">
+        <div className="pointer-events-none absolute -right-8 top-0 size-48 rounded-full bg-signal/30 blur-3xl" aria-hidden />
+        <div className="relative flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-[0.14em] opacity-70">
+            <div className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.16em] opacity-70 sm:text-xs">
               <ShieldCheck className="size-4" /> Admin control center
             </div>
-            <h1 className="mt-2 font-display text-3xl sm:text-4xl">Platform overview</h1>
-            <p className="mt-2 max-w-lg text-sm opacity-70">Review what needs approval and keep an eye on activity across HireHub.</p>
+            <h1 className="mt-2 font-display text-[1.85rem] leading-tight tracking-tight sm:text-4xl">Platform overview</h1>
+            <p className="mt-2 max-w-lg text-sm leading-relaxed opacity-70">Review what needs approval and keep an eye on activity across HireHub.</p>
           </div>
           <div className="flex flex-wrap gap-2">
             <Button variant="secondary" size="lg" asChild>
@@ -79,7 +80,7 @@ export function AdminDashboard() {
         </div>
       </header>
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid stagger-children gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Link to="/admin/jobs" className="block rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
           <StatCard label="Pending jobs" value={c?.pendingJobs} icon={Briefcase} tone="interview" loading={counts.isLoading} />
         </Link>
@@ -95,14 +96,14 @@ export function AdminDashboard() {
       </div>
 
       <Section title="Admin tools" description="Jump into approvals, users, applications, and reports">
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+        <div className="grid stagger-children gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
           {QUICK_LINKS.map((item) => (
             <Link
               key={item.to}
               to={item.to}
-              className="surface-card interactive-card flex flex-col gap-3 p-5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="surface-card interactive-card group flex flex-col gap-3 p-5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
-              <span className="flex size-9 items-center justify-center rounded-lg bg-signal-soft text-signal">
+              <span className="flex size-10 items-center justify-center rounded-xl bg-signal-soft text-signal ring-1 ring-signal/10 transition-transform duration-300 group-hover:scale-105">
                 <item.icon className="size-4" />
               </span>
               <div>

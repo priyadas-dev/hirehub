@@ -232,46 +232,46 @@ function JobDetailPage() {
         }
       />
 
-      <div className="grid gap-8 lg:grid-cols-5">
-        <section className="surface-card space-y-4 p-6 lg:col-span-3">
-          <h2 className="text-lg font-semibold">About the role</h2>
-          <p className="whitespace-pre-wrap text-sm text-muted-foreground">
+      <div className="grid gap-6 lg:grid-cols-5 lg:gap-8">
+        <section className="surface-card animate-fade-up space-y-5 p-5 sm:p-7 lg:col-span-3">
+          <h2 className="text-lg font-semibold tracking-tight">About the role</h2>
+          <p className="whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground">
             {j.description || "No description provided."}
           </p>
-          <dl className="mt-6 grid gap-3 border-t pt-4 text-sm sm:grid-cols-2">
-            <div className="flex gap-3">
-              <Building2 className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+          <dl className="mt-2 grid gap-3 border-t pt-5 text-sm sm:grid-cols-2">
+            <div className="flex gap-3 rounded-xl bg-surface/70 p-3 ring-1 ring-border/60">
+              <Building2 className="mt-0.5 size-4 shrink-0 text-signal" />
               <div>
-                <dt className="text-muted-foreground">Company</dt>
-                <dd className="font-medium">{companyName}</dd>
+                <dt className="text-xs text-muted-foreground">Company</dt>
+                <dd className="font-medium tracking-tight">{companyName}</dd>
               </div>
             </div>
-            <div className="flex gap-3">
-              <MapPin className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+            <div className="flex gap-3 rounded-xl bg-surface/70 p-3 ring-1 ring-border/60">
+              <MapPin className="mt-0.5 size-4 shrink-0 text-signal" />
               <div>
-                <dt className="text-muted-foreground">Location</dt>
-                <dd className="font-medium">{j.location ?? "Remote"}</dd>
+                <dt className="text-xs text-muted-foreground">Location</dt>
+                <dd className="font-medium tracking-tight">{j.location ?? "Remote"}</dd>
               </div>
             </div>
-            <div className="flex gap-3">
-              <Briefcase className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+            <div className="flex gap-3 rounded-xl bg-surface/70 p-3 ring-1 ring-border/60">
+              <Briefcase className="mt-0.5 size-4 shrink-0 text-signal" />
               <div>
-                <dt className="text-muted-foreground">Job type</dt>
-                <dd className="font-medium">{JOB_TYPE_LABEL[j.job_type]}</dd>
+                <dt className="text-xs text-muted-foreground">Job type</dt>
+                <dd className="font-medium tracking-tight">{JOB_TYPE_LABEL[j.job_type]}</dd>
               </div>
             </div>
-            <div className="flex gap-3">
-              <Calendar className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+            <div className="flex gap-3 rounded-xl bg-surface/70 p-3 ring-1 ring-border/60">
+              <Calendar className="mt-0.5 size-4 shrink-0 text-signal" />
               <div>
-                <dt className="text-muted-foreground">Posted</dt>
-                <dd className="font-medium">{fmtDate(j.created_at)}</dd>
+                <dt className="text-xs text-muted-foreground">Posted</dt>
+                <dd className="font-medium tracking-tight">{fmtDate(j.created_at)}</dd>
               </div>
             </div>
           </dl>
         </section>
 
-        <section className="surface-card space-y-4 p-6 lg:col-span-2">
-          <h2 className="text-lg font-semibold">Apply</h2>
+        <section className="surface-card animate-fade-up space-y-4 p-5 shadow-lift sm:p-7 lg:sticky lg:top-20 lg:col-span-2 lg:self-start [animation-delay:80ms]">
+          <h2 className="text-lg font-semibold tracking-tight">Apply</h2>
           {existingApp.isLoading ? (
             <CardSkeleton rows={3} />
           ) : existingApp.data ? (

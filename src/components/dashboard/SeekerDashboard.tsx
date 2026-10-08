@@ -56,7 +56,7 @@ export function SeekerDashboard() {
         title={`Good to see you, ${user?.name.split(" ")[0] ?? "there"}.`}
         description="Track every application from first click to offer."
       />
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid stagger-children gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Link to="/seeker/applications" className="block rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
           <StatCard label="Applications" value={c?.applications} icon={FileText} tone="applied" loading={counts.isLoading} />
         </Link>
@@ -67,17 +67,18 @@ export function SeekerDashboard() {
         </Link>
       </div>
 
-      <section className="surface-card p-6 sm:p-8" aria-labelledby="journey">
-        <div className="mb-8 flex flex-wrap items-center justify-between gap-3">
+      <section className="surface-card relative overflow-hidden p-5 sm:p-8" aria-labelledby="journey">
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-signal-soft/40 to-transparent" aria-hidden />
+        <div className="relative mb-8 flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 id="journey" className="text-lg font-semibold">Application journey</h2>
-            <p className="text-sm text-muted-foreground">
+            <h2 id="journey" className="text-lg font-semibold tracking-tight">Application journey</h2>
+            <p className="mt-0.5 text-sm text-muted-foreground">
               {latest ? "Where your most recent application stands." : "Once you apply, your progress shows up here."}
             </p>
           </div>
           {latest && <StatusBadge status={latest} />}
         </div>
-        <StatusTracker status={latest ?? "applied"} className={latest ? "mx-auto max-w-2xl" : "mx-auto max-w-2xl opacity-60"} />
+        <StatusTracker status={latest ?? "applied"} className={latest ? "relative mx-auto max-w-2xl" : "relative mx-auto max-w-2xl opacity-60"} />
       </section>
 
       <div className="grid gap-8 lg:grid-cols-5">
