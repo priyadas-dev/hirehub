@@ -4,6 +4,7 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Briefcase } from "lucide-react";
 import { toast } from "sonner";
 import { CardSkeleton, ErrorState, PageHeader } from "@/components/feedback/States";
 import { Button } from "@/components/ui/button";
@@ -13,8 +14,17 @@ import { useAuth } from "@/lib/auth";
 import { supabase } from "@/integrations/supabase/client";
 
 const schema = z.object({
-  full_name: z.string().trim().min(2, "Name is required"),
-  phone: z.string().trim().optional(),
+  full_name: z.string().trim().min(2, "Full name must be at least 2 characters"),
+  phone: z
+    .string()
+    .trim()
+    .optional()
+    .refine((v) => !v || v.length >= 7, "Enter a valid phone number"),
+  resume_url: z
+    .string()
+    .trim()
+    .optional()
+    .refine((v) => !v || /^https?:\/\/\S+/i.test(v), "Resume must be a full URL starting with http:// or https://"),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -23,7 +33,7 @@ export const Route = createFileRoute("/_app/seeker/profile")({
   head: () => ({
     meta: [
       { title: "My Profile — HireHub" },
-      { name: "description", content: "Update your seeker profile and review your resume link." },
+      { name: "description", content: "Update your seeker profile and resume link." },
     ],
   }),
   component: SeekerProfilePage,
@@ -38,43 +48,52 @@ function SeekerProfilePage() {
     queryKey: ["seeker-profile", id],
     enabled: !!id,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("full_name,email,phone")
-        .eq("id", id!)
-        .maybeSingle();
-      if (error) throw error;
-      return data;
-    },
-  });
+      const [{ data: p, error: pErr }, { data: authData, error: authErr }, latestApp] = await Promise.all([
+        supabase.from("profiles").select("full_name,email,phone").eq("id", id!).maybeSingle(),
+        supabase.auth.getUser(),
+        supabase
+          .from("applications")
+          .select("resume_url,jobs(title)")
+          .eq("seeker_id", id!)
+          .not("resume_url", "is", null)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+      ]);
+      if (pErr) throw pErr;
+      if (authErr) throw authErr;
+      if (latestApp.error) throw latestApp.error;
 
-  /** Resume lives on applications; seekers can SELECT but not UPDATE under existing RLS. */
-  const latestResume = useQuery({
-    queryKey: ["seeker-latest-resume", id],
-    enabled: !!id,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("applications")
-        .select("id,resume_url,created_at,jobs(title)")
-        .eq("seeker_id", id!)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (error) throw error;
-      return data;
+      const meta = (authData.user?.user_metadata ?? {}) as Record<string, unknown>;
+      const metaResume = typeof meta.resume_url === "string" ? meta.resume_url : "";
+      const appResume = latestApp.data?.resume_url ?? "";
+
+      return {
+        full_name: p?.full_name ?? "",
+        email: p?.email ?? "",
+        phone: p?.phone ?? "",
+        resume_url: metaResume || appResume || "",
+        resumeSource: metaResume
+          ? ("profile" as const)
+          : appResume
+            ? ("application" as const)
+            : ("none" as const),
+        latestJobTitle: latestApp.data?.jobs?.title ?? null,
+      };
     },
   });
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { full_name: "", phone: "" },
+    defaultValues: { full_name: "", phone: "", resume_url: "" },
   });
 
   useEffect(() => {
     if (profile.data) {
       form.reset({
-        full_name: profile.data.full_name ?? "",
-        phone: profile.data.phone ?? "",
+        full_name: profile.data.full_name,
+        phone: profile.data.phone,
+        resume_url: profile.data.resume_url,
       });
     }
   }, [profile.data, form]);
@@ -82,24 +101,34 @@ function SeekerProfilePage() {
   const save = useMutation({
     mutationFn: async (values: FormValues) => {
       if (!id) throw new Error("Not signed in");
-      const { error } = await supabase
+
+      const { error: profileErr } = await supabase
         .from("profiles")
         .update({
           full_name: values.full_name.trim(),
           phone: values.phone?.trim() || null,
         })
         .eq("id", id);
-      if (error) throw error;
+      if (profileErr) throw profileErr;
+
+      const resume = values.resume_url?.trim() || "";
+      const { error: metaErr } = await supabase.auth.updateUser({
+        data: { resume_url: resume || null },
+      });
+      if (metaErr) throw metaErr;
     },
     onSuccess: async () => {
-      toast.success("Profile updated");
+      toast.success("Profile updated", {
+        description: "Name, phone, and preferred resume URL are saved.",
+      });
       await qc.invalidateQueries({ queryKey: ["seeker-profile", id] });
+      await qc.invalidateQueries({ queryKey: ["seeker-latest-resume", id] });
       await refresh();
     },
     onError: (e: Error) => toast.error("Could not update profile", { description: e.message }),
   });
 
-  if (profile.isLoading || latestResume.isLoading) return <CardSkeleton rows={5} />;
+  if (profile.isLoading) return <CardSkeleton rows={5} />;
   if (profile.isError) return <ErrorState onRetry={() => void profile.refetch()} />;
 
   return (
@@ -107,10 +136,19 @@ function SeekerProfilePage() {
       <PageHeader
         eyebrow="Job Seeker"
         title="My profile / resume"
-        description="Keep your contact details current. Resume links are attached when you apply."
+        description="Update your contact details and preferred resume link used when you apply."
+        actions={
+          <Button variant="outline" size="sm" asChild>
+            <Link to="/seeker/jobs"><Briefcase /> Browse jobs</Link>
+          </Button>
+        }
       />
 
-      <form className="surface-card max-w-xl space-y-5 p-6" onSubmit={form.handleSubmit((v) => save.mutate(v))}>
+      <form
+        className="surface-card max-w-xl space-y-5 p-5 sm:p-6"
+        onSubmit={form.handleSubmit((v) => save.mutate(v))}
+        noValidate
+      >
         <div className="space-y-2">
           <Label htmlFor="email">Email</Label>
           <Input id="email" value={profile.data?.email ?? ""} disabled readOnly />
@@ -125,29 +163,31 @@ function SeekerProfilePage() {
         </div>
         <div className="space-y-2">
           <Label htmlFor="phone">Phone</Label>
-          <Input id="phone" {...form.register("phone")} placeholder="+880…" />
+          <Input id="phone" {...form.register("phone")} placeholder="+880…" inputMode="tel" />
+          {form.formState.errors.phone && (
+            <p className="text-xs text-destructive">{form.formState.errors.phone.message}</p>
+          )}
         </div>
         <div className="space-y-2">
           <Label htmlFor="resume_url">Resume URL</Label>
-          <Input
-            id="resume_url"
-            value={latestResume.data?.resume_url ?? ""}
-            disabled
-            readOnly
-            placeholder="Set when you apply to a job"
-          />
+          <Input id="resume_url" placeholder="https://…" {...form.register("resume_url")} />
+          {form.formState.errors.resume_url && (
+            <p className="text-xs text-destructive">{form.formState.errors.resume_url.message}</p>
+          )}
           <p className="text-xs text-muted-foreground">
-            {latestResume.data?.resume_url
-              ? `From your latest application${latestResume.data.jobs?.title ? ` (${latestResume.data.jobs.title})` : ""}. Change it the next time you apply.`
-              : "No resume on file yet — add a URL when you submit an application."}
+            {profile.data?.resumeSource === "application" && profile.data.latestJobTitle
+              ? `Currently prefilled from your application to ${profile.data.latestJobTitle}. Saving stores it as your preferred resume for new applications.`
+              : "This preferred resume is used to prefill the apply form on job details."}
           </p>
-          <Button type="button" variant="outline" size="sm" asChild>
-            <Link to="/seeker/jobs">Browse jobs to apply</Link>
+        </div>
+        <div className="flex flex-wrap gap-2 pt-1">
+          <Button type="submit" variant="signal" disabled={save.isPending}>
+            {save.isPending ? "Saving…" : "Save profile"}
+          </Button>
+          <Button type="button" variant="outline" asChild>
+            <Link to="/seeker">Back to dashboard</Link>
           </Button>
         </div>
-        <Button type="submit" variant="signal" disabled={save.isPending}>
-          {save.isPending ? "Saving…" : "Save profile"}
-        </Button>
       </form>
     </div>
   );

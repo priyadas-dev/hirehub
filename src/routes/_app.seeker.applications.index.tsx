@@ -1,8 +1,9 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { FileText } from "lucide-react";
+import { Briefcase, FileText } from "lucide-react";
 import { CardSkeleton, EmptyState, ErrorState, PageHeader } from "@/components/feedback/States";
 import { StatusBadge } from "@/components/status/StatusBadge";
+import { StatusTracker } from "@/components/status/StatusTracker";
 import type { ApplicationStatus } from "@/components/status/status";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth";
@@ -41,6 +42,11 @@ function MyApplicationsPage() {
         eyebrow="Job Seeker"
         title="My applications"
         description="Follow every application from Applied through to Hired or Not selected."
+        actions={
+          <Button variant="signal" size="sm" asChild>
+            <Link to="/seeker/jobs"><Briefcase /> Browse jobs</Link>
+          </Button>
+        }
       />
 
       {apps.isLoading ? (
@@ -48,37 +54,58 @@ function MyApplicationsPage() {
       ) : apps.isError ? (
         <ErrorState onRetry={() => void apps.refetch()} />
       ) : apps.data?.length ? (
-        <ul className="surface-card divide-y overflow-hidden">
-          {apps.data.map((a) => (
-            <li key={a.id} className="flex flex-col gap-3 px-5 py-4 transition-colors hover:bg-muted/35 sm:flex-row sm:items-center sm:justify-between">
-              <div className="min-w-0">
-                <p className="truncate font-medium tracking-tight">{a.jobs?.title ?? "Job"}</p>
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  {a.jobs?.companies?.name ?? "Company"} · Applied {fmtDate(a.created_at)}
-                </p>
-              </div>
-              <div className="flex items-center gap-3">
-                <StatusBadge status={a.status as ApplicationStatus} />
-                <Button size="sm" variant="outline" asChild>
-                  <Link to="/seeker/applications/$applicationId" params={{ applicationId: a.id }}>
-                    Track
-                  </Link>
-                </Button>
-              </div>
-            </li>
-          ))}
-        </ul>
+        <>
+          <p className="text-sm text-muted-foreground">
+            <span className="font-medium text-foreground tabular-nums">{apps.data.length}</span>{" "}
+            {apps.data.length === 1 ? "application" : "applications"}
+          </p>
+          <ul className="surface-card divide-y overflow-hidden">
+            {apps.data.map((a) => (
+              <li
+                key={a.id}
+                className="flex flex-col gap-3 px-5 py-4 transition-colors hover:bg-muted/35 sm:flex-row sm:items-center sm:justify-between"
+              >
+                <div className="min-w-0">
+                  <p className="truncate font-medium tracking-tight">{a.jobs?.title ?? "Job"}</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    {a.jobs?.companies?.name ?? "Company"}
+                    {a.jobs?.location ? ` · ${a.jobs.location}` : ""} · Applied {fmtDate(a.created_at)}
+                  </p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <StatusBadge status={a.status as ApplicationStatus} />
+                  <Button size="sm" variant="outline" asChild>
+                    <Link to="/seeker/applications/$applicationId" params={{ applicationId: a.id }}>
+                      Track
+                    </Link>
+                  </Button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </>
       ) : (
-        <EmptyState
-          icon={FileText}
-          title="No applications yet"
-          description="Browse approved jobs and submit your first application."
-          action={
-            <Button variant="signal" asChild>
-              <Link to="/seeker/jobs">Browse jobs</Link>
-            </Button>
-          }
-        />
+        <div className="space-y-6">
+          <EmptyState
+            icon={FileText}
+            title="No applications yet"
+            description="Browse approved jobs and submit your first application. You’ll track status here."
+            action={
+              <Button variant="signal" asChild>
+                <Link to="/seeker/jobs">Browse jobs</Link>
+              </Button>
+            }
+          />
+          <section className="surface-card space-y-5 p-5 sm:p-8">
+            <div>
+              <h2 className="text-lg font-semibold tracking-tight">How status tracking works</h2>
+              <p className="mt-0.5 text-sm text-muted-foreground">
+                Every application moves through this journey once recruiters take action.
+              </p>
+            </div>
+            <StatusTracker status="applied" className="mx-auto max-w-2xl opacity-70" />
+          </section>
+        </div>
       )}
     </div>
   );

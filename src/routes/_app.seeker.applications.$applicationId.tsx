@@ -81,14 +81,23 @@ function ApplicationDetailPage() {
       <PageHeader
         eyebrow="Application"
         title={a.jobs?.title ?? "Job"}
-        description={`${a.jobs?.companies?.name ?? "Company"} · Applied ${fmtDate(a.created_at)}`}
-        actions={<StatusBadge status={status} />}
+        description={`${a.jobs?.companies?.name ?? "Company"}${a.jobs?.location ? ` · ${a.jobs.location}` : ""} · Applied ${fmtDate(a.created_at)}`}
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            <StatusBadge status={status} />
+            <Button variant="outline" size="sm" asChild>
+              <Link to="/seeker/applications">All applications</Link>
+            </Button>
+          </div>
+        }
       />
 
       <section className="surface-card space-y-6 p-5 sm:p-8">
         <div>
           <h2 className="text-lg font-semibold tracking-tight">Status tracker</h2>
-          <p className="mt-0.5 text-sm text-muted-foreground">Follow your progress through the hiring journey.</p>
+          <p className="mt-0.5 text-sm text-muted-foreground">
+            Applied → Shortlisted → Interview → Hired. Recruiters update this as they review you.
+          </p>
         </div>
         <StatusTracker status={status} className="mx-auto max-w-2xl" />
       </section>

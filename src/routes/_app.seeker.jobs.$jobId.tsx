@@ -19,8 +19,8 @@ const applySchema = z.object({
   resume_url: z
     .string()
     .trim()
-    .optional()
-    .refine((v) => !v || /^https?:\/\//i.test(v), "Resume must be a full URL starting with http"),
+    .min(1, "Resume URL is required")
+    .refine((v) => /^https?:\/\/\S+/i.test(v), "Resume must be a full URL starting with http:// or https://"),
   cover_note: z.string().trim().optional(),
 });
 
@@ -109,16 +109,21 @@ function JobDetailPage() {
     queryKey: ["seeker-latest-resume", id],
     enabled: !!id,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("applications")
-        .select("resume_url")
-        .eq("seeker_id", id!)
-        .not("resume_url", "is", null)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (error) throw error;
-      return data;
+      const [{ data: authData }, appRes] = await Promise.all([
+        supabase.auth.getUser(),
+        supabase
+          .from("applications")
+          .select("resume_url")
+          .eq("seeker_id", id!)
+          .not("resume_url", "is", null)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+      ]);
+      if (appRes.error) throw appRes.error;
+      const meta = (authData.user?.user_metadata ?? {}) as Record<string, unknown>;
+      const metaResume = typeof meta.resume_url === "string" ? meta.resume_url.trim() : "";
+      return { resume_url: metaResume || appRes.data?.resume_url || null };
     },
   });
 
@@ -129,7 +134,7 @@ function JobDetailPage() {
 
   useEffect(() => {
     if (latestResume.data?.resume_url && !form.getValues("resume_url")) {
-      form.setValue("resume_url", latestResume.data.resume_url);
+      form.setValue("resume_url", latestResume.data.resume_url, { shouldValidate: false });
     }
   }, [latestResume.data, form]);
 
@@ -155,7 +160,7 @@ function JobDetailPage() {
         .insert({
           job_id: jobId,
           seeker_id: id,
-          resume_url: values.resume_url?.trim() || null,
+          resume_url: values.resume_url.trim(),
           cover_note: values.cover_note?.trim() || null,
         })
         .select("id")
@@ -226,6 +231,9 @@ function JobDetailPage() {
               {saved.data ? "Saved" : "Save job"}
             </Button>
             <Button variant="outline" asChild>
+              <Link to="/seeker/saved">Saved</Link>
+            </Button>
+            <Button variant="outline" asChild>
               <Link to="/seeker/jobs">Back to jobs</Link>
             </Button>
           </div>
@@ -291,8 +299,18 @@ function JobDetailPage() {
                 {form.formState.errors.resume_url && (
                   <p className="text-xs text-destructive">{form.formState.errors.resume_url.message}</p>
                 )}
-                {latestResume.data?.resume_url && (
-                  <p className="text-xs text-muted-foreground">Prefilled from your last application — edit if needed.</p>
+                {latestResume.data?.resume_url ? (
+                  <p className="text-xs text-muted-foreground">
+                    Prefilled from your profile or last application — edit if needed.
+                  </p>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    Add a public resume link. You can also save a preferred URL on your{" "}
+                    <Link to="/seeker/profile" className="text-signal underline">
+                      profile
+                    </Link>
+                    .
+                  </p>
                 )}
               </div>
               <div className="space-y-2">

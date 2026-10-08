@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { Briefcase, MapPin, Search, X } from "lucide-react";
+import { Bookmark, Briefcase, MapPin, Search, X } from "lucide-react";
 import { CardSkeleton, EmptyState, ErrorState, PageHeader } from "@/components/feedback/States";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -77,6 +77,16 @@ function BrowseJobsPage() {
         eyebrow="Job Seeker"
         title="Browse jobs"
         description="Search and filter admin-approved roles. Open a job to save or apply."
+        actions={
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" size="sm" asChild>
+              <Link to="/seeker/saved"><Bookmark /> Saved</Link>
+            </Button>
+            <Button variant="outline" size="sm" asChild>
+              <Link to="/seeker/applications">Applications</Link>
+            </Button>
+          </div>
+        }
       />
 
       <div className="surface-card space-y-4 p-4 sm:p-5">
