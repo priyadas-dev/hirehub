@@ -42,7 +42,7 @@ function Landing() {
             <span className="size-1.5 rounded-full bg-signal" /> Hiring, without the noise
           </span>
           <h1 className="mx-auto mt-6 max-w-3xl animate-fade-up font-display text-5xl leading-[1.05] sm:text-7xl [animation-delay:80ms]">
-            Where great people meet <em className="text-signal">great work.</em>
+            Where great people meet <em className="text-signal">great work</em>
           </h1>
           <p className="mx-auto mt-6 max-w-xl animate-fade-up text-lg text-muted-foreground [animation-delay:160ms]">
             HireHub brings job seekers and recruiters together in one calm, transparent space — so everyone always knows what happens next.
