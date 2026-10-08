@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { Bookmark, Briefcase, ExternalLink, MapPin, Search, X } from "lucide-react";
@@ -10,11 +10,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   BROWSE_JOB_TYPE_LABEL,
   fetchLiveJobs,
+  filterLocationSuggestions,
   JOB_CATEGORIES,
   matchesBrowseJobType,
   matchesCategory,
   matchesLocation,
   mergeLocationSuggestions,
+  normalizeBrowseJobTypeKey,
   type BrowseJobType,
   type JobCategory,
   type LiveJob,
@@ -26,7 +28,7 @@ export const Route = createFileRoute("/_app/seeker/jobs/")({
   head: () => ({
     meta: [
       { title: "Browse Jobs — HireHub" },
-      { name: "description", content: "Discover HireHub and live remote roles." },
+      { name: "description", content: "Discover HireHub and live external remote roles." },
     ],
   }),
   component: BrowseJobsPage,
@@ -35,8 +37,10 @@ export const Route = createFileRoute("/_app/seeker/jobs/")({
 function BrowseJobsPage() {
   const [q, setQ] = useState("");
   const [location, setLocation] = useState("");
+  const [locationOpen, setLocationOpen] = useState(false);
   const [category, setCategory] = useState<JobCategory | "all">("all");
   const [jobType, setJobType] = useState<BrowseJobType | "all">("all");
+  const locationWrapRef = useRef<HTMLDivElement>(null);
 
   const jobs = useQuery({
     queryKey: ["seeker-jobs"],
@@ -68,6 +72,11 @@ function BrowseJobsPage() {
     [jobs.data, liveJobs.data],
   );
 
+  const locationSuggestions = useMemo(
+    () => filterLocationSuggestions(locationOptions, location),
+    [locationOptions, location],
+  );
+
   const filteredHireHub = useMemo(() => {
     const list = jobs.data ?? [];
     const qq = q.trim().toLowerCase();
@@ -88,7 +97,11 @@ function BrowseJobsPage() {
     const list = liveJobs.data ?? [];
     const qq = q.trim().toLowerCase();
     return list.filter((j) => {
-      if (!matchesBrowseJobType(normalizeLiveJobType(j.jobType), j.location, jobType, { treatAsRemoteBoard: true })) {
+      if (
+        !matchesBrowseJobType(normalizeBrowseJobTypeKey(j.jobType), j.location, jobType, {
+          treatAsRemoteBoard: true,
+        })
+      ) {
         return false;
       }
       if (!matchesLocation(j.location, location)) return false;
@@ -112,6 +125,12 @@ function BrowseJobsPage() {
     setLocation("");
     setCategory("all");
     setJobType("all");
+    setLocationOpen(false);
+  };
+
+  const pickLocation = (value: string) => {
+    setLocation(value);
+    setLocationOpen(false);
   };
 
   return (
@@ -119,7 +138,7 @@ function BrowseJobsPage() {
       <PageHeader
         eyebrow="Job Seeker"
         title="Browse jobs"
-        description="Search HireHub roles and live remote openings. Filters apply to both sections."
+        description="Search HireHub roles and live external openings. Filters apply to both sections."
         actions={
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" size="sm" asChild>
@@ -153,26 +172,68 @@ function BrowseJobsPage() {
             </div>
           </div>
 
-          <div className="space-y-1.5">
+          <div className="space-y-1.5" ref={locationWrapRef}>
             <Label htmlFor="job-location" className="text-xs text-muted-foreground">
               Location
             </Label>
             <div className="relative">
-              <MapPin className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <MapPin className="pointer-events-none absolute left-3 top-1/2 z-10 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 id="job-location"
                 className="pl-9"
-                list="job-location-options"
-                placeholder="City, country, remote…"
+                placeholder="City, country, or Remote…"
                 value={location}
-                onChange={(e) => setLocation(e.target.value)}
+                onChange={(e) => {
+                  setLocation(e.target.value);
+                  setLocationOpen(true);
+                }}
+                onFocus={() => setLocationOpen(true)}
+                onBlur={() => {
+                  // Allow click on suggestion before closing
+                  window.setTimeout(() => {
+                    if (!locationWrapRef.current?.contains(document.activeElement)) {
+                      setLocationOpen(false);
+                    }
+                  }, 120);
+                }}
                 autoComplete="off"
+                role="combobox"
+                aria-expanded={locationOpen}
+                aria-controls="job-location-suggestions"
+                aria-autocomplete="list"
               />
-              <datalist id="job-location-options">
-                {locationOptions.map((loc) => (
-                  <option key={loc} value={loc} />
-                ))}
-              </datalist>
+              {locationOpen && locationSuggestions.length > 0 && (
+                <ul
+                  id="job-location-suggestions"
+                  role="listbox"
+                  className="absolute z-20 mt-1 max-h-56 w-full overflow-auto rounded-xl border bg-popover p-1 shadow-card"
+                >
+                  {locationSuggestions.map((loc) => (
+                    <li key={loc} role="option">
+                      <button
+                        type="button"
+                        className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-muted"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => pickLocation(loc)}
+                      >
+                        <MapPin className="size-3.5 shrink-0 text-muted-foreground" />
+                        {loc}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-1.5 pt-0.5">
+              <Button
+                type="button"
+                size="sm"
+                variant={location.trim().toLowerCase() === "remote" ? "signal" : "outline"}
+                className="h-7 px-2.5 text-xs"
+                onClick={() => pickLocation("Remote")}
+              >
+                Remote
+              </Button>
             </div>
           </div>
 
@@ -182,7 +243,7 @@ function BrowseJobsPage() {
               <SelectTrigger className="w-full" aria-label="Filter by category">
                 <SelectValue placeholder="All categories" />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="max-h-72">
                 <SelectItem value="all">All categories</SelectItem>
                 {JOB_CATEGORIES.map((c) => (
                   <SelectItem key={c} value={c}>
@@ -219,7 +280,7 @@ function BrowseJobsPage() {
               <>
                 <span className="font-medium text-foreground tabular-nums">{filteredHireHub.length}</span> HireHub
                 {" · "}
-                <span className="font-medium text-foreground tabular-nums">{filteredLive.length}</span> live
+                <span className="font-medium text-foreground tabular-nums">{filteredLive.length}</span> live external
                 {hasActiveFilters ? (
                   <>
                     {" "}
@@ -247,9 +308,11 @@ function BrowseJobsPage() {
         <div className="flex flex-wrap items-end justify-between gap-2">
           <div>
             <h2 id="hirehub-jobs-heading" className="text-lg font-semibold tracking-tight">
-              HireHub jobs
+              HireHub Jobs
             </h2>
-            <p className="text-sm text-muted-foreground">Admin-approved roles you can save and apply to on HireHub.</p>
+            <p className="text-sm text-muted-foreground">
+              Admin-approved roles. Save and apply through HireHub.
+            </p>
           </div>
           <p className="text-xs text-muted-foreground tabular-nums">
             {jobs.isLoading ? "…" : `${filteredHireHub.length} result${filteredHireHub.length === 1 ? "" : "s"}`}
@@ -272,6 +335,7 @@ function BrowseJobsPage() {
                     <Briefcase className="size-4" />
                   </div>
                   <div className="min-w-0">
+                    <p className="mb-1 text-[10px] font-medium uppercase tracking-wide text-signal">HireHub</p>
                     <h3 className="truncate font-semibold tracking-tight">{j.title}</h3>
                     <p className="mt-0.5 truncate text-sm text-muted-foreground">
                       {j.companies?.name ?? "Company"}
@@ -329,10 +393,10 @@ function BrowseJobsPage() {
         <div className="flex flex-wrap items-end justify-between gap-2">
           <div>
             <h2 id="live-jobs-heading" className="text-lg font-semibold tracking-tight">
-              Live jobs
+              Live Jobs / External
             </h2>
             <p className="text-sm text-muted-foreground">
-              Current remote openings from{" "}
+              Real-time remote openings from{" "}
               <a
                 href="https://remotive.com"
                 target="_blank"
@@ -341,7 +405,7 @@ function BrowseJobsPage() {
               >
                 Remotive
               </a>
-              . External listings — open on Remotive to apply. Not stored in HireHub.
+              . External only — not saved to HireHub and not applied through HireHub.
             </p>
           </div>
           <p className="text-xs text-muted-foreground tabular-nums">
@@ -356,7 +420,7 @@ function BrowseJobsPage() {
           </div>
         ) : liveJobs.isError ? (
           <ErrorState
-            title="Could not load live jobs"
+            title="Could not load live external jobs"
             description="Remotive is temporarily unavailable. HireHub jobs above still work."
             onRetry={() => void liveJobs.refetch()}
           />
@@ -369,11 +433,11 @@ function BrowseJobsPage() {
         ) : (
           <EmptyState
             icon={ExternalLink}
-            title={liveTotal ? "No live job matches" : "No live jobs right now"}
+            title={liveTotal ? "No live external matches" : "No live external jobs right now"}
             description={
               liveTotal
                 ? "Adjust search, location, category, or job type to see more Remotive roles."
-                : "Try again later for fresh remote listings."
+                : "Try again later for fresh remote listings from Remotive."
             }
             action={
               hasActiveFilters ? (
@@ -396,7 +460,10 @@ function LiveJobCard({ job }: { job: LiveJob }) {
     <li className="surface-card interactive-card group flex flex-col gap-4 p-5 sm:p-6">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <h3 className="font-semibold tracking-tight leading-snug">{job.title}</h3>
+          <p className="mb-1 text-[10px] font-medium uppercase tracking-wide text-status-interview">
+            Live / External
+          </p>
+          <h3 className="font-semibold leading-snug tracking-tight">{job.title}</h3>
           <p className="mt-0.5 truncate text-sm text-muted-foreground">{job.company}</p>
         </div>
         <span className="shrink-0 rounded-full border border-status-interview/30 bg-status-interview-soft/50 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-status-interview">
@@ -418,19 +485,9 @@ function LiveJobCard({ job }: { job: LiveJob }) {
         className="mt-auto w-fit transition-colors group-hover:border-signal/40 group-hover:text-signal"
       >
         <a href={job.url} target="_blank" rel="noreferrer">
-          View job <ExternalLink className="size-3.5" />
+          View Job <ExternalLink className="size-3.5" />
         </a>
       </Button>
     </li>
   );
-}
-
-/** Map Remotive display labels back to schema-ish keys for type filtering. */
-function normalizeLiveJobType(label: string): string {
-  const lower = label.toLowerCase();
-  if (lower.includes("full")) return "full_time";
-  if (lower.includes("part")) return "part_time";
-  if (lower.includes("contract")) return "contract";
-  if (lower.includes("freelance")) return "contract";
-  return lower.replace(/\s+/g, "_");
 }
