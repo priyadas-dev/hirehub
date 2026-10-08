@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/lib/auth";
+import { createActiveCompany, saveActiveCompany, useEnsureCompanyActive } from "@/lib/company-profile";
 import { fmtDate, supabase } from "@/components/dashboard/parts";
 
 const schema = z.object({
@@ -56,6 +57,8 @@ function CompanyPage() {
     },
   });
 
+  useEnsureCompanyActive(company.data?.id, company.data?.status, id);
+
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: { name: "", industry: "", website: "" },
@@ -80,21 +83,16 @@ function CompanyPage() {
         website: values.website?.trim() || null,
       };
       if (company.data?.id) {
-        const { error } = await supabase
-          .from("companies")
-          .update(payload)
-          .eq("id", company.data.id)
-          .eq("recruiter_id", id);
-        if (error) throw error;
+        await saveActiveCompany(company.data.id, id, payload);
       } else {
-        const { error } = await supabase.from("companies").insert({ ...payload, recruiter_id: id });
-        if (error) throw error;
+        await createActiveCompany(id, payload);
       }
     },
     onSuccess: async () => {
-      toast.success(company.data ? "Company updated" : "Company created");
+      toast.success(company.data ? "Company updated" : "Company is active. You can post a job now.");
       await qc.invalidateQueries({ queryKey: ["recruiter-company", id] });
       await qc.invalidateQueries({ queryKey: ["recruiter-companies"] });
+      await qc.invalidateQueries({ queryKey: ["admin-companies"] });
       await qc.invalidateQueries({ queryKey: ["dash-counts"] });
       await qc.invalidateQueries({ queryKey: ["admin-attention"] });
     },
@@ -104,15 +102,15 @@ function CompanyPage() {
   if (company.isLoading) return <CardSkeleton rows={5} />;
   if (company.isError) return <ErrorState onRetry={() => void company.refetch()} />;
 
-  const status = company.data?.status;
-  const exists = !!company.data;
+  const profile = company.data;
+  const exists = !!profile;
 
   return (
     <div className="space-y-8">
       <PageHeader
         eyebrow="Recruiter"
         title="Company profile"
-        description="Set up your company before posting jobs. New companies wait for admin approval."
+        description="Create your company directly. It is active as soon as you save it, and you can edit it anytime."
         actions={
           exists ? (
             <Button variant="signal" asChild>
@@ -128,20 +126,14 @@ function CompanyPage() {
         <EmptyState
           icon={Building2}
           title="No company yet"
-          description="Add your company details below. After saving, you can post jobs for admin approval."
+          description="Add your company name, industry, and website. Saving makes the profile active so you can post a job right away."
           className="py-8"
         />
       )}
 
-      {exists && status === "pending" && (
-        <div className="rounded-2xl border border-status-interview/30 bg-status-interview-soft/30 px-4 py-3 text-sm sm:px-5">
-          Your company is pending admin approval. You can still post jobs — they will also wait for review.
-        </div>
-      )}
-
-      {exists && status === "approved" && (
-        <div className="rounded-2xl border border-status-hired/30 bg-status-hired-soft/40 px-4 py-3 text-sm sm:px-5">
-          Company approved. Post roles and move applicants through Applied → Shortlisted → Interview → Hired.
+      {profile && profile.status === "approved" && (
+        <div className="rounded-2xl border bg-card px-4 py-3 text-sm sm:px-5">
+          <span className="font-medium">{profile.name}</span> is active. Post a job whenever you are ready — new listings stay pending until an admin approves them for seekers.
         </div>
       )}
 
@@ -149,12 +141,8 @@ function CompanyPage() {
         className="surface-card max-w-xl space-y-5 p-5 sm:p-6"
         onSubmit={form.handleSubmit((v) => save.mutate(v))}
       >
-        {status && (
-          <p className="text-sm text-muted-foreground">
-            Status:{" "}
-            <span className="rounded-full border px-2.5 py-0.5 text-xs font-medium capitalize">{status}</span>
-            {company.data?.created_at ? ` · Created ${fmtDate(company.data.created_at)}` : null}
-          </p>
+        {profile?.created_at && (
+          <p className="text-sm text-muted-foreground">Created {fmtDate(profile.created_at)}</p>
         )}
         <div className="space-y-2">
           <Label htmlFor="name">Company name</Label>

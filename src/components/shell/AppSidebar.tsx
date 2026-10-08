@@ -48,7 +48,11 @@ export function AppSidebar({ role }: { role: Role }) {
       <SidebarNav role={role} />
       <div className="mt-auto rounded-xl border bg-card p-4 shadow-xs">
         <p className="text-sm font-medium">Your journey starts here</p>
-        <p className="mt-1 text-xs text-muted-foreground">Use the links above to move through hiring on HireHub.</p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          {role === "recruiter"
+            ? "Create your company, then post jobs. Listings go live for seekers after admin approval."
+            : "Use the links above to move through hiring on HireHub."}
+        </p>
       </div>
     </aside>
   );

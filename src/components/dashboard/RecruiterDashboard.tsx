@@ -6,6 +6,7 @@ import { CardSkeleton, EmptyState, ErrorState } from "@/components/feedback/Stat
 import { StatusBadge } from "@/components/status/StatusBadge";
 import type { ApplicationStatus } from "@/components/status/status";
 import { useAuth } from "@/lib/auth";
+import { useEnsureCompanyActive } from "@/lib/company-profile";
 import { countRows, fmtDate, Section, StatCard, supabase, useCounts } from "./parts";
 
 export function RecruiterDashboard() {
@@ -77,7 +78,7 @@ export function RecruiterDashboard() {
 
   const c = counts.data;
   const companyReady = !!company.data;
-  const companyPending = company.data?.status === "pending";
+  useEnsureCompanyActive(company.data?.id, company.data?.status, id);
 
   return (
     <div className="space-y-10">
@@ -95,7 +96,7 @@ export function RecruiterDashboard() {
               Welcome back, {user?.name.split(" ")[0] ?? "there"}.
             </h1>
             <p className="mt-2 max-w-lg text-sm leading-relaxed text-muted-foreground">
-              Company → Post job → Admin approval → Review applicants → Shortlist → Interview → Hire.
+              Create your company, post a job, then wait for an admin to approve the listing before seekers can apply.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -123,19 +124,12 @@ export function RecruiterDashboard() {
           <div>
             <p className="font-medium">Set up your company first</p>
             <p className="text-sm text-muted-foreground">
-              You need a company profile before posting jobs for admin approval.
+              Add your company name, industry, and website. The profile is active as soon as you save it, and you can post a job right away.
             </p>
           </div>
           <Button variant="signal" asChild>
             <Link to="/recruiter/company">Create company</Link>
           </Button>
-        </div>
-      )}
-
-      {companyReady && companyPending && (
-        <div className="rounded-2xl border border-status-interview/30 bg-status-interview-soft/30 px-4 py-3 text-sm sm:px-5">
-          <span className="font-medium">{company.data.name}</span> is pending admin approval. You can still post jobs —
-          they will wait for review too.
         </div>
       )}
 

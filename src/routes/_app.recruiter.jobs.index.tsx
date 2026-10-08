@@ -235,7 +235,7 @@ function MyJobsPage() {
           description={
             search.status
               ? "Try another status or clear the filter to see all listings."
-              : "Create a company profile if needed, then post your first role for admin approval."
+              : "Create your company if you have not yet, then post a role. The company is active immediately; the job stays pending until an admin approves it."
           }
           action={
             search.status ? (

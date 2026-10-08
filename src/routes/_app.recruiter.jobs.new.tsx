@@ -49,7 +49,7 @@ function PostJobPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("companies")
-        .select("id,name,status")
+        .select("id,name")
         .eq("recruiter_id", id!)
         .order("created_at", { ascending: true });
       if (error) throw error;
@@ -88,6 +88,7 @@ function PostJobPage() {
           job_type: values.job_type as JobType,
           company_id: values.company_id,
           recruiter_id: id,
+          status: "pending",
         })
         .select("id")
         .single();
@@ -111,14 +112,14 @@ function PostJobPage() {
   if (!companies.data?.length) {
     return (
       <div className="space-y-8">
-        <PageHeader eyebrow="Recruiter" title="Post a job" description="Create a company profile before posting roles." />
+        <PageHeader eyebrow="Recruiter" title="Post a job" description="Create your company profile, then submit a listing for admin approval." />
         <EmptyState
           icon={Building2}
           title="Company required"
-          description="Add your company first, then come back to post a job."
+          description="Create your company first. It becomes active immediately, and this job will start as pending until an admin approves it."
           action={
             <Button variant="signal" asChild>
-              <Link to="/recruiter/company">Set up company</Link>
+              <Link to="/recruiter/company">Create company</Link>
             </Button>
           }
         />
@@ -154,18 +155,13 @@ function PostJobPage() {
             <SelectContent>
               {companies.data.map((c) => (
                 <SelectItem key={c.id} value={c.id}>
-                  {c.name} ({c.status})
+                  {c.name}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
           {form.formState.errors.company_id && (
             <p className="text-xs text-destructive">{form.formState.errors.company_id.message}</p>
-          )}
-          {companies.data.find((c) => c.id === form.watch("company_id"))?.status === "pending" && (
-            <p className="text-xs text-muted-foreground">
-              This company is still pending admin approval. You can submit the job now; it will also wait for review.
-            </p>
           )}
         </div>
         <div className="space-y-2">
