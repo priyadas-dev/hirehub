@@ -33,7 +33,7 @@ export const NAV: Record<Role, NavItem[]> = {
     { label: "Browse Jobs", icon: Briefcase, to: "/seeker/jobs" },
     { label: "My Applications", icon: FileText, to: "/seeker/applications" },
     { label: "Saved Jobs", icon: Bookmark, soon: true },
-    { label: "My Profile / Resume", icon: UserCircle, soon: true },
+    { label: "My Profile / Resume", icon: UserCircle, to: "/seeker/profile" },
   ],
   recruiter: [
     { label: "Recruiter Dashboard", icon: LayoutDashboard, to: "/recruiter" },

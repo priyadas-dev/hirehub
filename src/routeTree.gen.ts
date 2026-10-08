@@ -21,6 +21,7 @@ import { Route as AppRecruiterApplicantsRouteImport } from './routes/_app.recrui
 import { Route as AppSeekerIndexRouteImport } from './routes/_app.seeker.index'
 import { Route as AppSeekerApplicationsRouteImport } from './routes/_app.seeker.applications'
 import { Route as AppSeekerJobsRouteImport } from './routes/_app.seeker.jobs'
+import { Route as AppSeekerProfileRouteImport } from './routes/_app.seeker.profile'
 import { Route as AppSeekerApplicationsIndexRouteImport } from './routes/_app.seeker.applications.index'
 import { Route as AppSeekerApplicationsApplicationIdRouteImport } from './routes/_app.seeker.applications.$applicationId'
 import { Route as AppSeekerJobsIndexRouteImport } from './routes/_app.seeker.jobs.index'
@@ -85,6 +86,11 @@ const AppSeekerJobsRoute = AppSeekerJobsRouteImport.update({
   path: '/jobs',
   getParentRoute: () => AppSeekerRoute,
 } as any)
+const AppSeekerProfileRoute = AppSeekerProfileRouteImport.update({
+  id: '/profile',
+  path: '/profile',
+  getParentRoute: () => AppSeekerRoute,
+} as any)
 const AppSeekerApplicationsIndexRoute =
   AppSeekerApplicationsIndexRouteImport.update({
     id: '/',
@@ -118,6 +124,7 @@ export interface FileRoutesByFullPath {
   '/recruiter/applicants': typeof AppRecruiterApplicantsRoute
   '/seeker/applications': typeof AppSeekerApplicationsRouteWithChildren
   '/seeker/jobs': typeof AppSeekerJobsRouteWithChildren
+  '/seeker/profile': typeof AppSeekerProfileRoute
   '/recruiter/': typeof AppRecruiterIndexRoute
   '/seeker/': typeof AppSeekerIndexRoute
   '/seeker/applications/$applicationId': typeof AppSeekerApplicationsApplicationIdRoute
@@ -131,6 +138,7 @@ export interface FileRoutesByTo {
   '/admin': typeof AppAdminRoute
   '/dashboard': typeof AppDashboardRoute
   '/recruiter/applicants': typeof AppRecruiterApplicantsRoute
+  '/seeker/profile': typeof AppSeekerProfileRoute
   '/recruiter': typeof AppRecruiterIndexRoute
   '/seeker': typeof AppSeekerIndexRoute
   '/seeker/applications/$applicationId': typeof AppSeekerApplicationsApplicationIdRoute
@@ -150,6 +158,7 @@ export interface FileRoutesById {
   '/_app/recruiter/applicants': typeof AppRecruiterApplicantsRoute
   '/_app/seeker/applications': typeof AppSeekerApplicationsRouteWithChildren
   '/_app/seeker/jobs': typeof AppSeekerJobsRouteWithChildren
+  '/_app/seeker/profile': typeof AppSeekerProfileRoute
   '/_app/recruiter/': typeof AppRecruiterIndexRoute
   '/_app/seeker/': typeof AppSeekerIndexRoute
   '/_app/seeker/applications/$applicationId': typeof AppSeekerApplicationsApplicationIdRoute
@@ -169,6 +178,7 @@ export interface FileRouteTypes {
     | '/recruiter/applicants'
     | '/seeker/applications'
     | '/seeker/jobs'
+    | '/seeker/profile'
     | '/recruiter/'
     | '/seeker/'
     | '/seeker/applications/$applicationId'
@@ -182,6 +192,7 @@ export interface FileRouteTypes {
     | '/admin'
     | '/dashboard'
     | '/recruiter/applicants'
+    | '/seeker/profile'
     | '/recruiter'
     | '/seeker'
     | '/seeker/applications/$applicationId'
@@ -200,6 +211,7 @@ export interface FileRouteTypes {
     | '/_app/recruiter/applicants'
     | '/_app/seeker/applications'
     | '/_app/seeker/jobs'
+    | '/_app/seeker/profile'
     | '/_app/recruiter/'
     | '/_app/seeker/'
     | '/_app/seeker/applications/$applicationId'
@@ -300,6 +312,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppSeekerJobsRouteImport
       parentRoute: typeof AppSeekerRoute
     }
+    '/_app/seeker/profile': {
+      id: '/_app/seeker/profile'
+      path: '/profile'
+      fullPath: '/seeker/profile'
+      preLoaderRoute: typeof AppSeekerProfileRouteImport
+      parentRoute: typeof AppSeekerRoute
+    }
     '/_app/seeker/applications/': {
       id: '/_app/seeker/applications/'
       path: '/'
@@ -378,12 +397,14 @@ const AppSeekerJobsRouteWithChildren = AppSeekerJobsRoute._addFileChildren(
 interface AppSeekerRouteChildren {
   AppSeekerApplicationsRoute: typeof AppSeekerApplicationsRouteWithChildren
   AppSeekerJobsRoute: typeof AppSeekerJobsRouteWithChildren
+  AppSeekerProfileRoute: typeof AppSeekerProfileRoute
   AppSeekerIndexRoute: typeof AppSeekerIndexRoute
 }
 
 const AppSeekerRouteChildren: AppSeekerRouteChildren = {
   AppSeekerApplicationsRoute: AppSeekerApplicationsRouteWithChildren,
   AppSeekerJobsRoute: AppSeekerJobsRouteWithChildren,
+  AppSeekerProfileRoute: AppSeekerProfileRoute,
   AppSeekerIndexRoute: AppSeekerIndexRoute,
 }
 

@@ -18,6 +18,7 @@ describe("App routing", () => {
     "/seeker/jobs/abc",
     "/seeker/applications",
     "/seeker/applications/abc",
+    "/seeker/profile",
     "/recruiter",
     "/recruiter/applicants",
   ])("matches application workflow route %s", (path) => {
