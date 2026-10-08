@@ -1,6 +1,6 @@
 import { Bookmark, Briefcase, CalendarClock, FileText, MapPin, Sparkles, Star } from "lucide-react";
+import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { CardSkeleton, EmptyState, PageHeader } from "@/components/feedback/States";
 import { StatusTracker } from "@/components/status/StatusTracker";
@@ -8,8 +8,6 @@ import { StatusBadge } from "@/components/status/StatusBadge";
 import type { ApplicationStatus } from "@/components/status/status";
 import { useAuth } from "@/lib/auth";
 import { countRows, fmtDate, Section, StatCard, supabase, useCounts } from "./parts";
-
-const soon = (what: string) => () => toast("Coming soon", { description: `${what} arrives in the next milestone.` });
 
 export function SeekerDashboard() {
   const { user } = useAuth();
@@ -31,6 +29,19 @@ export function SeekerDashboard() {
       const { data, error } = await supabase
         .from("applications").select("id,status,created_at,jobs(title,location)")
         .eq("seeker_id", id!).order("created_at", { ascending: false }).limit(5);
+      if (error) throw error;
+      return data;
+    },
+  });
+  const recommended = useQuery({
+    queryKey: ["seeker-recommended"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("jobs")
+        .select("id,title,location,companies(name)")
+        .eq("status", "approved")
+        .order("created_at", { ascending: false })
+        .limit(2);
       if (error) throw error;
       return data;
     },
@@ -66,41 +77,81 @@ export function SeekerDashboard() {
       </section>
 
       <div className="grid gap-8 lg:grid-cols-5">
-        <Section title="Recent applications" className="lg:col-span-3">
+        <Section
+          title="Recent applications"
+          className="lg:col-span-3"
+          action={
+            <Button size="sm" variant="outline" asChild>
+              <Link to="/seeker/applications">View all</Link>
+            </Button>
+          }
+        >
           {recent.isLoading ? <CardSkeleton /> : recent.data && recent.data.length > 0 ? (
             <ul className="surface-card divide-y">
               {recent.data.map((a) => (
-                <li key={a.id} className="flex items-center justify-between gap-4 px-5 py-4">
-                  <div className="min-w-0">
-                    <p className="truncate font-medium">{a.jobs?.title ?? "Job"}</p>
-                    <p className="text-xs text-muted-foreground">Applied {fmtDate(a.created_at)}</p>
-                  </div>
-                  <StatusBadge status={a.status as ApplicationStatus} />
+                <li key={a.id}>
+                  <Link
+                    to="/seeker/applications/$applicationId"
+                    params={{ applicationId: a.id }}
+                    className="flex items-center justify-between gap-4 px-5 py-4 transition-colors hover:bg-muted/40"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate font-medium">{a.jobs?.title ?? "Job"}</p>
+                      <p className="text-xs text-muted-foreground">Applied {fmtDate(a.created_at)}</p>
+                    </div>
+                    <StatusBadge status={a.status as ApplicationStatus} />
+                  </Link>
                 </li>
               ))}
             </ul>
           ) : (
-            <EmptyState icon={FileText} title="No applications yet"
+            <EmptyState
+              icon={FileText}
+              title="No applications yet"
               description="When you apply for a role, you'll follow its progress right here."
-              action={<Button variant="signal" onClick={soon("Job browsing")}>Browse jobs</Button>} />
+              action={
+                <Button variant="signal" asChild>
+                  <Link to="/seeker/jobs">Browse jobs</Link>
+                </Button>
+              }
+            />
           )}
         </Section>
-        <Section title="Recommended for you" description="Tailored to your profile" className="lg:col-span-2">
+        <Section title="Recommended for you" description="Latest approved roles" className="lg:col-span-2">
           <div className="space-y-3">
-            {[0, 1].map((i) => (
-              <div key={i} className="surface-card flex items-start gap-4 p-4" aria-hidden>
-                <div className="flex size-10 items-center justify-center rounded-lg border bg-muted text-muted-foreground"><Briefcase className="size-4" /></div>
-                <div className="flex-1 space-y-2">
-                  <div className="h-3 w-3/4 rounded bg-muted" />
-                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground"><MapPin className="size-3" /><div className="h-2.5 w-20 rounded bg-muted" /></div>
+            {recommended.isLoading ? (
+              <CardSkeleton rows={2} />
+            ) : recommended.data?.length ? (
+              recommended.data.map((j) => (
+                <Link
+                  key={j.id}
+                  to="/seeker/jobs/$jobId"
+                  params={{ jobId: j.id }}
+                  className="surface-card flex items-start gap-4 p-4 transition-colors hover:bg-muted/40"
+                >
+                  <div className="flex size-10 items-center justify-center rounded-lg border bg-muted text-muted-foreground">
+                    <Briefcase className="size-4" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium">{j.title}</p>
+                    <p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <MapPin className="size-3" /> {j.location ?? "Remote"}
+                      {j.companies?.name ? ` · ${j.companies.name}` : ""}
+                    </p>
+                  </div>
+                </Link>
+              ))
+            ) : (
+              <div className="rounded-xl border border-dashed bg-surface/60 p-4 text-center text-sm text-muted-foreground">
+                <Sparkles className="mx-auto mb-2 size-4 text-signal" />
+                Approved roles will show up here as they are posted.
+                <div className="mt-3">
+                  <Button size="sm" variant="outline" asChild>
+                    <Link to="/seeker/jobs">Browse jobs</Link>
+                  </Button>
                 </div>
               </div>
-            ))}
-            <div className="rounded-xl border border-dashed bg-surface/60 p-4 text-center text-sm text-muted-foreground">
-              <Sparkles className="mx-auto mb-2 size-4 text-signal" />
-              Complete your profile and we'll match you with approved roles as they're posted.
-              <div className="mt-3"><Button size="sm" variant="outline" onClick={soon("Profile & resume")}>Complete profile</Button></div>
-            </div>
+            )}
           </div>
         </Section>
       </div>

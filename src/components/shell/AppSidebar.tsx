@@ -28,7 +28,9 @@ export function SidebarNav({ role, onNavigate }: { role: Role; onNavigate?: () =
           <span key={item.label} aria-disabled className={cn(base, "cursor-default text-muted-foreground/70")}>
             <Icon className="size-4" />
             {item.label}
-            <span className="ml-auto rounded-md border px-1.5 py-0.5 text-[10px] uppercase tracking-wider">Soon</span>
+            {item.soon && (
+              <span className="ml-auto rounded-md border px-1.5 py-0.5 text-[10px] uppercase tracking-wider">Soon</span>
+            )}
           </span>
         );
       })}

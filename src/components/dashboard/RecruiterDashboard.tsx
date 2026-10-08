@@ -1,4 +1,5 @@
 import { Briefcase, CheckCircle2, Clock, PlusSquare, Users } from "lucide-react";
+import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -54,7 +55,12 @@ export function RecruiterDashboard() {
             <h1 className="mt-2 font-display text-3xl sm:text-4xl">Welcome back, {user?.name.split(" ")[0] ?? "there"}.</h1>
             <p className="mt-2 max-w-lg text-sm text-muted-foreground">Post roles, review applicants and move great people forward.</p>
           </div>
-          <Button variant="signal" size="lg" onClick={soon("Job posting")}><PlusSquare /> Post a job</Button>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" size="lg" asChild>
+              <Link to="/recruiter/applicants"><Users /> Applicants</Link>
+            </Button>
+            <Button variant="signal" size="lg" onClick={soon("Job posting")}><PlusSquare /> Post a job</Button>
+          </div>
         </div>
       </header>
 
@@ -84,16 +90,29 @@ export function RecruiterDashboard() {
               action={<Button variant="signal" onClick={soon("Job posting")}>Post a job</Button>} />
           )}
         </Section>
-        <Section title="Recent applicants">
+        <Section
+          title="Recent applicants"
+          action={
+            <Button size="sm" variant="outline" asChild>
+              <Link to="/recruiter/applicants">View all</Link>
+            </Button>
+          }
+        >
           {recentApps.isLoading ? <CardSkeleton /> : recentApps.data?.length ? (
             <ul className="surface-card divide-y">
               {recentApps.data.map((a) => (
-                <li key={a.id} className="flex items-center justify-between gap-4 px-5 py-4">
-                  <div className="min-w-0">
-                    <p className="truncate font-medium">{a.profiles?.full_name || a.profiles?.email || "Applicant"}</p>
-                    <p className="truncate text-xs text-muted-foreground">{a.jobs.title} · {fmtDate(a.created_at)}</p>
-                  </div>
-                  <StatusBadge status={a.status as ApplicationStatus} />
+                <li key={a.id}>
+                  <Link
+                    to="/recruiter/applicants"
+                    search={{ applicationId: a.id }}
+                    className="flex items-center justify-between gap-4 px-5 py-4 transition-colors hover:bg-muted/40"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate font-medium">{a.profiles?.full_name || a.profiles?.email || "Applicant"}</p>
+                      <p className="truncate text-xs text-muted-foreground">{a.jobs.title} · {fmtDate(a.created_at)}</p>
+                    </div>
+                    <StatusBadge status={a.status as ApplicationStatus} />
+                  </Link>
                 </li>
               ))}
             </ul>
