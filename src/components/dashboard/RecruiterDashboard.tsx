@@ -1,15 +1,12 @@
-import { Briefcase, CheckCircle2, Clock, PlusSquare, Users } from "lucide-react";
+import { Briefcase, Building2, CheckCircle2, Clock, PlusSquare, Users } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { CardSkeleton, EmptyState } from "@/components/feedback/States";
+import { CardSkeleton, EmptyState, ErrorState } from "@/components/feedback/States";
 import { StatusBadge } from "@/components/status/StatusBadge";
 import type { ApplicationStatus } from "@/components/status/status";
 import { useAuth } from "@/lib/auth";
 import { countRows, fmtDate, Section, StatCard, supabase, useCounts } from "./parts";
-
-const soon = (what: string) => () => toast("Coming soon", { description: `${what} arrives in the next milestone.` });
 
 export function RecruiterDashboard() {
   const { user } = useAuth();
@@ -57,23 +54,45 @@ export function RecruiterDashboard() {
           </div>
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" size="lg" asChild>
+              <Link to="/recruiter/company"><Building2 /> Company</Link>
+            </Button>
+            <Button variant="outline" size="lg" asChild>
               <Link to="/recruiter/applicants"><Users /> Applicants</Link>
             </Button>
-            <Button variant="signal" size="lg" onClick={soon("Job posting")}><PlusSquare /> Post a job</Button>
+            <Button variant="signal" size="lg" asChild>
+              <Link to="/recruiter/jobs/new"><PlusSquare /> Post a job</Link>
+            </Button>
           </div>
         </div>
       </header>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Active jobs" value={c?.active} icon={Briefcase} loading={counts.isLoading} />
-        <StatCard label="Pending approval" value={c?.pending} icon={Clock} tone="interview" loading={counts.isLoading} />
-        <StatCard label="Total applicants" value={c?.applicants} icon={Users} tone="applied" loading={counts.isLoading} />
+        <Link to="/recruiter/jobs" className="block rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          <StatCard label="Active jobs" value={c?.active} icon={Briefcase} loading={counts.isLoading} />
+        </Link>
+        <Link to="/recruiter/jobs" className="block rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          <StatCard label="Pending approval" value={c?.pending} icon={Clock} tone="interview" loading={counts.isLoading} />
+        </Link>
+        <Link to="/recruiter/applicants" className="block rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          <StatCard label="Total applicants" value={c?.applicants} icon={Users} tone="applied" loading={counts.isLoading} />
+        </Link>
         <StatCard label="Hired" value={c?.hired} icon={CheckCircle2} tone="hired" loading={counts.isLoading} />
       </div>
 
       <div className="grid gap-8 lg:grid-cols-2">
-        <Section title="Recent job posts">
-          {recentJobs.isLoading ? <CardSkeleton /> : recentJobs.data?.length ? (
+        <Section
+          title="Recent job posts"
+          action={
+            <Button size="sm" variant="outline" asChild>
+              <Link to="/recruiter/jobs">View all</Link>
+            </Button>
+          }
+        >
+          {recentJobs.isLoading ? (
+            <CardSkeleton />
+          ) : recentJobs.isError ? (
+            <ErrorState onRetry={() => void recentJobs.refetch()} />
+          ) : recentJobs.data?.length ? (
             <ul className="surface-card divide-y">
               {recentJobs.data.map((j) => (
                 <li key={j.id} className="flex items-center justify-between gap-4 px-5 py-4">
@@ -86,8 +105,16 @@ export function RecruiterDashboard() {
               ))}
             </ul>
           ) : (
-            <EmptyState icon={Briefcase} title="No job posts yet" description="Your first listing will appear here once you post it."
-              action={<Button variant="signal" onClick={soon("Job posting")}>Post a job</Button>} />
+            <EmptyState
+              icon={Briefcase}
+              title="No job posts yet"
+              description="Your first listing will appear here once you post it."
+              action={
+                <Button variant="signal" asChild>
+                  <Link to="/recruiter/jobs/new">Post a job</Link>
+                </Button>
+              }
+            />
           )}
         </Section>
         <Section
@@ -98,7 +125,11 @@ export function RecruiterDashboard() {
             </Button>
           }
         >
-          {recentApps.isLoading ? <CardSkeleton /> : recentApps.data?.length ? (
+          {recentApps.isLoading ? (
+            <CardSkeleton />
+          ) : recentApps.isError ? (
+            <ErrorState onRetry={() => void recentApps.refetch()} />
+          ) : recentApps.data?.length ? (
             <ul className="surface-card divide-y">
               {recentApps.data.map((a) => (
                 <li key={a.id}>

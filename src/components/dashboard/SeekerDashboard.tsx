@@ -2,7 +2,7 @@ import { Bookmark, Briefcase, CalendarClock, FileText, MapPin, Sparkles, Star } 
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { CardSkeleton, EmptyState, PageHeader } from "@/components/feedback/States";
+import { CardSkeleton, EmptyState, ErrorState, PageHeader } from "@/components/feedback/States";
 import { StatusTracker } from "@/components/status/StatusTracker";
 import { StatusBadge } from "@/components/status/StatusBadge";
 import type { ApplicationStatus } from "@/components/status/status";
@@ -57,10 +57,14 @@ export function SeekerDashboard() {
         description="Track every application from first click to offer."
       />
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Applications" value={c?.applications} icon={FileText} tone="applied" loading={counts.isLoading} />
+        <Link to="/seeker/applications" className="block rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          <StatCard label="Applications" value={c?.applications} icon={FileText} tone="applied" loading={counts.isLoading} />
+        </Link>
         <StatCard label="Shortlisted" value={c?.shortlisted} icon={Star} tone="shortlisted" loading={counts.isLoading} />
         <StatCard label="Interviews" value={c?.interviews} icon={CalendarClock} tone="interview" loading={counts.isLoading} />
-        <StatCard label="Saved jobs" value={c?.saved} icon={Bookmark} loading={counts.isLoading} />
+        <Link to="/seeker/saved" className="block rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          <StatCard label="Saved jobs" value={c?.saved} icon={Bookmark} loading={counts.isLoading} />
+        </Link>
       </div>
 
       <section className="surface-card p-6 sm:p-8" aria-labelledby="journey">
@@ -86,7 +90,11 @@ export function SeekerDashboard() {
             </Button>
           }
         >
-          {recent.isLoading ? <CardSkeleton /> : recent.data && recent.data.length > 0 ? (
+          {recent.isLoading ? (
+            <CardSkeleton />
+          ) : recent.isError ? (
+            <ErrorState onRetry={() => void recent.refetch()} />
+          ) : recent.data && recent.data.length > 0 ? (
             <ul className="surface-card divide-y">
               {recent.data.map((a) => (
                 <li key={a.id}>
@@ -121,6 +129,8 @@ export function SeekerDashboard() {
           <div className="space-y-3">
             {recommended.isLoading ? (
               <CardSkeleton rows={2} />
+            ) : recommended.isError ? (
+              <ErrorState onRetry={() => void recommended.refetch()} />
             ) : recommended.data?.length ? (
               recommended.data.map((j) => (
                 <Link

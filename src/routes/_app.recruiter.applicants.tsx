@@ -6,7 +6,7 @@ import { z } from "zod";
 import { CardSkeleton, EmptyState, ErrorState, PageHeader } from "@/components/feedback/States";
 import { StatusBadge } from "@/components/status/StatusBadge";
 import { StatusTracker } from "@/components/status/StatusTracker";
-import type { ApplicationStatus } from "@/components/status/status";
+import { STATUS_META, type ApplicationStatus } from "@/components/status/status";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { nextApplicationStatuses, STATUS_ACTION_LABEL } from "@/lib/hirehub";
@@ -95,6 +95,8 @@ function ApplicantsPage() {
       await qc.invalidateQueries({ queryKey: ["seeker-recent"] });
       await qc.invalidateQueries({ queryKey: ["seeker-applications"] });
       await qc.invalidateQueries({ queryKey: ["seeker-application"] });
+      await qc.invalidateQueries({ queryKey: ["admin-applications"] });
+      await qc.invalidateQueries({ queryKey: ["admin-reports"] });
     },
     onError: (e: Error) => toast.error("Could not update status", { description: e.message }),
   });
@@ -142,7 +144,7 @@ function ApplicantsPage() {
             <SelectItem value="all">All statuses</SelectItem>
             {(["applied", "shortlisted", "interview", "hired", "rejected"] as ApplicationStatus[]).map((s) => (
               <SelectItem key={s} value={s}>
-                {s}
+                {STATUS_META[s].label}
               </SelectItem>
             ))}
           </SelectContent>

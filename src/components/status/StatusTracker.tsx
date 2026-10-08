@@ -71,6 +71,9 @@ export function StatusTracker({ status, className }: { status: ApplicationStatus
           })}
         </ol>
       </div>
+      {rejected && (
+        <p className="mt-4 text-center text-sm text-status-rejected">This application was not selected.</p>
+      )}
     </div>
   );
 }

@@ -3,7 +3,7 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Briefcase, Building2, Calendar, MapPin } from "lucide-react";
+import { Bookmark, Briefcase, Building2, Calendar, MapPin } from "lucide-react";
 import { toast } from "sonner";
 import { CardSkeleton, ErrorState, PageHeader } from "@/components/feedback/States";
 import { Button } from "@/components/ui/button";
@@ -66,6 +66,42 @@ function JobDetailPage() {
       if (error) throw error;
       return data;
     },
+  });
+
+  const saved = useQuery({
+    queryKey: ["seeker-saved-for-job", id, jobId],
+    enabled: !!id,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("saved_jobs")
+        .select("id")
+        .eq("seeker_id", id!)
+        .eq("job_id", jobId)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const toggleSave = useMutation({
+    mutationFn: async () => {
+      if (!id) throw new Error("Not signed in");
+      if (saved.data?.id) {
+        const { error } = await supabase.from("saved_jobs").delete().eq("id", saved.data.id).eq("seeker_id", id);
+        if (error) throw error;
+        return "removed" as const;
+      }
+      const { error } = await supabase.from("saved_jobs").insert({ seeker_id: id, job_id: jobId });
+      if (error) throw error;
+      return "saved" as const;
+    },
+    onSuccess: async (action) => {
+      toast.success(action === "saved" ? "Job saved" : "Removed from saved");
+      await qc.invalidateQueries({ queryKey: ["seeker-saved-for-job", id, jobId] });
+      await qc.invalidateQueries({ queryKey: ["seeker-saved"] });
+      await qc.invalidateQueries({ queryKey: ["dash-counts"] });
+    },
+    onError: (e: Error) => toast.error("Could not update saved jobs", { description: e.message }),
   });
 
   const form = useForm<ApplyValues>({
@@ -156,9 +192,19 @@ function JobDetailPage() {
         title={j.title}
         description={`${JOB_TYPE_LABEL[j.job_type]} · Posted ${fmtDate(j.created_at)}`}
         actions={
-          <Button variant="outline" asChild>
-            <Link to="/seeker/jobs">Back to jobs</Link>
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              disabled={!id || toggleSave.isPending}
+              onClick={() => toggleSave.mutate()}
+            >
+              <Bookmark className={saved.data ? "fill-current" : undefined} />
+              {saved.data ? "Saved" : "Save job"}
+            </Button>
+            <Button variant="outline" asChild>
+              <Link to="/seeker/jobs">Back to jobs</Link>
+            </Button>
+          </div>
         }
       />
 

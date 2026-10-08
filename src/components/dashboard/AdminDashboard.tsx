@@ -9,6 +9,8 @@ import type { LucideIcon } from "lucide-react";
 import type { AppNavPath } from "@/components/shell/nav";
 
 const QUICK_LINKS: { label: string; description: string; to: AppNavPath; icon: LucideIcon }[] = [
+  { label: "Approve jobs", description: "Review pending listings", to: "/admin/jobs", icon: ShieldCheck },
+  { label: "Manage companies", description: "Approve recruiter companies", to: "/admin/companies", icon: Building2 },
   { label: "Manage users", description: "View accounts and change roles", to: "/admin/users", icon: Users },
   { label: "All applications", description: "Job, applicant, status, and date", to: "/admin/applications", icon: ClipboardList },
   { label: "Reports", description: "Recruitment stats and charts", to: "/admin/reports", icon: BarChart3 },
@@ -65,10 +67,10 @@ export function AdminDashboard() {
           </div>
           <div className="flex flex-wrap gap-2">
             <Button variant="secondary" size="lg" asChild>
-              <Link to="/admin/users"><Users /> Users</Link>
+              <Link to="/admin/jobs"><ShieldCheck /> Approve jobs</Link>
             </Button>
             <Button variant="secondary" size="lg" asChild>
-              <Link to="/admin/applications"><ClipboardList /> Applications</Link>
+              <Link to="/admin/users"><Users /> Users</Link>
             </Button>
             <Button variant="secondary" size="lg" asChild>
               <Link to="/admin/reports"><BarChart3 /> Reports</Link>
@@ -78,18 +80,22 @@ export function AdminDashboard() {
       </header>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Pending jobs" value={c?.pendingJobs} icon={Briefcase} tone="interview" loading={counts.isLoading} />
-        <StatCard label="Pending companies" value={c?.pendingCompanies} icon={Building2} tone="shortlisted" loading={counts.isLoading} />
-        <Link to="/admin/users" className="block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-xl">
+        <Link to="/admin/jobs" className="block rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          <StatCard label="Pending jobs" value={c?.pendingJobs} icon={Briefcase} tone="interview" loading={counts.isLoading} />
+        </Link>
+        <Link to="/admin/companies" className="block rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          <StatCard label="Pending companies" value={c?.pendingCompanies} icon={Building2} tone="shortlisted" loading={counts.isLoading} />
+        </Link>
+        <Link to="/admin/users" className="block rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
           <StatCard label="Total users" value={c?.users} icon={Users} loading={counts.isLoading} />
         </Link>
-        <Link to="/admin/applications" className="block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-xl">
+        <Link to="/admin/applications" className="block rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
           <StatCard label="Applications" value={c?.applications} icon={FileText} tone="applied" loading={counts.isLoading} />
         </Link>
       </div>
 
-      <Section title="Admin tools" description="Jump into user management, applications, and reports">
-        <div className="grid gap-4 sm:grid-cols-3">
+      <Section title="Admin tools" description="Jump into approvals, users, applications, and reports">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
           {QUICK_LINKS.map((item) => (
             <Link
               key={item.to}
@@ -109,8 +115,20 @@ export function AdminDashboard() {
       </Section>
 
       <div className="grid gap-8 lg:grid-cols-2">
-        <Section title="Needs attention" description="Jobs and companies waiting for approval">
-          {attention.isLoading ? <CardSkeleton /> : attention.data?.length ? (
+        <Section
+          title="Needs attention"
+          description="Jobs and companies waiting for approval"
+          action={
+            <Button variant="outline" size="sm" asChild>
+              <Link to="/admin/jobs">Review jobs</Link>
+            </Button>
+          }
+        >
+          {attention.isLoading ? (
+            <CardSkeleton />
+          ) : attention.isError ? (
+            <EmptyState icon={ShieldCheck} title="Could not load" description="Refresh to try again." />
+          ) : attention.data?.length ? (
             <div className="surface-card overflow-x-auto">
               <table className="w-full text-sm">
                 <thead><tr className="border-b text-left text-xs uppercase tracking-wider text-muted-foreground">
@@ -119,7 +137,14 @@ export function AdminDashboard() {
                 <tbody className="divide-y">
                   {attention.data.map((r) => (
                     <tr key={r.kind + r.id}>
-                      <td className="px-5 py-3 font-medium">{r.name}</td>
+                      <td className="px-5 py-3">
+                        <Link
+                          to={r.kind === "Job" ? "/admin/jobs" : "/admin/companies"}
+                          className="font-medium hover:underline"
+                        >
+                          {r.name}
+                        </Link>
+                      </td>
                       <td className="px-5 py-3"><span className="rounded-full bg-status-interview-soft px-2 py-0.5 text-xs text-status-interview">{r.kind}</span></td>
                       <td className="px-5 py-3 text-muted-foreground">{fmtDate(r.at)}</td>
                     </tr>
