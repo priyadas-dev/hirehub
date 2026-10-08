@@ -1,10 +1,11 @@
 import { useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { Briefcase, MapPin, Search } from "lucide-react";
+import { Briefcase, MapPin, Search, X } from "lucide-react";
 import { CardSkeleton, EmptyState, ErrorState, PageHeader } from "@/components/feedback/States";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { JOB_TYPE_LABEL, type JobType } from "@/lib/hirehub";
 import { fmtDate, supabase } from "@/components/dashboard/parts";
@@ -37,6 +38,15 @@ function BrowseJobsPage() {
     },
   });
 
+  const locationOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const j of jobs.data ?? []) {
+      const loc = j.location?.trim();
+      if (loc) set.add(loc);
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [jobs.data]);
+
   const filtered = useMemo(() => {
     const list = jobs.data ?? [];
     const qq = q.trim().toLowerCase();
@@ -52,29 +62,115 @@ function BrowseJobsPage() {
     });
   }, [jobs.data, q, location, jobType]);
 
+  const hasActiveFilters = q.trim() !== "" || location.trim() !== "" || jobType !== "all";
+  const totalApproved = jobs.data?.length ?? 0;
+
+  const clearFilters = () => {
+    setQ("");
+    setLocation("");
+    setJobType("all");
+  };
+
   return (
     <div className="space-y-8">
-      <PageHeader eyebrow="Job Seeker" title="Browse jobs" description="Only admin-approved roles are listed. Open a job to apply." />
+      <PageHeader
+        eyebrow="Job Seeker"
+        title="Browse jobs"
+        description="Search and filter admin-approved roles. Open a job to save or apply."
+      />
 
-      <div className="flex flex-col gap-3 rounded-2xl border bg-card/60 p-3 shadow-xs backdrop-blur-sm sm:flex-row sm:items-center sm:p-3.5">
-        <div className="relative flex-1">
-          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input className="border-0 bg-transparent pl-9 shadow-none focus-visible:ring-0" placeholder="Search title or company" value={q} onChange={(e) => setQ(e.target.value)} />
+      <div className="surface-card space-y-4 p-4 sm:p-5">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,11rem)]">
+          <div className="space-y-1.5 sm:col-span-2 lg:col-span-1">
+            <Label htmlFor="job-search" className="text-xs text-muted-foreground">
+              Search
+            </Label>
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                id="job-search"
+                className="pl-9"
+                placeholder="Job title or company"
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                autoComplete="off"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="job-location" className="text-xs text-muted-foreground">
+              Location
+            </Label>
+            <div className="relative">
+              <MapPin className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                id="job-location"
+                className="pl-9"
+                list="job-location-options"
+                placeholder="City, remote…"
+                value={location}
+                onChange={(e) => setLocation(e.target.value)}
+                autoComplete="off"
+              />
+              <datalist id="job-location-options">
+                {locationOptions.map((loc) => (
+                  <option key={loc} value={loc} />
+                ))}
+              </datalist>
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Job type</Label>
+            <Select value={jobType} onValueChange={(v) => setJobType(v as JobType | "all")}>
+              <SelectTrigger className="w-full" aria-label="Filter by job type">
+                <SelectValue placeholder="All types" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All types</SelectItem>
+                {(Object.keys(JOB_TYPE_LABEL) as JobType[]).map((t) => (
+                  <SelectItem key={t} value={t}>
+                    {JOB_TYPE_LABEL[t]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
-        <Input className="sm:w-48" placeholder="Location" value={location} onChange={(e) => setLocation(e.target.value)} />
-        <Select value={jobType} onValueChange={(v) => setJobType(v as JobType | "all")}>
-          <SelectTrigger className="sm:w-44">
-            <SelectValue placeholder="Job type" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All types</SelectItem>
-            {(Object.keys(JOB_TYPE_LABEL) as JobType[]).map((t) => (
-              <SelectItem key={t} value={t}>
-                {JOB_TYPE_LABEL[t]}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+
+        <div className="flex flex-col gap-3 border-t pt-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-muted-foreground" aria-live="polite">
+            {jobs.isLoading ? (
+              "Loading jobs…"
+            ) : (
+              <>
+                Showing{" "}
+                <span className="font-medium text-foreground tabular-nums">{filtered.length}</span>
+                {hasActiveFilters ? (
+                  <>
+                    {" "}
+                    of <span className="font-medium text-foreground tabular-nums">{totalApproved}</span> approved{" "}
+                    {totalApproved === 1 ? "job" : "jobs"}
+                  </>
+                ) : (
+                  <> approved {filtered.length === 1 ? "job" : "jobs"}</>
+                )}
+              </>
+            )}
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="w-full sm:w-auto"
+            disabled={!hasActiveFilters}
+            onClick={clearFilters}
+          >
+            <X className="size-3.5" />
+            Clear all filters
+          </Button>
+        </div>
       </div>
 
       {jobs.isLoading ? (
@@ -105,7 +201,12 @@ function BrowseJobsPage() {
                 {j.salary_range && <span className="rounded-full border bg-surface/80 px-2 py-0.5">{j.salary_range}</span>}
                 <span className="rounded-full border bg-surface/80 px-2 py-0.5">Posted {fmtDate(j.created_at)}</span>
               </div>
-              <Button asChild size="sm" variant="outline" className="mt-auto w-fit transition-colors group-hover:border-signal/40 group-hover:text-signal">
+              <Button
+                asChild
+                size="sm"
+                variant="outline"
+                className="mt-auto w-fit transition-colors group-hover:border-signal/40 group-hover:text-signal"
+              >
                 <Link to="/seeker/jobs/$jobId" params={{ jobId: j.id }}>
                   View & apply
                 </Link>
@@ -116,8 +217,20 @@ function BrowseJobsPage() {
       ) : (
         <EmptyState
           icon={Briefcase}
-          title={jobs.data?.length ? "No matches" : "No approved jobs yet"}
-          description={jobs.data?.length ? "Try a different search or filter." : "Check back after recruiters post roles and admins approve them."}
+          title={totalApproved ? "No matches" : "No approved jobs yet"}
+          description={
+            totalApproved
+              ? "Try different search terms or clear your filters."
+              : "Check back after recruiters post roles and admins approve them."
+          }
+          action={
+            hasActiveFilters ? (
+              <Button variant="outline" onClick={clearFilters}>
+                <X className="size-3.5" />
+                Clear all filters
+              </Button>
+            ) : undefined
+          }
         />
       )}
     </div>
