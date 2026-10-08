@@ -16,6 +16,10 @@ import { Route as AppAdminRouteImport } from './routes/_app.admin'
 import { Route as AppDashboardRouteImport } from './routes/_app.dashboard'
 import { Route as AppRecruiterRouteImport } from './routes/_app.recruiter'
 import { Route as AppSeekerRouteImport } from './routes/_app.seeker'
+import { Route as AppAdminIndexRouteImport } from './routes/_app.admin.index'
+import { Route as AppAdminApplicationsRouteImport } from './routes/_app.admin.applications'
+import { Route as AppAdminReportsRouteImport } from './routes/_app.admin.reports'
+import { Route as AppAdminUsersRouteImport } from './routes/_app.admin.users'
 import { Route as AppRecruiterIndexRouteImport } from './routes/_app.recruiter.index'
 import { Route as AppRecruiterApplicantsRouteImport } from './routes/_app.recruiter.applicants'
 import { Route as AppSeekerIndexRouteImport } from './routes/_app.seeker.index'
@@ -60,6 +64,26 @@ const AppSeekerRoute = AppSeekerRouteImport.update({
   id: '/seeker',
   path: '/seeker',
   getParentRoute: () => AppRoute,
+} as any)
+const AppAdminIndexRoute = AppAdminIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AppAdminRoute,
+} as any)
+const AppAdminApplicationsRoute = AppAdminApplicationsRouteImport.update({
+  id: '/applications',
+  path: '/applications',
+  getParentRoute: () => AppAdminRoute,
+} as any)
+const AppAdminReportsRoute = AppAdminReportsRouteImport.update({
+  id: '/reports',
+  path: '/reports',
+  getParentRoute: () => AppAdminRoute,
+} as any)
+const AppAdminUsersRoute = AppAdminUsersRouteImport.update({
+  id: '/users',
+  path: '/users',
+  getParentRoute: () => AppAdminRoute,
 } as any)
 const AppRecruiterIndexRoute = AppRecruiterIndexRouteImport.update({
   id: '/',
@@ -117,14 +141,18 @@ const AppSeekerJobsJobIdRoute = AppSeekerJobsJobIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
-  '/admin': typeof AppAdminRoute
+  '/admin': typeof AppAdminRouteWithChildren
   '/dashboard': typeof AppDashboardRoute
   '/recruiter': typeof AppRecruiterRouteWithChildren
   '/seeker': typeof AppSeekerRouteWithChildren
+  '/admin/applications': typeof AppAdminApplicationsRoute
+  '/admin/reports': typeof AppAdminReportsRoute
+  '/admin/users': typeof AppAdminUsersRoute
   '/recruiter/applicants': typeof AppRecruiterApplicantsRoute
   '/seeker/applications': typeof AppSeekerApplicationsRouteWithChildren
   '/seeker/jobs': typeof AppSeekerJobsRouteWithChildren
   '/seeker/profile': typeof AppSeekerProfileRoute
+  '/admin/': typeof AppAdminIndexRoute
   '/recruiter/': typeof AppRecruiterIndexRoute
   '/seeker/': typeof AppSeekerIndexRoute
   '/seeker/applications/$applicationId': typeof AppSeekerApplicationsApplicationIdRoute
@@ -135,10 +163,13 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
-  '/admin': typeof AppAdminRoute
   '/dashboard': typeof AppDashboardRoute
+  '/admin/applications': typeof AppAdminApplicationsRoute
+  '/admin/reports': typeof AppAdminReportsRoute
+  '/admin/users': typeof AppAdminUsersRoute
   '/recruiter/applicants': typeof AppRecruiterApplicantsRoute
   '/seeker/profile': typeof AppSeekerProfileRoute
+  '/admin': typeof AppAdminIndexRoute
   '/recruiter': typeof AppRecruiterIndexRoute
   '/seeker': typeof AppSeekerIndexRoute
   '/seeker/applications/$applicationId': typeof AppSeekerApplicationsApplicationIdRoute
@@ -151,14 +182,18 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_app': typeof AppRouteWithChildren
   '/auth': typeof AuthRoute
-  '/_app/admin': typeof AppAdminRoute
+  '/_app/admin': typeof AppAdminRouteWithChildren
   '/_app/dashboard': typeof AppDashboardRoute
   '/_app/recruiter': typeof AppRecruiterRouteWithChildren
   '/_app/seeker': typeof AppSeekerRouteWithChildren
+  '/_app/admin/applications': typeof AppAdminApplicationsRoute
+  '/_app/admin/reports': typeof AppAdminReportsRoute
+  '/_app/admin/users': typeof AppAdminUsersRoute
   '/_app/recruiter/applicants': typeof AppRecruiterApplicantsRoute
   '/_app/seeker/applications': typeof AppSeekerApplicationsRouteWithChildren
   '/_app/seeker/jobs': typeof AppSeekerJobsRouteWithChildren
   '/_app/seeker/profile': typeof AppSeekerProfileRoute
+  '/_app/admin/': typeof AppAdminIndexRoute
   '/_app/recruiter/': typeof AppRecruiterIndexRoute
   '/_app/seeker/': typeof AppSeekerIndexRoute
   '/_app/seeker/applications/$applicationId': typeof AppSeekerApplicationsApplicationIdRoute
@@ -175,10 +210,14 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/recruiter'
     | '/seeker'
+    | '/admin/applications'
+    | '/admin/reports'
+    | '/admin/users'
     | '/recruiter/applicants'
     | '/seeker/applications'
     | '/seeker/jobs'
     | '/seeker/profile'
+    | '/admin/'
     | '/recruiter/'
     | '/seeker/'
     | '/seeker/applications/$applicationId'
@@ -189,10 +228,13 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/auth'
-    | '/admin'
     | '/dashboard'
+    | '/admin/applications'
+    | '/admin/reports'
+    | '/admin/users'
     | '/recruiter/applicants'
     | '/seeker/profile'
+    | '/admin'
     | '/recruiter'
     | '/seeker'
     | '/seeker/applications/$applicationId'
@@ -208,10 +250,14 @@ export interface FileRouteTypes {
     | '/_app/dashboard'
     | '/_app/recruiter'
     | '/_app/seeker'
+    | '/_app/admin/applications'
+    | '/_app/admin/reports'
+    | '/_app/admin/users'
     | '/_app/recruiter/applicants'
     | '/_app/seeker/applications'
     | '/_app/seeker/jobs'
     | '/_app/seeker/profile'
+    | '/_app/admin/'
     | '/_app/recruiter/'
     | '/_app/seeker/'
     | '/_app/seeker/applications/$applicationId'
@@ -276,6 +322,34 @@ declare module '@tanstack/react-router' {
       fullPath: '/seeker'
       preLoaderRoute: typeof AppSeekerRouteImport
       parentRoute: typeof AppRoute
+    }
+    '/_app/admin/': {
+      id: '/_app/admin/'
+      path: '/'
+      fullPath: '/admin/'
+      preLoaderRoute: typeof AppAdminIndexRouteImport
+      parentRoute: typeof AppAdminRoute
+    }
+    '/_app/admin/applications': {
+      id: '/_app/admin/applications'
+      path: '/applications'
+      fullPath: '/admin/applications'
+      preLoaderRoute: typeof AppAdminApplicationsRouteImport
+      parentRoute: typeof AppAdminRoute
+    }
+    '/_app/admin/reports': {
+      id: '/_app/admin/reports'
+      path: '/reports'
+      fullPath: '/admin/reports'
+      preLoaderRoute: typeof AppAdminReportsRouteImport
+      parentRoute: typeof AppAdminRoute
+    }
+    '/_app/admin/users': {
+      id: '/_app/admin/users'
+      path: '/users'
+      fullPath: '/admin/users'
+      preLoaderRoute: typeof AppAdminUsersRouteImport
+      parentRoute: typeof AppAdminRoute
     }
     '/_app/recruiter/': {
       id: '/_app/recruiter/'
@@ -350,6 +424,24 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface AppAdminRouteChildren {
+  AppAdminApplicationsRoute: typeof AppAdminApplicationsRoute
+  AppAdminReportsRoute: typeof AppAdminReportsRoute
+  AppAdminUsersRoute: typeof AppAdminUsersRoute
+  AppAdminIndexRoute: typeof AppAdminIndexRoute
+}
+
+const AppAdminRouteChildren: AppAdminRouteChildren = {
+  AppAdminApplicationsRoute: AppAdminApplicationsRoute,
+  AppAdminReportsRoute: AppAdminReportsRoute,
+  AppAdminUsersRoute: AppAdminUsersRoute,
+  AppAdminIndexRoute: AppAdminIndexRoute,
+}
+
+const AppAdminRouteWithChildren = AppAdminRoute._addFileChildren(
+  AppAdminRouteChildren,
+)
+
 interface AppRecruiterRouteChildren {
   AppRecruiterApplicantsRoute: typeof AppRecruiterApplicantsRoute
   AppRecruiterIndexRoute: typeof AppRecruiterIndexRoute
@@ -413,14 +505,14 @@ const AppSeekerRouteWithChildren = AppSeekerRoute._addFileChildren(
 )
 
 interface AppRouteChildren {
-  AppAdminRoute: typeof AppAdminRoute
+  AppAdminRoute: typeof AppAdminRouteWithChildren
   AppDashboardRoute: typeof AppDashboardRoute
   AppRecruiterRoute: typeof AppRecruiterRouteWithChildren
   AppSeekerRoute: typeof AppSeekerRouteWithChildren
 }
 
 const AppRouteChildren: AppRouteChildren = {
-  AppAdminRoute: AppAdminRoute,
+  AppAdminRoute: AppAdminRouteWithChildren,
   AppDashboardRoute: AppDashboardRoute,
   AppRecruiterRoute: AppRecruiterRouteWithChildren,
   AppSeekerRoute: AppSeekerRouteWithChildren,

@@ -45,9 +45,9 @@ export const NAV: Record<Role, NavItem[]> = {
   admin: [
     { label: "Admin Dashboard", icon: LayoutDashboard, to: "/admin" },
     { label: "Approve Jobs", icon: ShieldCheck, soon: true },
-    { label: "Manage Users", icon: Users, soon: true },
+    { label: "Manage Users", icon: Users, to: "/admin/users" },
     { label: "Manage Companies", icon: Building2, soon: true },
-    { label: "All Applications", icon: ClipboardList, soon: true },
-    { label: "Reports", icon: BarChart3, soon: true },
+    { label: "All Applications", icon: ClipboardList, to: "/admin/applications" },
+    { label: "Reports", icon: BarChart3, to: "/admin/reports" },
   ],
 };

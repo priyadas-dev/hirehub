@@ -1,8 +1,18 @@
-import { Activity, Briefcase, Building2, FileText, ShieldCheck, Users } from "lucide-react";
+import { Activity, BarChart3, Briefcase, Building2, ClipboardList, FileText, ShieldCheck, Users } from "lucide-react";
+import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { CardSkeleton, EmptyState } from "@/components/feedback/States";
+import { Button } from "@/components/ui/button";
 import { countRows, fmtDate, Section, StatCard, supabase, useCounts } from "./parts";
 import { useAuth } from "@/lib/auth";
+import type { LucideIcon } from "lucide-react";
+import type { AppNavPath } from "@/components/shell/nav";
+
+const QUICK_LINKS: { label: string; description: string; to: AppNavPath; icon: LucideIcon }[] = [
+  { label: "Manage users", description: "View accounts and change roles", to: "/admin/users", icon: Users },
+  { label: "All applications", description: "Job, applicant, status, and date", to: "/admin/applications", icon: ClipboardList },
+  { label: "Reports", description: "Recruitment stats and charts", to: "/admin/reports", icon: BarChart3 },
+];
 
 export function AdminDashboard() {
   const { user } = useAuth();
@@ -45,19 +55,58 @@ export function AdminDashboard() {
   return (
     <div className="space-y-10">
       <header className="rounded-2xl bg-primary p-6 text-primary-foreground sm:p-8">
-        <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-[0.14em] opacity-70">
-          <ShieldCheck className="size-4" /> Admin control center
+        <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-[0.14em] opacity-70">
+              <ShieldCheck className="size-4" /> Admin control center
+            </div>
+            <h1 className="mt-2 font-display text-3xl sm:text-4xl">Platform overview</h1>
+            <p className="mt-2 max-w-lg text-sm opacity-70">Review what needs approval and keep an eye on activity across HireHub.</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="secondary" size="lg" asChild>
+              <Link to="/admin/users"><Users /> Users</Link>
+            </Button>
+            <Button variant="secondary" size="lg" asChild>
+              <Link to="/admin/applications"><ClipboardList /> Applications</Link>
+            </Button>
+            <Button variant="secondary" size="lg" asChild>
+              <Link to="/admin/reports"><BarChart3 /> Reports</Link>
+            </Button>
+          </div>
         </div>
-        <h1 className="mt-2 font-display text-3xl sm:text-4xl">Platform overview</h1>
-        <p className="mt-2 max-w-lg text-sm opacity-70">Review what needs approval and keep an eye on activity across HireHub.</p>
       </header>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard label="Pending jobs" value={c?.pendingJobs} icon={Briefcase} tone="interview" loading={counts.isLoading} />
         <StatCard label="Pending companies" value={c?.pendingCompanies} icon={Building2} tone="shortlisted" loading={counts.isLoading} />
-        <StatCard label="Total users" value={c?.users} icon={Users} loading={counts.isLoading} />
-        <StatCard label="Applications" value={c?.applications} icon={FileText} tone="applied" loading={counts.isLoading} />
+        <Link to="/admin/users" className="block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-xl">
+          <StatCard label="Total users" value={c?.users} icon={Users} loading={counts.isLoading} />
+        </Link>
+        <Link to="/admin/applications" className="block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-xl">
+          <StatCard label="Applications" value={c?.applications} icon={FileText} tone="applied" loading={counts.isLoading} />
+        </Link>
       </div>
+
+      <Section title="Admin tools" description="Jump into user management, applications, and reports">
+        <div className="grid gap-4 sm:grid-cols-3">
+          {QUICK_LINKS.map((item) => (
+            <Link
+              key={item.to}
+              to={item.to}
+              className="surface-card interactive-card flex flex-col gap-3 p-5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <span className="flex size-9 items-center justify-center rounded-lg bg-signal-soft text-signal">
+                <item.icon className="size-4" />
+              </span>
+              <div>
+                <p className="font-medium">{item.label}</p>
+                <p className="mt-1 text-sm text-muted-foreground">{item.description}</p>
+              </div>
+            </Link>
+          ))}
+        </div>
+      </Section>
 
       <div className="grid gap-8 lg:grid-cols-2">
         <Section title="Needs attention" description="Jobs and companies waiting for approval">
@@ -82,7 +131,15 @@ export function AdminDashboard() {
             <EmptyState icon={ShieldCheck} title="All clear" description="Nothing is waiting for approval right now." />
           )}
         </Section>
-        <Section title="Recent platform activity" description="Latest signups">
+        <Section
+          title="Recent platform activity"
+          description="Latest signups"
+          action={
+            <Button variant="outline" size="sm" asChild>
+              <Link to="/admin/users">Manage users</Link>
+            </Button>
+          }
+        >
           {signups.isLoading ? <CardSkeleton /> : signups.data?.length ? (
             <ul className="surface-card divide-y">
               {signups.data.map((p) => (

@@ -21,6 +21,10 @@ describe("App routing", () => {
     "/seeker/profile",
     "/recruiter",
     "/recruiter/applicants",
+    "/admin",
+    "/admin/users",
+    "/admin/applications",
+    "/admin/reports",
   ])("matches application workflow route %s", (path) => {
     const matches = router.matchRoutes(path);
     expect(matches.at(-1)?.routeId).not.toBe(rootRouteId);
