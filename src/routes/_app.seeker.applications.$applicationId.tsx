@@ -43,13 +43,17 @@ function ApplicationDetailPage() {
       if (app.data?.status !== "applied") {
         throw new Error("You can only withdraw while the status is Applied");
       }
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from("applications")
         .delete()
         .eq("id", applicationId)
         .eq("seeker_id", id!)
-        .eq("status", "applied");
+        .eq("status", "applied")
+        .select("id");
       if (error) throw error;
+      if (!data?.length) {
+        throw new Error("Application could not be withdrawn — status may have already changed.");
+      }
     },
     onSuccess: async () => {
       toast.success("Application withdrawn");

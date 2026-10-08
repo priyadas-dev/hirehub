@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -15,11 +15,6 @@ import { supabase } from "@/integrations/supabase/client";
 const schema = z.object({
   full_name: z.string().trim().min(2, "Name is required"),
   phone: z.string().trim().optional(),
-  resume_url: z
-    .string()
-    .trim()
-    .optional()
-    .refine((v) => !v || /^https?:\/\//i.test(v), "Resume must be a full URL starting with http"),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -28,7 +23,7 @@ export const Route = createFileRoute("/_app/seeker/profile")({
   head: () => ({
     meta: [
       { title: "My Profile — HireHub" },
-      { name: "description", content: "Update your seeker profile and resume link." },
+      { name: "description", content: "Update your seeker profile and review your resume link." },
     ],
   }),
   component: SeekerProfilePage,
@@ -53,7 +48,7 @@ function SeekerProfilePage() {
     },
   });
 
-  /** Resume lives on applications in the existing schema (no profiles.resume_url column). */
+  /** Resume lives on applications; seekers can SELECT but not UPDATE under existing RLS. */
   const latestResume = useQuery({
     queryKey: ["seeker-latest-resume", id],
     enabled: !!id,
@@ -72,7 +67,7 @@ function SeekerProfilePage() {
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { full_name: "", phone: "", resume_url: "" },
+    defaultValues: { full_name: "", phone: "" },
   });
 
   useEffect(() => {
@@ -80,42 +75,25 @@ function SeekerProfilePage() {
       form.reset({
         full_name: profile.data.full_name ?? "",
         phone: profile.data.phone ?? "",
-        resume_url: latestResume.data?.resume_url ?? "",
       });
     }
-  }, [profile.data, latestResume.data, form]);
+  }, [profile.data, form]);
 
   const save = useMutation({
     mutationFn: async (values: FormValues) => {
       if (!id) throw new Error("Not signed in");
-
-      const { error: profileErr } = await supabase
+      const { error } = await supabase
         .from("profiles")
         .update({
           full_name: values.full_name.trim(),
           phone: values.phone?.trim() || null,
         })
         .eq("id", id);
-      if (profileErr) throw profileErr;
-
-      const resume = values.resume_url?.trim() || null;
-      if (latestResume.data?.id) {
-        const { error: appErr } = await supabase
-          .from("applications")
-          .update({ resume_url: resume })
-          .eq("id", latestResume.data.id)
-          .eq("seeker_id", id);
-        if (appErr) throw appErr;
-      } else if (resume) {
-        throw new Error("Apply to a job first to attach a resume URL, or leave the resume field empty for now.");
-      }
+      if (error) throw error;
     },
     onSuccess: async () => {
       toast.success("Profile updated");
       await qc.invalidateQueries({ queryKey: ["seeker-profile", id] });
-      await qc.invalidateQueries({ queryKey: ["seeker-latest-resume", id] });
-      await qc.invalidateQueries({ queryKey: ["seeker-applications"] });
-      await qc.invalidateQueries({ queryKey: ["seeker-application"] });
       await refresh();
     },
     onError: (e: Error) => toast.error("Could not update profile", { description: e.message }),
@@ -129,7 +107,7 @@ function SeekerProfilePage() {
       <PageHeader
         eyebrow="Job Seeker"
         title="My profile / resume"
-        description="Keep your contact details current. Resume links are stored with your applications."
+        description="Keep your contact details current. Resume links are attached when you apply."
       />
 
       <form className="surface-card max-w-xl space-y-5 p-6" onSubmit={form.handleSubmit((v) => save.mutate(v))}>
@@ -151,15 +129,21 @@ function SeekerProfilePage() {
         </div>
         <div className="space-y-2">
           <Label htmlFor="resume_url">Resume URL</Label>
-          <Input id="resume_url" placeholder="https://…" {...form.register("resume_url")} />
-          {form.formState.errors.resume_url && (
-            <p className="text-xs text-destructive">{form.formState.errors.resume_url.message}</p>
-          )}
+          <Input
+            id="resume_url"
+            value={latestResume.data?.resume_url ?? ""}
+            disabled
+            readOnly
+            placeholder="Set when you apply to a job"
+          />
           <p className="text-xs text-muted-foreground">
-            {latestResume.data
-              ? `Saved with your latest application${latestResume.data.jobs?.title ? ` (${latestResume.data.jobs.title})` : ""}.`
-              : "No applications yet — submit an application first, then you can update the resume link here."}
+            {latestResume.data?.resume_url
+              ? `From your latest application${latestResume.data.jobs?.title ? ` (${latestResume.data.jobs.title})` : ""}. Change it the next time you apply.`
+              : "No resume on file yet — add a URL when you submit an application."}
           </p>
+          <Button type="button" variant="outline" size="sm" asChild>
+            <Link to="/seeker/jobs">Browse jobs to apply</Link>
+          </Button>
         </div>
         <Button type="submit" variant="signal" disabled={save.isPending}>
           {save.isPending ? "Saving…" : "Save profile"}

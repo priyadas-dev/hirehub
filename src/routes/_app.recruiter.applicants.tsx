@@ -84,8 +84,16 @@ function ApplicantsPage() {
       if (!allowed.includes(status)) {
         throw new Error(`Cannot move from ${from} to ${status}`);
       }
-      const { error } = await supabase.from("applications").update({ status }).eq("id", applicationId);
+      const { data, error } = await supabase
+        .from("applications")
+        .update({ status })
+        .eq("id", applicationId)
+        .eq("status", from)
+        .select("id");
       if (error) throw error;
+      if (!data?.length) {
+        throw new Error("Status was already changed. Refresh and try again.");
+      }
     },
     onSuccess: async () => {
       toast.success("Application status updated");
@@ -185,13 +193,16 @@ function ApplicantsPage() {
 
           {selected && (
             <div className="surface-card space-y-6 p-6 lg:col-span-3">
-              <div>
-                <h2 className="text-lg font-semibold">
-                  {selected.profiles?.full_name || selected.profiles?.email || "Applicant"}
-                </h2>
-                <p className="text-sm text-muted-foreground">
-                  {selected.jobs.title} · Applied {fmtDate(selected.created_at)}
-                </p>
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h2 className="text-lg font-semibold">
+                    {selected.profiles?.full_name || selected.profiles?.email || "Applicant"}
+                  </h2>
+                  <p className="text-sm text-muted-foreground">
+                    {selected.jobs.title} · Applied {fmtDate(selected.created_at)}
+                  </p>
+                </div>
+                <StatusBadge status={selected.status as ApplicationStatus} />
               </div>
               <StatusTracker status={selected.status as ApplicationStatus} />
               <div className="space-y-2 text-sm">

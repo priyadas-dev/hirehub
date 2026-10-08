@@ -21,6 +21,12 @@ function initials(name: string) {
   return name.split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase();
 }
 
+function profilePath(role: SessionUser["role"]) {
+  if (role === "seeker") return "/seeker/profile" as const;
+  if (role === "recruiter") return "/recruiter/company" as const;
+  return "/admin" as const;
+}
+
 function UserMenu({ user }: { user: SessionUser }) {
   const { signOut } = useAuth();
   const navigate = useNavigate();
@@ -43,7 +49,9 @@ function UserMenu({ user }: { user: SessionUser }) {
           <p className="truncate text-xs text-muted-foreground">{user.email}</p>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onSelect={() => toast("Profile is coming soon")}><User /> Profile</DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => void navigate({ to: profilePath(user.role) })}>
+          <User /> Profile
+        </DropdownMenuItem>
         <DropdownMenuItem onSelect={() => toast("Settings are coming soon")}><Settings /> Settings</DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem

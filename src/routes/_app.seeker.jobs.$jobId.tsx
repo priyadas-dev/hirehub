@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -104,10 +105,33 @@ function JobDetailPage() {
     onError: (e: Error) => toast.error("Could not update saved jobs", { description: e.message }),
   });
 
+  const latestResume = useQuery({
+    queryKey: ["seeker-latest-resume", id],
+    enabled: !!id,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("applications")
+        .select("resume_url")
+        .eq("seeker_id", id!)
+        .not("resume_url", "is", null)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
+
   const form = useForm<ApplyValues>({
     resolver: zodResolver(applySchema),
     defaultValues: { resume_url: "", cover_note: "" },
   });
+
+  useEffect(() => {
+    if (latestResume.data?.resume_url && !form.getValues("resume_url")) {
+      form.setValue("resume_url", latestResume.data.resume_url);
+    }
+  }, [latestResume.data, form]);
 
   const apply = useMutation({
     mutationFn: async (values: ApplyValues) => {
@@ -248,7 +272,9 @@ function JobDetailPage() {
 
         <section className="surface-card space-y-4 p-6 lg:col-span-2">
           <h2 className="text-lg font-semibold">Apply</h2>
-          {existingApp.data ? (
+          {existingApp.isLoading ? (
+            <CardSkeleton rows={3} />
+          ) : existingApp.data ? (
             <div className="space-y-3 text-sm">
               <p className="text-muted-foreground">You already applied to this role.</p>
               <Button asChild variant="signal">
@@ -264,6 +290,9 @@ function JobDetailPage() {
                 <Input id="resume_url" placeholder="https://…" {...form.register("resume_url")} />
                 {form.formState.errors.resume_url && (
                   <p className="text-xs text-destructive">{form.formState.errors.resume_url.message}</p>
+                )}
+                {latestResume.data?.resume_url && (
+                  <p className="text-xs text-muted-foreground">Prefilled from your last application — edit if needed.</p>
                 )}
               </div>
               <div className="space-y-2">
