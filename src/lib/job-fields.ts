@@ -65,7 +65,7 @@ export function isApplicationDeadlinePassed(isoDate: string | null | undefined, 
 
 export function fmtDeadline(isoDate: string | null | undefined): string | null {
   if (!isoDate || !ISO_DATE.test(isoDate)) return null;
-  const [y, m, d] = isoDate.split("-").map(Number);
+  const [y = 1970, m = 1, d = 1] = isoDate.split("-").map(Number);
   return new Date(y, m - 1, d).toLocaleDateString(undefined, {
     month: "short",
     day: "numeric",
