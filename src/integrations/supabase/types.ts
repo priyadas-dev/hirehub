@@ -99,6 +99,7 @@ export type Database = {
       }
       jobs: {
         Row: {
+          application_deadline: string | null
           company_id: string
           created_at: string
           description: string | null
@@ -111,6 +112,7 @@ export type Database = {
           title: string
         }
         Insert: {
+          application_deadline?: string | null
           company_id: string
           created_at?: string
           description?: string | null
@@ -123,6 +125,7 @@ export type Database = {
           title: string
         }
         Update: {
+          application_deadline?: string | null
           company_id?: string
           created_at?: string
           description?: string | null

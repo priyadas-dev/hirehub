@@ -15,6 +15,20 @@
       "when": 1791365441298,
       "tag": "0001_signup_role_choice",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791533408347,
+      "tag": "0002_jobs_application_deadline",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1791533421567,
+      "tag": "0003_applications_deadline_rls",
+      "breakpoints": true
     }
   ]
 }
