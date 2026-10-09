@@ -65,7 +65,7 @@ function SeekerProfilePage() {
       if (latestApp.error) throw latestApp.error;
 
       const meta = (authData.user?.user_metadata ?? {}) as Record<string, unknown>;
-      const metaResume = typeof meta.resume_url === "string" ? meta.resume_url : "";
+      const metaResume = typeof meta["resume_url"] === "string" ? meta["resume_url"] : "";
       const appResume = latestApp.data?.resume_url ?? "";
 
       return {

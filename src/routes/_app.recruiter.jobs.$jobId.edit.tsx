@@ -14,9 +14,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { JOB_TYPE_LABEL, type JobType } from "@/lib/hirehub";
 import {
   fmtDeadline,
+  jobDeadline,
   isDeadlineOnOrAfterToday,
   JOB_STATUS_LABEL,
-  packJobDescription,
   unpackJobDescription,
   type JobStatus,
 } from "@/lib/job-fields";
@@ -57,7 +57,7 @@ function EditJobPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("jobs")
-        .select("id,title,description,location,salary_range,job_type,status,company_id,companies(name)")
+        .select("id,title,description,location,salary_range,job_type,status,application_deadline,company_id,companies(name)")
         .eq("id", jobId)
         .eq("recruiter_id", id!)
         .maybeSingle();
@@ -81,7 +81,8 @@ function EditJobPage() {
 
   useEffect(() => {
     if (job.data) {
-      const { description, applicationDeadline } = unpackJobDescription(job.data.description);
+      const description = unpackJobDescription(job.data.description).description;
+      const applicationDeadline = jobDeadline(job.data);
       form.reset({
         title: job.data.title,
         description,
@@ -100,7 +101,7 @@ function EditJobPage() {
         throw new Error("Closed jobs cannot be edited. Post a new listing instead.");
       }
 
-      const previousDeadline = unpackJobDescription(job.data?.description).applicationDeadline;
+      const previousDeadline = jobDeadline(job.data);
       if (
         !isDeadlineOnOrAfterToday(values.application_deadline) &&
         values.application_deadline !== previousDeadline
@@ -112,7 +113,8 @@ function EditJobPage() {
         .from("jobs")
         .update({
           title: values.title.trim(),
-          description: packJobDescription(values.description, values.application_deadline),
+          description: values.description.trim(),
+          application_deadline: values.application_deadline,
           location: values.location.trim(),
           salary_range: values.salary_range?.trim() || null,
           job_type: values.job_type as JobType,
@@ -143,7 +145,7 @@ function EditJobPage() {
 
   const closed = job.data?.status === "closed";
   const status = (job.data?.status ?? "pending") as JobStatus;
-  const packedDeadline = unpackJobDescription(job.data?.description).applicationDeadline;
+  const packedDeadline = jobDeadline(job.data);
 
   return (
     <div className="space-y-8">

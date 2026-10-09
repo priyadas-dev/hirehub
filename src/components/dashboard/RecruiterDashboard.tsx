@@ -11,7 +11,7 @@ import {
   fmtDeadline,
   JOB_STATUS_BADGE_CLASS,
   JOB_STATUS_LABEL,
-  unpackJobDescription,
+  jobDeadline,
   type JobStatus,
 } from "@/lib/job-fields";
 import { cn } from "@/lib/utils";
@@ -60,7 +60,7 @@ export function RecruiterDashboard() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("jobs")
-        .select("id,title,status,created_at,location,description,applications(count)")
+        .select("id,title,status,created_at,location,description,application_deadline,applications(count)")
         .eq("recruiter_id", id!)
         .order("created_at", { ascending: false })
         .limit(5);
@@ -185,7 +185,7 @@ export function RecruiterDashboard() {
               {recentJobs.data.map((j) => {
                 const appCount = Array.isArray(j.applications) ? (j.applications[0]?.count ?? 0) : 0;
                 const status = j.status as JobStatus;
-                const deadline = unpackJobDescription(j.description).applicationDeadline;
+                const deadline = jobDeadline(j);
                 return (
                   <li key={j.id}>
                     <Link

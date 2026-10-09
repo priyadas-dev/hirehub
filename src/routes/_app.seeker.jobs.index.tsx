@@ -22,7 +22,7 @@ import {
   type LiveJob,
 } from "@/lib/job-discovery";
 import { JOB_TYPE_LABEL, type JobType } from "@/lib/hirehub";
-import { fmtDeadline, unpackJobDescription } from "@/lib/job-fields";
+import { fmtDeadline, jobDeadline, unpackJobDescription } from "@/lib/job-fields";
 import { fmtDate, supabase } from "@/components/dashboard/parts";
 
 export const Route = createFileRoute("/_app/seeker/jobs/")({
@@ -48,7 +48,7 @@ function BrowseJobsPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("jobs")
-        .select("id,title,description,location,salary_range,job_type,created_at,companies(name)")
+        .select("id,title,description,location,salary_range,job_type,created_at,application_deadline,companies(name)")
         .eq("status", "approved")
         .order("created_at", { ascending: false });
       if (error) throw error;
@@ -356,7 +356,7 @@ function BrowseJobsPage() {
                   )}
                   <span className="rounded-full border bg-surface/80 px-2 py-0.5">Posted {fmtDate(j.created_at)}</span>
                   {(() => {
-                    const deadline = unpackJobDescription(j.description).applicationDeadline;
+                    const deadline = jobDeadline(j);
                     const label = fmtDeadline(deadline);
                     return label ? (
                       <span className="rounded-full border bg-surface/80 px-2 py-0.5">Deadline {label}</span>
