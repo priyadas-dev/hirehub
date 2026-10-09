@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useNavigate } from "@tanstack/react-router";
+import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { Bell, LogOut, Menu, Search, Settings, User } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -15,10 +15,16 @@ import {
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Logo } from "@/components/brand/Logo";
 import { ROLE_HOME, ROLE_LABEL, useAuth, type SessionUser } from "@/lib/auth";
+import { headerSearchPlaceholder, headerSearchTarget } from "@/lib/header-search";
 import { SidebarNav } from "./AppSidebar";
 
 function initials(name: string) {
-  return name.split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase();
+  return name
+    .split(" ")
+    .map((p) => p[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
 }
 
 function profilePath(role: SessionUser["role"]) {
@@ -33,9 +39,14 @@ function UserMenu({ user }: { user: SessionUser }) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <button className="flex items-center gap-2.5 rounded-full p-0.5 pr-1 transition-colors hover:bg-accent sm:pr-3" aria-label="Open profile menu">
+        <button
+          className="flex items-center gap-2.5 rounded-full p-0.5 pr-1 transition-colors hover:bg-accent sm:pr-3"
+          aria-label="Open profile menu"
+        >
           <Avatar className="size-8">
-            <AvatarFallback className="bg-signal-soft text-xs font-semibold text-signal">{initials(user.name)}</AvatarFallback>
+            <AvatarFallback className="bg-signal-soft text-xs font-semibold text-signal">
+              {initials(user.name)}
+            </AvatarFallback>
           </Avatar>
           <span className="hidden text-left sm:block">
             <span className="block text-sm font-medium leading-tight">{user.name}</span>
@@ -52,7 +63,9 @@ function UserMenu({ user }: { user: SessionUser }) {
         <DropdownMenuItem onSelect={() => void navigate({ to: profilePath(user.role) })}>
           <User /> Profile
         </DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => toast("Settings are coming soon")}><Settings /> Settings</DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => toast("Settings are coming soon")}>
+          <Settings /> Settings
+        </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem
           onSelect={async () => {
@@ -65,6 +78,73 @@ function UserMenu({ user }: { user: SessionUser }) {
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
+  );
+}
+
+function HeaderSearch({ user }: { user: SessionUser }) {
+  const navigate = useNavigate();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const searchQ = useRouterState({
+    select: (s) => {
+      const search = s.location.search as Record<string, unknown>;
+      return typeof search.q === "string" ? search.q : "";
+    },
+  });
+  const [query, setQuery] = useState("");
+
+  useEffect(() => {
+    const onJobsSearchPage =
+      /^\/seeker\/jobs\/?$/.test(pathname) ||
+      /^\/recruiter\/jobs\/?$/.test(pathname) ||
+      /^\/admin\/jobs\/?$/.test(pathname);
+    if (!onJobsSearchPage) return;
+    setQuery((current) => (current === searchQ || current.trim() === searchQ ? current : searchQ));
+  }, [pathname, searchQ]);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== "k") return;
+      e.preventDefault();
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
+  const runSearch = (event?: FormEvent) => {
+    event?.preventDefault();
+    const target = headerSearchTarget(user.role, query);
+    if (target.to === "/recruiter/jobs") {
+      void navigate({
+        to: "/recruiter/jobs",
+        search: (prev) => ({ ...prev, q: target.search.q }),
+      });
+      return;
+    }
+    void navigate({ to: target.to, search: target.search });
+  };
+
+  return (
+    <form onSubmit={runSearch} className="relative min-w-0 max-w-md flex-1">
+      <label className="block">
+        <span className="sr-only">Search</span>
+        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+        <input
+          ref={inputRef}
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder={headerSearchPlaceholder(user.role)}
+          className="h-10 w-full rounded-lg border bg-card pl-9 pr-14 text-sm shadow-xs outline-none transition placeholder:text-muted-foreground focus:border-signal focus:ring-4 focus:ring-signal/10"
+          autoComplete="off"
+          enterKeyHint="search"
+        />
+        <kbd className="pointer-events-none absolute right-3 top-1/2 hidden -translate-y-1/2 rounded border bg-muted px-1.5 font-mono text-[10px] text-muted-foreground sm:inline">
+          ⌘K
+        </kbd>
+      </label>
+    </form>
   );
 }
 
@@ -85,18 +165,20 @@ export function AppHeader({ user }: { user: SessionUser }) {
         </SheetContent>
       </Sheet>
 
-      <label className="relative hidden max-w-md flex-1 md:block">
-        <span className="sr-only">Search</span>
-        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-        <input
-          placeholder="Search jobs, companies, people…"
-          className="h-10 w-full rounded-lg border bg-card pl-9 pr-14 text-sm shadow-xs outline-none transition placeholder:text-muted-foreground focus:border-signal focus:ring-4 focus:ring-signal/10"
-        />
-        <kbd className="absolute right-3 top-1/2 -translate-y-1/2 rounded border bg-muted px-1.5 font-mono text-[10px] text-muted-foreground">⌘K</kbd>
-      </label>
+      <HeaderSearch user={user} />
 
-      <div className="ml-auto flex items-center gap-1.5">
-        <Button variant="ghost" size="icon" aria-label="Notifications" className="relative" onClick={() => toast("You're all caught up", { description: "New notifications will show up here." })}>
+      <div className="flex shrink-0 items-center gap-1.5">
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label="Notifications"
+          className="relative"
+          onClick={() =>
+            toast("You're all caught up", {
+              description: "New notifications will show up here.",
+            })
+          }
+        >
           <Bell />
           <span className="absolute right-2 top-2 size-2 rounded-full bg-signal ring-2 ring-background" />
         </Button>
