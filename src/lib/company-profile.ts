@@ -1,91 +1,79 @@
-import { useEffect, useRef } from "react";
-import { useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 
-type CompanyFields = {
+export type CompanyFields = {
   name: string;
   industry: string | null;
   website: string | null;
 };
 
+/** Payload for creating a company — always pending until an admin approves. */
+export function buildCreateCompanyPayload(recruiterId: string, fields: CompanyFields) {
+  return {
+    ...fields,
+    recruiter_id: recruiterId,
+    status: "pending" as const,
+  };
+}
+
 /**
- * Insert must use status "pending" — that is what the existing company insert
- * policy allows. The owner may then set "approved", which is the active state
- * already stored on companies. No admin step, and no schema change.
+ * Fields a recruiter may update on their own company.
+ * Never includes status — only admins approve companies (assignment requirement).
  */
-export async function createActiveCompany(recruiterId: string, fields: CompanyFields) {
+export function buildSaveCompanyPayload(fields: CompanyFields) {
+  return {
+    name: fields.name,
+    industry: fields.industry,
+    website: fields.website,
+  };
+}
+
+/**
+ * Create a company as pending for admin approval.
+ * Jobs separately stay pending until admin approves them.
+ */
+export async function createPendingCompany(recruiterId: string, fields: CompanyFields) {
   const { data: created, error: insertError } = await supabase
     .from("companies")
-    .insert({ ...fields, recruiter_id: recruiterId, status: "pending" })
-    .select("id")
+    .insert(buildCreateCompanyPayload(recruiterId, fields))
+    .select("id,status")
     .single();
   if (insertError) throw insertError;
-
-  const { data: active, error: activateError } = await supabase
-    .from("companies")
-    .update({ status: "approved" })
-    .eq("id", created.id)
-    .eq("recruiter_id", recruiterId)
-    .select("id,status");
-  if (activateError) throw activateError;
-  if (!active?.some((row) => row.status === "approved")) {
-    throw new Error("Company was saved but could not be activated.");
+  if (created.status !== "pending") {
+    throw new Error("Company was created with an unexpected status.");
   }
   return created.id;
 }
 
-export async function saveActiveCompany(
+/**
+ * Update company profile fields only. Does not change approval status.
+ */
+export async function saveCompanyProfile(
   companyId: string,
   recruiterId: string,
   fields: CompanyFields,
 ) {
   const { data, error } = await supabase
     .from("companies")
-    .update({ ...fields, status: "approved" })
+    .update(buildSaveCompanyPayload(fields))
     .eq("id", companyId)
     .eq("recruiter_id", recruiterId)
     .select("id,status");
   if (error) throw error;
-  if (!data?.some((row) => row.status === "approved")) {
+  if (!data?.length) {
     throw new Error("Company could not be saved.");
   }
+  return data[0];
 }
 
-/** Clears a leftover pending company so it does not wait on admin review. */
-async function activateOwnedCompany(companyId: string, recruiterId: string) {
-  const { error } = await supabase
-    .from("companies")
-    .update({ status: "approved" })
-    .eq("id", companyId)
-    .eq("recruiter_id", recruiterId)
-    .eq("status", "pending");
-  if (error) throw error;
-}
+/** @deprecated Prefer createPendingCompany. */
+export const createActiveCompany = createPendingCompany;
 
-export function useEnsureCompanyActive(
-  companyId: string | undefined,
-  status: string | undefined,
-  recruiterId: string | undefined,
-) {
-  const qc = useQueryClient();
-  const tried = useRef<string | null>(null);
+/** @deprecated Prefer saveCompanyProfile. */
+export const saveActiveCompany = saveCompanyProfile;
 
-  useEffect(() => {
-    if (!companyId || !recruiterId || status !== "pending") return;
-    if (tried.current === companyId) return;
-    tried.current = companyId;
-
-    void activateOwnedCompany(companyId, recruiterId)
-      .then(async () => {
-        await qc.invalidateQueries({ queryKey: ["recruiter-company"] });
-        await qc.invalidateQueries({ queryKey: ["recruiter-companies"] });
-        await qc.invalidateQueries({ queryKey: ["admin-companies"] });
-        await qc.invalidateQueries({ queryKey: ["admin-attention"] });
-        await qc.invalidateQueries({ queryKey: ["dash-counts"] });
-      })
-      .catch((e: Error) => {
-        toast.error("Could not activate company", { description: e.message });
-      });
-  }, [companyId, status, recruiterId, qc]);
-}
+/*
+ * OPTIONAL RLS HARDENING (NOT APPLIED — needs explicit approval before any migration):
+ *
+ * App code no longer self-approves, but owner UPDATE RLS still allows setting status=approved via API.
+ * See drizzle/migrations/PROPOSED_0004_companies_owner_cannot_self_approve.sql
+ */

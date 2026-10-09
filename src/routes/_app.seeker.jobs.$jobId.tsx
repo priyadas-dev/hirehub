@@ -15,8 +15,8 @@ import { JOB_TYPE_LABEL } from "@/lib/hirehub";
 import {
   fmtDeadline,
   isApplicationDeadlinePassed,
-  jobDeadline,
-  unpackJobDescription,
+  resolveJobDeadline,
+  stripDeadlineMarker,
 } from "@/lib/job-fields";
 import { useAuth } from "@/lib/auth";
 import { fmtDate, supabase } from "@/components/dashboard/parts";
@@ -34,7 +34,7 @@ type ApplyValues = z.infer<typeof applySchema>;
 
 export const Route = createFileRoute("/_app/seeker/jobs/$jobId")({
   head: () => ({
-    meta: [{ title: "Job details — HireHub" }],
+    meta: [{ title: "Job details ΓÇö HireHub" }],
   }),
   component: JobDetailPage,
 });
@@ -51,7 +51,9 @@ function JobDetailPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("jobs")
-        .select("id,title,description,location,salary_range,job_type,status,created_at,application_deadline,companies(name,industry)")
+        .select(
+          "id,title,description,location,salary_range,job_type,status,created_at,application_deadline,companies(name,industry)",
+        )
         .eq("id", jobId)
         .eq("status", "approved")
         .maybeSingle();
@@ -128,7 +130,7 @@ function JobDetailPage() {
       ]);
       if (appRes.error) throw appRes.error;
       const meta = (authData.user?.user_metadata ?? {}) as Record<string, unknown>;
-      const metaResume = typeof meta["resume_url"] === "string" ? meta["resume_url"].trim() : "";
+      const metaResume = typeof meta.resume_url === "string" ? meta.resume_url.trim() : "";
       return { resume_url: metaResume || appRes.data?.resume_url || null };
     },
   });
@@ -148,7 +150,17 @@ function JobDetailPage() {
     mutationFn: async (values: ApplyValues) => {
       if (!id) throw new Error("Not signed in");
 
-      const deadline = jobDeadline(job.data);
+      // Prefer fresh DB value so a recruiter deadline extension reopens Apply without a new post.
+      const { data: liveJob, error: liveErr } = await supabase
+        .from("jobs")
+        .select("id,status,application_deadline,description")
+        .eq("id", jobId)
+        .eq("status", "approved")
+        .maybeSingle();
+      if (liveErr) throw liveErr;
+      if (!liveJob) throw new Error("This job is no longer available.");
+
+      const deadline = resolveJobDeadline(liveJob.application_deadline, liveJob.description);
       if (isApplicationDeadlinePassed(deadline)) {
         throw new Error("The application deadline for this job has passed.");
       }
@@ -179,9 +191,6 @@ function JobDetailPage() {
       if (error) {
         if (error.code === "23505" || /duplicate|unique/i.test(error.message)) {
           throw new Error("Already applied");
-        }
-        if (/applications for this job closed/i.test(error.message)) {
-          throw new Error("The application deadline for this job has passed.");
         }
         throw error;
       }
@@ -227,8 +236,8 @@ function JobDetailPage() {
 
   const j = job.data;
   const companyName = j.companies?.name ?? "Company";
-  const plainDescription = unpackJobDescription(j.description).description;
-  const applicationDeadline = jobDeadline(j);
+  const plainDescription = stripDeadlineMarker(j.description);
+  const applicationDeadline = resolveJobDeadline(j.application_deadline, j.description);
   const deadlineLabel = fmtDeadline(applicationDeadline);
   const deadlinePassed = isApplicationDeadlinePassed(applicationDeadline);
 
@@ -237,8 +246,8 @@ function JobDetailPage() {
       <PageHeader
         eyebrow={companyName}
         title={j.title}
-        description={`${JOB_TYPE_LABEL[j.job_type]} · Posted ${fmtDate(j.created_at)}${
-          deadlineLabel ? ` · Deadline ${deadlineLabel}` : ""
+        description={`${JOB_TYPE_LABEL[j.job_type]} ┬╖ Posted ${fmtDate(j.created_at)}${
+          deadlineLabel ? ` ┬╖ Deadline ${deadlineLabel}` : ""
         }`}
         actions={
           <div className="flex flex-wrap gap-2">
@@ -302,7 +311,7 @@ function JobDetailPage() {
                   <dt className="text-xs text-muted-foreground">Application deadline</dt>
                   <dd className="font-medium tracking-tight">
                     {deadlineLabel}
-                    {deadlinePassed ? " · Closed" : ""}
+                    {deadlinePassed ? " ┬╖ Closed" : ""}
                   </dd>
                 </div>
               </div>
@@ -336,13 +345,13 @@ function JobDetailPage() {
             <form className="space-y-4" onSubmit={form.handleSubmit((v) => apply.mutate(v))}>
               <div className="space-y-2">
                 <Label htmlFor="resume_url">Resume URL</Label>
-                <Input id="resume_url" placeholder="https://…" {...form.register("resume_url")} />
+                <Input id="resume_url" placeholder="https://ΓÇª" {...form.register("resume_url")} />
                 {form.formState.errors.resume_url && (
                   <p className="text-xs text-destructive">{form.formState.errors.resume_url.message}</p>
                 )}
                 {latestResume.data?.resume_url ? (
                   <p className="text-xs text-muted-foreground">
-                    Prefilled from your profile or last application — edit if needed.
+                    Prefilled from your profile or last application ΓÇö edit if needed.
                   </p>
                 ) : (
                   <p className="text-xs text-muted-foreground">
@@ -362,7 +371,7 @@ function JobDetailPage() {
                 <p className="text-xs text-muted-foreground">Apply by {deadlineLabel}.</p>
               )}
               <Button type="submit" variant="signal" className="w-full" disabled={apply.isPending}>
-                {apply.isPending ? "Submitting…" : "Submit application"}
+                {apply.isPending ? "SubmittingΓÇª" : "Submit application"}
               </Button>
             </form>
           )}

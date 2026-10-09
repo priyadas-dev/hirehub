@@ -12,8 +12,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { DeadlineDatePicker } from "@/components/jobs/DeadlineDatePicker";
 import { JOB_TYPE_LABEL, type JobType } from "@/lib/hirehub";
-import { isDeadlineOnOrAfterToday } from "@/lib/job-fields";
+import { isDeadlineOnOrAfterToday, stripDeadlineMarker } from "@/lib/job-fields";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/components/dashboard/parts";
 
@@ -35,7 +36,7 @@ type FormValues = z.infer<typeof schema>;
 export const Route = createFileRoute("/_app/recruiter/jobs/new")({
   head: () => ({
     meta: [
-      { title: "Post a job — HireHub" },
+      { title: "Post a job ΓÇö HireHub" },
       { name: "description", content: "Submit a new job for admin approval." },
     ],
   }),
@@ -88,11 +89,11 @@ function PostJobPage() {
         .from("jobs")
         .insert({
           title: values.title.trim(),
-          description: values.description.trim(),
-          application_deadline: values.application_deadline,
+          description: stripDeadlineMarker(values.description).trim() || null,
           location: values.location.trim(),
           salary_range: values.salary_range?.trim() || null,
           job_type: values.job_type as JobType,
+          application_deadline: values.application_deadline,
           company_id: values.company_id,
           recruiter_id: id,
           status: "pending",
@@ -119,14 +120,14 @@ function PostJobPage() {
   if (!companies.data?.length) {
     return (
       <div className="space-y-8">
-        <PageHeader eyebrow="Recruiter" title="Post a job" description="Create your company profile, then submit a listing for admin approval." />
+        <PageHeader eyebrow="Recruiter" title="Post a job" description="Create a company profile before posting roles." />
         <EmptyState
           icon={Building2}
           title="Company required"
-          description="Create your company first. It becomes active immediately, and this job will start as pending until an admin approves it."
+          description="Add your company first, then come back to post a job."
           action={
             <Button variant="signal" asChild>
-              <Link to="/recruiter/company">Create company</Link>
+              <Link to="/recruiter/company">Set up company</Link>
             </Button>
           }
         />
@@ -180,7 +181,7 @@ function PostJobPage() {
         </div>
         <div className="space-y-2">
           <Label htmlFor="description">Description</Label>
-          <Textarea id="description" rows={5} {...form.register("description")} placeholder="Role details…" />
+          <Textarea id="description" rows={5} {...form.register("description")} placeholder="Role detailsΓÇª" />
           {form.formState.errors.description && (
             <p className="text-xs text-destructive">{form.formState.errors.description.message}</p>
           )}
@@ -195,7 +196,7 @@ function PostJobPage() {
           </div>
           <div className="space-y-2">
             <Label htmlFor="salary_range">Salary range</Label>
-            <Input id="salary_range" {...form.register("salary_range")} placeholder="e.g. $80k–$100k" />
+            <Input id="salary_range" {...form.register("salary_range")} placeholder="e.g. $80kΓÇô$100k" />
           </div>
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
@@ -219,17 +220,23 @@ function PostJobPage() {
           </div>
           <div className="space-y-2">
             <Label htmlFor="application_deadline">Application deadline</Label>
-            <Input id="application_deadline" type="date" {...form.register("application_deadline")} />
+            <DeadlineDatePicker
+              id="application_deadline"
+              value={form.watch("application_deadline")}
+              disablePast
+              onChange={(iso) => form.setValue("application_deadline", iso, { shouldValidate: true })}
+            />
             {form.formState.errors.application_deadline && (
               <p className="text-xs text-destructive">{form.formState.errors.application_deadline.message}</p>
             )}
           </div>
         </div>
         <p className="text-xs text-muted-foreground">
-          Status is always pending on submit. Only an admin can approve the listing for seekers.
+          Status is always pending on submit. Only an admin can approve the listing for seekers. Applications stay open
+          through the end of the deadline day.
         </p>
         <Button type="submit" variant="signal" disabled={post.isPending}>
-          {post.isPending ? "Submitting…" : "Submit for approval"}
+          {post.isPending ? "SubmittingΓÇª" : "Submit for approval"}
         </Button>
       </form>
     </div>

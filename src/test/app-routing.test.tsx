@@ -13,6 +13,9 @@ describe("App routing", () => {
   });
 
   it.each([
+    "/auth",
+    "/forgot-password",
+    "/reset-password",
     "/seeker",
     "/seeker/jobs",
     "/seeker/jobs/abc",

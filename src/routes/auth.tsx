@@ -10,13 +10,19 @@ import { Logo } from "@/components/brand/Logo";
 import { StatusTracker } from "@/components/status/StatusTracker";
 import { ROLE_HOME, useAuth } from "@/lib/auth";
 import { supabase } from "@/integrations/supabase/client";
-import { lovable } from "@/integrations/lovable/index";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/auth")({
-  validateSearch: (s: Record<string, unknown>): { redirect?: string; mode?: "signup" } => ({
+  validateSearch: (s: Record<string, unknown>): {
+    redirect?: string;
+    mode?: "signup";
+    error?: string;
+    error_description?: string;
+  } => ({
     ...(typeof s["redirect"] === "string" ? { redirect: s["redirect"] } : {}),
     ...(s["mode"] === "signup" ? { mode: "signup" as const } : {}),
+    ...(typeof s["error"] === "string" ? { error: s["error"] } : {}),
+    ...(typeof s["error_description"] === "string" ? { error_description: s["error_description"] } : {}),
   }),
   head: () => ({
     meta: [
@@ -59,6 +65,25 @@ function AuthPage() {
     }
     navigate({ to: ROLE_HOME[r], replace: true });
   }
+
+  // Surface OAuth provider failures returned by Supabase on redirect
+  // (e.g. /auth?error=server_error&error_description=failed+to+exchange...).
+  useEffect(() => {
+    if (!search.error) return;
+    const detail = (search.error_description ?? search.error).replace(/\+/g, " ");
+    toast.error("Google sign-in didn't work", {
+      description:
+        detail.toLowerCase().includes("exchange authorization code")
+          ? "Supabase could not finish Google's token exchange. Check that the Google Client ID and Enabled Client Secret match on project rropcdqzzdcsnnifdlgp, and that Google Cloud allows https://rropcdqzzdcsnnifdlgp.supabase.co/auth/v1/callback."
+          : detail,
+    });
+    navigate({
+      to: "/auth",
+      search: search.redirect ? { redirect: search.redirect } : search.mode ? { mode: search.mode } : {},
+      replace: true,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search.error, search.error_description]);
 
   // Already signed in (including after returning from Google) → go to role area.
   useEffect(() => {
@@ -120,14 +145,19 @@ function AuthPage() {
   async function onGoogle() {
     setBusy("google");
     try {
-      const result = await lovable.auth.signInWithOAuth("google", { redirect_uri: `${window.location.origin}/auth` });
-      if (result.error) throw result.error;
-      if (result.redirected) return;
-      const s = await refresh();
-      if (s) goHome(s.role);
+      // Supabase Google OAuth (works on localhost + Vercel). Requires Google provider
+      // enabled and redirect URLs allowlisted in Supabase Auth settings — see
+      // GOOGLE_OAUTH_REDIRECT_URLS in src/lib/assignment-verification.ts.
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: `${window.location.origin}/auth`,
+        },
+      });
+      if (error) throw error;
+      // Browser navigates to Google; session is restored on return to /auth.
     } catch (err) {
       toast.error("Google sign-in didn't work", { description: friendly(err) });
-    } finally {
       setBusy(null);
     }
   }
@@ -199,6 +229,16 @@ function AuthPage() {
             {mode === "signup" && <Field id="name" label="Full name" autoComplete="name" error={errors["name"]} />}
             <Field id="email" label="Email" type="email" autoComplete="email" error={errors["email"]} />
             <Field id="password" label="Password" type="password" autoComplete={mode === "signin" ? "current-password" : "new-password"} error={errors["password"]} />
+            {mode === "signin" && (
+              <div className="-mt-2 flex justify-end">
+                <Link
+                  to="/forgot-password"
+                  className="text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+                >
+                  Forgot password?
+                </Link>
+              </div>
+            )}
 
             <Button type="submit" variant="signal" size="lg" className="w-full" disabled={!!busy}>
               {busy === "form" && <Loader2 className="animate-spin" />}

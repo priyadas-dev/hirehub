@@ -21,9 +21,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { JOB_TYPE_LABEL } from "@/lib/hirehub";
 import {
   fmtDeadline,
+  isApplicationDeadlinePassed,
   JOB_STATUS_BADGE_CLASS,
   JOB_STATUS_LABEL,
-  jobDeadline,
+  resolveJobDeadline,
   type JobStatus,
 } from "@/lib/job-fields";
 import { useAuth } from "@/lib/auth";
@@ -39,7 +40,7 @@ export const Route = createFileRoute("/_app/recruiter/jobs/")({
   validateSearch: searchSchema,
   head: () => ({
     meta: [
-      { title: "My job posts — HireHub" },
+      { title: "My job posts ΓÇö HireHub" },
       { name: "description", content: "Manage your job listings." },
     ],
   }),
@@ -60,7 +61,9 @@ function MyJobsPage() {
     queryFn: async () => {
       let q = supabase
         .from("jobs")
-        .select("id,title,location,job_type,status,created_at,description,application_deadline,companies(name),applications(count)")
+        .select(
+          "id,title,location,job_type,status,created_at,description,application_deadline,companies(name),applications(count)",
+        )
         .eq("recruiter_id", id!)
         .order("created_at", { ascending: false });
       if (search.status) q = q.eq("status", search.status);
@@ -127,7 +130,7 @@ function MyJobsPage() {
                 }),
               })
             }
-            placeholder="Search by job title…"
+            placeholder="Search by job titleΓÇª"
             className="w-full sm:max-w-xs"
             aria-label="Search by job title"
           />
@@ -167,8 +170,8 @@ function MyJobsPage() {
         {!jobs.isLoading && !jobs.isError && (
           <p className="text-sm text-muted-foreground">
             {filteredCount} listing{filteredCount === 1 ? "" : "s"}
-            {search.status ? ` · ${JOB_STATUS_LABEL[search.status]}` : ""}
-            {titleQuery ? ` · “${titleQuery}”` : ""}
+            {search.status ? ` ┬╖ ${JOB_STATUS_LABEL[search.status]}` : ""}
+            {titleQuery ? ` ┬╖ ΓÇ£${titleQuery}ΓÇ¥` : ""}
           </p>
         )}
       </div>
@@ -183,7 +186,9 @@ function MyJobsPage() {
             const appCount = Array.isArray(j.applications) ? (j.applications[0]?.count ?? 0) : 0;
             const canEdit = j.status !== "closed";
             const canClose = j.status === "approved" || j.status === "pending";
-            const deadline = jobDeadline(j);
+            const deadline = resolveJobDeadline(j.application_deadline, j.description);
+            const deadlineLabel = fmtDeadline(deadline);
+            const deadlineExpired = isApplicationDeadlinePassed(deadline);
             const status = j.status as JobStatus;
             return (
               <li
@@ -201,11 +206,16 @@ function MyJobsPage() {
                     >
                       {JOB_STATUS_LABEL[status]}
                     </span>
+                    {deadlineExpired && (
+                      <span className="rounded-full border border-status-interview/40 bg-status-interview-soft/60 px-2.5 py-0.5 text-xs font-medium text-status-interview">
+                        Deadline expired
+                      </span>
+                    )}
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    {j.companies?.name ?? "Company"} · {j.location ?? "Remote"} · {JOB_TYPE_LABEL[j.job_type]} ·{" "}
+                    {j.companies?.name ?? "Company"} ┬╖ {j.location ?? "Remote"} ┬╖ {JOB_TYPE_LABEL[j.job_type]} ┬╖{" "}
                     {fmtDate(j.created_at)}
-                    {deadline ? ` · Deadline ${fmtDeadline(deadline)}` : ""}
+                    {deadlineLabel ? ` ┬╖ Deadline ${deadlineLabel}` : ""}
                   </p>
                   <p className="text-xs text-muted-foreground">
                     {appCount} applicant{appCount === 1 ? "" : "s"}
@@ -235,7 +245,7 @@ function MyJobsPage() {
                         <AlertDialogHeader>
                           <AlertDialogTitle>Close this job?</AlertDialogTitle>
                           <AlertDialogDescription>
-                            “{j.title}” will no longer appear to seekers. Existing applications stay available for
+                            ΓÇ£{j.title}ΓÇ¥ will no longer appear to seekers. Existing applications stay available for
                             review.
                           </AlertDialogDescription>
                         </AlertDialogHeader>

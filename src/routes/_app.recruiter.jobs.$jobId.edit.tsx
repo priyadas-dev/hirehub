@@ -11,13 +11,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { DeadlineDatePicker } from "@/components/jobs/DeadlineDatePicker";
 import { JOB_TYPE_LABEL, type JobType } from "@/lib/hirehub";
 import {
+  canSetApplicationDeadline,
   fmtDeadline,
-  jobDeadline,
-  isDeadlineOnOrAfterToday,
+  isApplicationDeadlinePassed,
   JOB_STATUS_LABEL,
-  unpackJobDescription,
+  resolveJobDeadline,
+  stripDeadlineMarker,
   type JobStatus,
 } from "@/lib/job-fields";
 import { useAuth } from "@/lib/auth";
@@ -37,7 +39,7 @@ type FormValues = z.infer<typeof schema>;
 export const Route = createFileRoute("/_app/recruiter/jobs/$jobId/edit")({
   head: () => ({
     meta: [
-      { title: "Edit job — HireHub" },
+      { title: "Edit job ΓÇö HireHub" },
       { name: "description", content: "Update your job listing details." },
     ],
   }),
@@ -57,7 +59,9 @@ function EditJobPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("jobs")
-        .select("id,title,description,location,salary_range,job_type,status,application_deadline,company_id,companies(name)")
+        .select(
+          "id,title,description,location,salary_range,job_type,status,company_id,application_deadline,companies(name)",
+        )
         .eq("id", jobId)
         .eq("recruiter_id", id!)
         .maybeSingle();
@@ -81,15 +85,14 @@ function EditJobPage() {
 
   useEffect(() => {
     if (job.data) {
-      const description = unpackJobDescription(job.data.description).description;
-      const applicationDeadline = jobDeadline(job.data);
+      const deadline = resolveJobDeadline(job.data.application_deadline, job.data.description);
       form.reset({
         title: job.data.title,
-        description,
+        description: stripDeadlineMarker(job.data.description),
         location: job.data.location ?? "",
         salary_range: job.data.salary_range ?? "",
         job_type: job.data.job_type,
-        application_deadline: applicationDeadline ?? "",
+        application_deadline: deadline ?? "",
       });
     }
   }, [job.data, form]);
@@ -101,34 +104,37 @@ function EditJobPage() {
         throw new Error("Closed jobs cannot be edited. Post a new listing instead.");
       }
 
-      const previousDeadline = jobDeadline(job.data);
-      if (
-        !isDeadlineOnOrAfterToday(values.application_deadline) &&
-        values.application_deadline !== previousDeadline
-      ) {
-        throw new Error("Deadline must be today or in the future.");
+      const previousDeadline = resolveJobDeadline(job.data?.application_deadline, job.data?.description);
+      if (!canSetApplicationDeadline(values.application_deadline, previousDeadline)) {
+        throw new Error("Deadline must be today or a future date (or leave the current expired deadline unchanged).");
       }
 
+      const deadlineExtended =
+        previousDeadline !== values.application_deadline &&
+        isApplicationDeadlinePassed(previousDeadline) &&
+        !isApplicationDeadlinePassed(values.application_deadline);
+
+      // Ownership: recruiter_id filter; status is never written here (no re-approval).
       const { data, error } = await supabase
         .from("jobs")
         .update({
           title: values.title.trim(),
-          description: values.description.trim(),
-          application_deadline: values.application_deadline,
+          description: stripDeadlineMarker(values.description).trim() || null,
           location: values.location.trim(),
           salary_range: values.salary_range?.trim() || null,
           job_type: values.job_type as JobType,
-          // Recruiter edits never change approval status — only admins approve.
+          application_deadline: values.application_deadline,
         })
         .eq("id", jobId)
         .eq("recruiter_id", id)
         .neq("status", "closed")
-        .select("id");
+        .select("id,status,application_deadline");
       if (error) throw error;
-      if (!data?.length) throw new Error("Job could not be updated. It may already be closed.");
+      if (!data?.length) throw new Error("Job could not be updated. It may already be closed or not owned by you.");
+      return { deadlineExtended, row: data[0] };
     },
-    onSuccess: async () => {
-      toast.success("Job updated");
+    onSuccess: async (result) => {
+      toast.success(result.deadlineExtended ? "Deadline extended ΓÇö applications can reopen" : "Job updated");
       await qc.invalidateQueries({ queryKey: ["recruiter-jobs"] });
       await qc.invalidateQueries({ queryKey: ["recruiter-job", jobId] });
       await qc.invalidateQueries({ queryKey: ["rec-jobs"] });
@@ -145,7 +151,9 @@ function EditJobPage() {
 
   const closed = job.data?.status === "closed";
   const status = (job.data?.status ?? "pending") as JobStatus;
-  const packedDeadline = jobDeadline(job.data);
+  const currentDeadline = resolveJobDeadline(job.data?.application_deadline, job.data?.description);
+  const deadlineExpired = isApplicationDeadlinePassed(currentDeadline);
+  const deadlineLabel = fmtDeadline(currentDeadline);
 
   return (
     <div className="space-y-8">
@@ -155,8 +163,8 @@ function EditJobPage() {
         description={
           closed
             ? "This listing is closed and can no longer be edited."
-            : `${job.data?.companies?.name ?? "Company"} · ${JOB_STATUS_LABEL[status]}${
-                packedDeadline ? ` · Deadline ${fmtDeadline(packedDeadline)}` : ""
+            : `${job.data?.companies?.name ?? "Company"} ┬╖ ${JOB_STATUS_LABEL[status]}${
+                deadlineLabel ? ` ┬╖ Deadline ${deadlineLabel}${deadlineExpired ? " (expired)" : ""}` : ""
               }`
         }
         actions={
@@ -172,6 +180,13 @@ function EditJobPage() {
           </div>
         }
       />
+
+      {deadlineExpired && !closed && (
+        <div className="rounded-xl border border-status-interview/30 bg-status-interview-soft/40 px-4 py-3 text-sm">
+          The application deadline has expired. Set a new date of today or later to reopen applications. Extending the
+          deadline does not change approval status or existing applications.
+        </div>
+      )}
 
       <form
         className="surface-card max-w-xl space-y-5 p-5 sm:p-6"
@@ -191,7 +206,7 @@ function EditJobPage() {
             rows={5}
             disabled={closed}
             {...form.register("description")}
-            placeholder="Role details…"
+            placeholder="Role detailsΓÇª"
           />
           {form.formState.errors.description && (
             <p className="text-xs text-destructive">{form.formState.errors.description.message}</p>
@@ -211,7 +226,7 @@ function EditJobPage() {
               id="salary_range"
               disabled={closed}
               {...form.register("salary_range")}
-              placeholder="e.g. $80k–$100k"
+              placeholder="e.g. $80kΓÇô$100k"
             />
           </div>
         </div>
@@ -237,12 +252,20 @@ function EditJobPage() {
           </div>
           <div className="space-y-2">
             <Label htmlFor="application_deadline">Application deadline</Label>
-            <Input
+            <DeadlineDatePicker
               id="application_deadline"
-              type="date"
+              value={form.watch("application_deadline")}
               disabled={closed}
-              {...form.register("application_deadline")}
+              disablePast
+              placeholder={deadlineExpired ? "Extend deadlineΓÇª" : "Pick a deadline"}
+              onChange={(iso) => form.setValue("application_deadline", iso, { shouldValidate: true })}
             />
+            {deadlineLabel && (
+              <p className="text-xs text-muted-foreground">
+                Current: {deadlineLabel}
+                {deadlineExpired ? " ┬╖ Expired ΓÇö extend to reopen applications" : " ┬╖ Open through end of day (Asia/Dhaka)"}
+              </p>
+            )}
             {form.formState.errors.application_deadline && (
               <p className="text-xs text-destructive">{form.formState.errors.application_deadline.message}</p>
             )}
@@ -250,7 +273,7 @@ function EditJobPage() {
         </div>
         {!closed && (
           <Button type="submit" variant="signal" disabled={save.isPending}>
-            {save.isPending ? "Saving…" : "Save changes"}
+            {save.isPending ? "SavingΓÇª" : deadlineExpired ? "Extend deadline & save" : "Save changes"}
           </Button>
         )}
       </form>

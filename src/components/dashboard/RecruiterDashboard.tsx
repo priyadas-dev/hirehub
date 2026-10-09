@@ -6,12 +6,11 @@ import { CardSkeleton, EmptyState, ErrorState } from "@/components/feedback/Stat
 import { StatusBadge } from "@/components/status/StatusBadge";
 import type { ApplicationStatus } from "@/components/status/status";
 import { useAuth } from "@/lib/auth";
-import { useEnsureCompanyActive } from "@/lib/company-profile";
 import {
   fmtDeadline,
   JOB_STATUS_BADGE_CLASS,
   JOB_STATUS_LABEL,
-  jobDeadline,
+  resolveJobDeadline,
   type JobStatus,
 } from "@/lib/job-fields";
 import { cn } from "@/lib/utils";
@@ -86,7 +85,7 @@ export function RecruiterDashboard() {
 
   const c = counts.data;
   const companyReady = !!company.data;
-  useEnsureCompanyActive(company.data?.id, company.data?.status, id);
+  const companyPending = company.data?.status === "pending";
 
   return (
     <div className="space-y-10">
@@ -104,7 +103,8 @@ export function RecruiterDashboard() {
               Welcome back, {user?.name.split(" ")[0] ?? "there"}.
             </h1>
             <p className="mt-2 max-w-lg text-sm leading-relaxed text-muted-foreground">
-              Create your company, post a job, then wait for an admin to approve the listing before seekers can apply.
+              Create your company and wait for admin approval, then post a job ΓÇö listings also need admin approval
+              before seekers can apply.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -137,11 +137,25 @@ export function RecruiterDashboard() {
           <div>
             <p className="font-medium">Set up your company first</p>
             <p className="text-sm text-muted-foreground">
-              Add your company name, industry, and website. The profile is active as soon as you save it, and you can post a job right away.
+              Add your company name, industry, and website. An admin must approve the company before it is fully active.
             </p>
           </div>
           <Button variant="signal" asChild>
             <Link to="/recruiter/company">Create company</Link>
+          </Button>
+        </div>
+      )}
+
+      {!company.isLoading && companyPending && (
+        <div className="flex flex-col gap-3 rounded-2xl border border-dashed border-status-interview/40 bg-status-interview-soft/40 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
+          <div>
+            <p className="font-medium">Company pending admin approval</p>
+            <p className="text-sm text-muted-foreground">
+              {company.data?.name ?? "Your company"} is waiting for an admin. You can edit the profile meanwhile.
+            </p>
+          </div>
+          <Button variant="outline" asChild>
+            <Link to="/recruiter/company">View company</Link>
           </Button>
         </div>
       )}
@@ -185,7 +199,7 @@ export function RecruiterDashboard() {
               {recentJobs.data.map((j) => {
                 const appCount = Array.isArray(j.applications) ? (j.applications[0]?.count ?? 0) : 0;
                 const status = j.status as JobStatus;
-                const deadline = jobDeadline(j);
+                const deadline = resolveJobDeadline(j.application_deadline, j.description);
                 return (
                   <li key={j.id}>
                     <Link
@@ -196,9 +210,9 @@ export function RecruiterDashboard() {
                       <div className="min-w-0">
                         <p className="truncate font-medium">{j.title}</p>
                         <p className="text-xs text-muted-foreground">
-                          {j.location ?? "Remote"} · {fmtDate(j.created_at)} · {appCount} applicant
+                          {j.location ?? "Remote"} ┬╖ {fmtDate(j.created_at)} ┬╖ {appCount} applicant
                           {appCount === 1 ? "" : "s"}
-                          {deadline ? ` · Deadline ${fmtDeadline(deadline)}` : ""}
+                          {deadline ? ` ┬╖ Deadline ${fmtDeadline(deadline)}` : ""}
                         </p>
                       </div>
                       <span
@@ -259,7 +273,7 @@ export function RecruiterDashboard() {
                         {a.profiles?.full_name || a.profiles?.email || "Applicant"}
                       </p>
                       <p className="truncate text-xs text-muted-foreground">
-                        {a.jobs.title} · {fmtDate(a.created_at)}
+                        {a.jobs.title} ┬╖ {fmtDate(a.created_at)}
                       </p>
                     </div>
                     <StatusBadge status={a.status as ApplicationStatus} />

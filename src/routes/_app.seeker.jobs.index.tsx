@@ -22,13 +22,13 @@ import {
   type LiveJob,
 } from "@/lib/job-discovery";
 import { JOB_TYPE_LABEL, type JobType } from "@/lib/hirehub";
-import { fmtDeadline, jobDeadline, unpackJobDescription } from "@/lib/job-fields";
+import { fmtDeadline, resolveJobDeadline, stripDeadlineMarker } from "@/lib/job-fields";
 import { fmtDate, supabase } from "@/components/dashboard/parts";
 
 export const Route = createFileRoute("/_app/seeker/jobs/")({
   head: () => ({
     meta: [
-      { title: "Browse Jobs — HireHub" },
+      { title: "Browse Jobs ΓÇö HireHub" },
       { name: "description", content: "Discover HireHub and live external remote roles." },
     ],
   }),
@@ -84,7 +84,7 @@ function BrowseJobsPage() {
     return list.filter((j) => {
       if (!matchesBrowseJobType(j.job_type, j.location, jobType)) return false;
       if (!matchesLocation(j.location, location)) return false;
-      const plainDescription = unpackJobDescription(j.description).description;
+      const plainDescription = stripDeadlineMarker(j.description);
       const text = `${j.title} ${plainDescription} ${j.companies?.name ?? ""}`;
       if (!matchesCategory(text, undefined, category)) return false;
       if (qq) {
@@ -166,7 +166,7 @@ function BrowseJobsPage() {
               <Input
                 id="job-search"
                 className="pl-9"
-                placeholder="Title, company, skills…"
+                placeholder="Title, company, skillsΓÇª"
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
                 autoComplete="off"
@@ -183,7 +183,7 @@ function BrowseJobsPage() {
               <Input
                 id="job-location"
                 className="pl-9"
-                placeholder="City, country, or Remote…"
+                placeholder="City, country, or RemoteΓÇª"
                 value={location}
                 onChange={(e) => {
                   setLocation(e.target.value);
@@ -277,11 +277,11 @@ function BrowseJobsPage() {
         <div className="flex flex-col gap-3 border-t pt-3 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm text-muted-foreground" aria-live="polite">
             {jobs.isLoading && liveJobs.isLoading ? (
-              "Loading jobs…"
+              "Loading jobsΓÇª"
             ) : (
               <>
                 <span className="font-medium text-foreground tabular-nums">{filteredHireHub.length}</span> HireHub
-                {" · "}
+                {" ┬╖ "}
                 <span className="font-medium text-foreground tabular-nums">{filteredLive.length}</span> live external
                 {hasActiveFilters ? (
                   <>
@@ -317,7 +317,7 @@ function BrowseJobsPage() {
             </p>
           </div>
           <p className="text-xs text-muted-foreground tabular-nums">
-            {jobs.isLoading ? "…" : `${filteredHireHub.length} result${filteredHireHub.length === 1 ? "" : "s"}`}
+            {jobs.isLoading ? "ΓÇª" : `${filteredHireHub.length} result${filteredHireHub.length === 1 ? "" : "s"}`}
           </p>
         </div>
 
@@ -356,8 +356,7 @@ function BrowseJobsPage() {
                   )}
                   <span className="rounded-full border bg-surface/80 px-2 py-0.5">Posted {fmtDate(j.created_at)}</span>
                   {(() => {
-                    const deadline = jobDeadline(j);
-                    const label = fmtDeadline(deadline);
+                    const label = fmtDeadline(resolveJobDeadline(j.application_deadline, j.description));
                     return label ? (
                       <span className="rounded-full border bg-surface/80 px-2 py-0.5">Deadline {label}</span>
                     ) : null;
@@ -414,11 +413,11 @@ function BrowseJobsPage() {
               >
                 Remotive
               </a>
-              . External only — not saved to HireHub and not applied through HireHub.
+              . External only ΓÇö not saved to HireHub and not applied through HireHub.
             </p>
           </div>
           <p className="text-xs text-muted-foreground tabular-nums">
-            {liveJobs.isLoading ? "…" : `${filteredLive.length} result${filteredLive.length === 1 ? "" : "s"}`}
+            {liveJobs.isLoading ? "ΓÇª" : `${filteredLive.length} result${filteredLive.length === 1 ? "" : "s"}`}
           </p>
         </div>
 

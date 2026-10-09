@@ -1,1 +1,5 @@
 project_id = "rropcdqzzdcsnnifdlgp"
+
+# Local Edge Function definitions (not deployed by this change).
+[functions.notify-application-status]
+verify_jwt = true

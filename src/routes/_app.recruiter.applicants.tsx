@@ -10,6 +10,7 @@ import { STATUS_META, type ApplicationStatus } from "@/components/status/status"
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { nextApplicationStatuses, STATUS_ACTION_LABEL } from "@/lib/hirehub";
+import { requestApplicationStatusNotification } from "@/lib/notify-application-status";
 import { useAuth } from "@/lib/auth";
 import { fmtDate, supabase } from "@/components/dashboard/parts";
 
@@ -125,6 +126,13 @@ function ApplicantsPage() {
       if (error) throw error;
       if (!data?.length) {
         throw new Error("Status was already changed. Refresh and try again.");
+      }
+
+      // Status is already persisted via RLS. Notify is best-effort and must not fail this mutation.
+      try {
+        await requestApplicationStatusNotification(applicationId, status);
+      } catch (notifyErr) {
+        console.warn("[notify-application-status] skipped after status update", notifyErr);
       }
     },
     onSuccess: async () => {

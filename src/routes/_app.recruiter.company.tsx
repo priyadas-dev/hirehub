@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/lib/auth";
-import { createActiveCompany, saveActiveCompany, useEnsureCompanyActive } from "@/lib/company-profile";
+import { createPendingCompany, saveCompanyProfile } from "@/lib/company-profile";
 import { fmtDate, supabase } from "@/components/dashboard/parts";
 
 const schema = z.object({
@@ -57,8 +57,6 @@ function CompanyPage() {
     },
   });
 
-  useEnsureCompanyActive(company.data?.id, company.data?.status, id);
-
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: { name: "", industry: "", website: "" },
@@ -83,13 +81,18 @@ function CompanyPage() {
         website: values.website?.trim() || null,
       };
       if (company.data?.id) {
-        await saveActiveCompany(company.data.id, id, payload);
-      } else {
-        await createActiveCompany(id, payload);
+        return saveCompanyProfile(company.data.id, id, payload);
       }
+      await createPendingCompany(id, payload);
+      return { status: "pending" as const };
     },
-    onSuccess: async () => {
-      toast.success(company.data ? "Company updated" : "Company is active. You can post a job now.");
+    onSuccess: async (result) => {
+      const wasCreate = !company.data?.id;
+      if (wasCreate || result?.status === "pending") {
+        toast.success(wasCreate ? "Company submitted for admin approval" : "Company updated");
+      } else {
+        toast.success("Company updated");
+      }
       await qc.invalidateQueries({ queryKey: ["recruiter-company", id] });
       await qc.invalidateQueries({ queryKey: ["recruiter-companies"] });
       await qc.invalidateQueries({ queryKey: ["admin-companies"] });
@@ -104,15 +107,17 @@ function CompanyPage() {
 
   const profile = company.data;
   const exists = !!profile;
+  const pending = profile?.status === "pending";
+  const approved = profile?.status === "approved";
 
   return (
     <div className="space-y-8">
       <PageHeader
         eyebrow="Recruiter"
         title="Company profile"
-        description="Create your company directly. It is active as soon as you save it, and you can edit it anytime."
+        description="Create your company profile. An admin must approve it before it is fully active. Job posts also need a separate admin approval."
         actions={
-          exists ? (
+          approved ? (
             <Button variant="signal" asChild>
               <Link to="/recruiter/jobs/new">
                 <PlusSquare /> Post a job
@@ -126,14 +131,22 @@ function CompanyPage() {
         <EmptyState
           icon={Building2}
           title="No company yet"
-          description="Add your company name, industry, and website. Saving makes the profile active so you can post a job right away."
+          description="Add your company name, industry, and website. After you save, an admin reviews and approves the profile."
           className="py-8"
         />
       )}
 
-      {profile && profile.status === "approved" && (
+      {pending && (
+        <div className="rounded-2xl border border-status-interview/40 bg-status-interview-soft/50 px-4 py-3 text-sm sm:px-5">
+          <span className="font-medium">{profile?.name}</span> is pending admin approval. You can edit details while
+          you wait. Job posts also need admin approval before seekers can apply.
+        </div>
+      )}
+
+      {approved && (
         <div className="rounded-2xl border bg-card px-4 py-3 text-sm sm:px-5">
-          <span className="font-medium">{profile.name}</span> is active. Post a job whenever you are ready — new listings stay pending until an admin approves them for seekers.
+          <span className="font-medium">{profile?.name}</span> is approved. Post a job whenever you are ready — new
+          listings stay pending until an admin approves them for seekers.
         </div>
       )}
 
@@ -164,7 +177,7 @@ function CompanyPage() {
         </div>
         <div className="flex flex-wrap gap-2">
           <Button type="submit" variant="signal" disabled={save.isPending}>
-            {save.isPending ? "Saving…" : exists ? "Save changes" : "Create company"}
+            {save.isPending ? "Saving…" : exists ? "Save changes" : "Submit for approval"}
           </Button>
           {exists && (
             <Button type="button" variant="outline" asChild>
