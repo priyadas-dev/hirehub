@@ -13,7 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { JOB_TYPE_LABEL, type JobType } from "@/lib/hirehub";
-import { isDeadlineOnOrAfterToday, packJobDescription } from "@/lib/job-fields";
+import { isDeadlineOnOrAfterToday } from "@/lib/job-fields";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/components/dashboard/parts";
 
@@ -88,7 +88,8 @@ function PostJobPage() {
         .from("jobs")
         .insert({
           title: values.title.trim(),
-          description: packJobDescription(values.description, values.application_deadline),
+          description: values.description.trim(),
+          application_deadline: values.application_deadline,
           location: values.location.trim(),
           salary_range: values.salary_range?.trim() || null,
           job_type: values.job_type as JobType,

@@ -23,7 +23,7 @@ import {
   fmtDeadline,
   JOB_STATUS_BADGE_CLASS,
   JOB_STATUS_LABEL,
-  unpackJobDescription,
+  jobDeadline,
   type JobStatus,
 } from "@/lib/job-fields";
 import { useAuth } from "@/lib/auth";
@@ -60,7 +60,7 @@ function MyJobsPage() {
     queryFn: async () => {
       let q = supabase
         .from("jobs")
-        .select("id,title,location,job_type,status,created_at,description,companies(name),applications(count)")
+        .select("id,title,location,job_type,status,created_at,description,application_deadline,companies(name),applications(count)")
         .eq("recruiter_id", id!)
         .order("created_at", { ascending: false });
       if (search.status) q = q.eq("status", search.status);
@@ -183,7 +183,7 @@ function MyJobsPage() {
             const appCount = Array.isArray(j.applications) ? (j.applications[0]?.count ?? 0) : 0;
             const canEdit = j.status !== "closed";
             const canClose = j.status === "approved" || j.status === "pending";
-            const deadline = unpackJobDescription(j.description).applicationDeadline;
+            const deadline = jobDeadline(j);
             const status = j.status as JobStatus;
             return (
               <li

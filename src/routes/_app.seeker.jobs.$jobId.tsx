@@ -15,6 +15,7 @@ import { JOB_TYPE_LABEL } from "@/lib/hirehub";
 import {
   fmtDeadline,
   isApplicationDeadlinePassed,
+  jobDeadline,
   unpackJobDescription,
 } from "@/lib/job-fields";
 import { useAuth } from "@/lib/auth";
@@ -50,7 +51,7 @@ function JobDetailPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("jobs")
-        .select("id,title,description,location,salary_range,job_type,status,created_at,companies(name,industry)")
+        .select("id,title,description,location,salary_range,job_type,status,created_at,application_deadline,companies(name,industry)")
         .eq("id", jobId)
         .eq("status", "approved")
         .maybeSingle();
@@ -147,7 +148,7 @@ function JobDetailPage() {
     mutationFn: async (values: ApplyValues) => {
       if (!id) throw new Error("Not signed in");
 
-      const deadline = unpackJobDescription(job.data?.description).applicationDeadline;
+      const deadline = jobDeadline(job.data);
       if (isApplicationDeadlinePassed(deadline)) {
         throw new Error("The application deadline for this job has passed.");
       }
@@ -223,7 +224,8 @@ function JobDetailPage() {
 
   const j = job.data;
   const companyName = j.companies?.name ?? "Company";
-  const { description: plainDescription, applicationDeadline } = unpackJobDescription(j.description);
+  const plainDescription = unpackJobDescription(j.description).description;
+  const applicationDeadline = jobDeadline(j);
   const deadlineLabel = fmtDeadline(applicationDeadline);
   const deadlinePassed = isApplicationDeadlinePassed(applicationDeadline);
 
