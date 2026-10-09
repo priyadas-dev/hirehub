@@ -128,7 +128,7 @@ function JobDetailPage() {
       ]);
       if (appRes.error) throw appRes.error;
       const meta = (authData.user?.user_metadata ?? {}) as Record<string, unknown>;
-      const metaResume = typeof meta.resume_url === "string" ? meta.resume_url.trim() : "";
+      const metaResume = typeof meta["resume_url"] === "string" ? meta["resume_url"].trim() : "";
       return { resume_url: metaResume || appRes.data?.resume_url || null };
     },
   });
