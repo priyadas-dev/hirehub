@@ -180,6 +180,9 @@ function JobDetailPage() {
         if (error.code === "23505" || /duplicate|unique/i.test(error.message)) {
           throw new Error("Already applied");
         }
+        if (/applications for this job closed/i.test(error.message)) {
+          throw new Error("The application deadline for this job has passed.");
+        }
         throw error;
       }
       return data;
