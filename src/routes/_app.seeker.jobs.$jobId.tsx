@@ -12,6 +12,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { JOB_TYPE_LABEL } from "@/lib/hirehub";
+import {
+  fmtDeadline,
+  isApplicationDeadlinePassed,
+  unpackJobDescription,
+} from "@/lib/job-fields";
 import { useAuth } from "@/lib/auth";
 import { fmtDate, supabase } from "@/components/dashboard/parts";
 
@@ -142,6 +147,11 @@ function JobDetailPage() {
     mutationFn: async (values: ApplyValues) => {
       if (!id) throw new Error("Not signed in");
 
+      const deadline = unpackJobDescription(job.data?.description).applicationDeadline;
+      if (isApplicationDeadlinePassed(deadline)) {
+        throw new Error("The application deadline for this job has passed.");
+      }
+
       const { data: existing, error: existingErr } = await supabase
         .from("applications")
         .select("id")
@@ -213,13 +223,18 @@ function JobDetailPage() {
 
   const j = job.data;
   const companyName = j.companies?.name ?? "Company";
+  const { description: plainDescription, applicationDeadline } = unpackJobDescription(j.description);
+  const deadlineLabel = fmtDeadline(applicationDeadline);
+  const deadlinePassed = isApplicationDeadlinePassed(applicationDeadline);
 
   return (
     <div className="space-y-8">
       <PageHeader
         eyebrow={companyName}
         title={j.title}
-        description={`${JOB_TYPE_LABEL[j.job_type]} · Posted ${fmtDate(j.created_at)}`}
+        description={`${JOB_TYPE_LABEL[j.job_type]} · Posted ${fmtDate(j.created_at)}${
+          deadlineLabel ? ` · Deadline ${deadlineLabel}` : ""
+        }`}
         actions={
           <div className="flex flex-wrap gap-2">
             <Button
@@ -244,7 +259,7 @@ function JobDetailPage() {
         <section className="surface-card animate-fade-up space-y-5 p-5 sm:p-7 lg:col-span-3">
           <h2 className="text-lg font-semibold tracking-tight">About the role</h2>
           <p className="whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground">
-            {j.description || "No description provided."}
+            {plainDescription || "No description provided."}
           </p>
           <dl className="mt-2 grid gap-3 border-t pt-5 text-sm sm:grid-cols-2">
             <div className="flex gap-3 rounded-xl bg-surface/70 p-3 ring-1 ring-border/60">
@@ -275,6 +290,18 @@ function JobDetailPage() {
                 <dd className="font-medium tracking-tight">{fmtDate(j.created_at)}</dd>
               </div>
             </div>
+            {deadlineLabel && (
+              <div className="flex gap-3 rounded-xl bg-surface/70 p-3 ring-1 ring-border/60 sm:col-span-2">
+                <Calendar className="mt-0.5 size-4 shrink-0 text-signal" />
+                <div>
+                  <dt className="text-xs text-muted-foreground">Application deadline</dt>
+                  <dd className="font-medium tracking-tight">
+                    {deadlineLabel}
+                    {deadlinePassed ? " · Closed" : ""}
+                  </dd>
+                </div>
+              </div>
+            )}
           </dl>
         </section>
 
@@ -289,6 +316,15 @@ function JobDetailPage() {
                 <Link to="/seeker/applications/$applicationId" params={{ applicationId: existingApp.data.id }}>
                   View application
                 </Link>
+              </Button>
+            </div>
+          ) : deadlinePassed ? (
+            <div className="space-y-3 text-sm">
+              <p className="text-muted-foreground">
+                Applications closed on {deadlineLabel}. This role is no longer accepting new applications.
+              </p>
+              <Button variant="outline" asChild>
+                <Link to="/seeker/jobs">Browse other jobs</Link>
               </Button>
             </div>
           ) : (
@@ -317,6 +353,9 @@ function JobDetailPage() {
                 <Label htmlFor="cover_note">Cover note (optional)</Label>
                 <Textarea id="cover_note" rows={4} placeholder="Optional note for the recruiter" {...form.register("cover_note")} />
               </div>
+              {deadlineLabel && (
+                <p className="text-xs text-muted-foreground">Apply by {deadlineLabel}.</p>
+              )}
               <Button type="submit" variant="signal" className="w-full" disabled={apply.isPending}>
                 {apply.isPending ? "Submitting…" : "Submit application"}
               </Button>

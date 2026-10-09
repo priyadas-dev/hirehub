@@ -22,6 +22,7 @@ import {
   type LiveJob,
 } from "@/lib/job-discovery";
 import { JOB_TYPE_LABEL, type JobType } from "@/lib/hirehub";
+import { fmtDeadline, unpackJobDescription } from "@/lib/job-fields";
 import { fmtDate, supabase } from "@/components/dashboard/parts";
 
 export const Route = createFileRoute("/_app/seeker/jobs/")({
@@ -83,7 +84,8 @@ function BrowseJobsPage() {
     return list.filter((j) => {
       if (!matchesBrowseJobType(j.job_type, j.location, jobType)) return false;
       if (!matchesLocation(j.location, location)) return false;
-      const text = `${j.title} ${j.description ?? ""} ${j.companies?.name ?? ""}`;
+      const plainDescription = unpackJobDescription(j.description).description;
+      const text = `${j.title} ${plainDescription} ${j.companies?.name ?? ""}`;
       if (!matchesCategory(text, undefined, category)) return false;
       if (qq) {
         const hay = `${j.title} ${j.companies?.name ?? ""} ${j.location ?? ""}`.toLowerCase();
@@ -353,6 +355,13 @@ function BrowseJobsPage() {
                     <span className="rounded-full border bg-surface/80 px-2 py-0.5">{j.salary_range}</span>
                   )}
                   <span className="rounded-full border bg-surface/80 px-2 py-0.5">Posted {fmtDate(j.created_at)}</span>
+                  {(() => {
+                    const deadline = unpackJobDescription(j.description).applicationDeadline;
+                    const label = fmtDeadline(deadline);
+                    return label ? (
+                      <span className="rounded-full border bg-surface/80 px-2 py-0.5">Deadline {label}</span>
+                    ) : null;
+                  })()}
                 </div>
                 <Button
                   asChild

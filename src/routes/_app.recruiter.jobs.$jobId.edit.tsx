@@ -12,15 +12,24 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { JOB_TYPE_LABEL, type JobType } from "@/lib/hirehub";
+import {
+  fmtDeadline,
+  isDeadlineOnOrAfterToday,
+  JOB_STATUS_LABEL,
+  packJobDescription,
+  unpackJobDescription,
+  type JobStatus,
+} from "@/lib/job-fields";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/components/dashboard/parts";
 
 const schema = z.object({
   title: z.string().trim().min(2, "Title is required"),
-  description: z.string().trim().optional(),
-  location: z.string().trim().optional(),
+  description: z.string().trim().min(1, "Description is required"),
+  location: z.string().trim().min(1, "Location is required"),
   salary_range: z.string().trim().optional(),
   job_type: z.enum(["full_time", "part_time", "contract"]),
+  application_deadline: z.string().min(1, "Application deadline is required"),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -66,17 +75,20 @@ function EditJobPage() {
       location: "",
       salary_range: "",
       job_type: "full_time",
+      application_deadline: "",
     },
   });
 
   useEffect(() => {
     if (job.data) {
+      const { description, applicationDeadline } = unpackJobDescription(job.data.description);
       form.reset({
         title: job.data.title,
-        description: job.data.description ?? "",
+        description,
         location: job.data.location ?? "",
         salary_range: job.data.salary_range ?? "",
         job_type: job.data.job_type,
+        application_deadline: applicationDeadline ?? "",
       });
     }
   }, [job.data, form]);
@@ -87,14 +99,24 @@ function EditJobPage() {
       if (job.data?.status === "closed") {
         throw new Error("Closed jobs cannot be edited. Post a new listing instead.");
       }
+
+      const previousDeadline = unpackJobDescription(job.data?.description).applicationDeadline;
+      if (
+        !isDeadlineOnOrAfterToday(values.application_deadline) &&
+        values.application_deadline !== previousDeadline
+      ) {
+        throw new Error("Deadline must be today or in the future.");
+      }
+
       const { data, error } = await supabase
         .from("jobs")
         .update({
           title: values.title.trim(),
-          description: values.description?.trim() || null,
-          location: values.location?.trim() || null,
+          description: packJobDescription(values.description, values.application_deadline),
+          location: values.location.trim(),
           salary_range: values.salary_range?.trim() || null,
           job_type: values.job_type as JobType,
+          // Recruiter edits never change approval status — only admins approve.
         })
         .eq("id", jobId)
         .eq("recruiter_id", id)
@@ -110,6 +132,7 @@ function EditJobPage() {
       await qc.invalidateQueries({ queryKey: ["rec-jobs"] });
       await qc.invalidateQueries({ queryKey: ["seeker-jobs"] });
       await qc.invalidateQueries({ queryKey: ["seeker-recommended"] });
+      await qc.invalidateQueries({ queryKey: ["seeker-job", jobId] });
       void navigate({ to: "/recruiter/jobs" });
     },
     onError: (e: Error) => toast.error("Could not update job", { description: e.message }),
@@ -119,6 +142,8 @@ function EditJobPage() {
   if (job.isError) return <ErrorState onRetry={() => void job.refetch()} />;
 
   const closed = job.data?.status === "closed";
+  const status = (job.data?.status ?? "pending") as JobStatus;
+  const packedDeadline = unpackJobDescription(job.data?.description).applicationDeadline;
 
   return (
     <div className="space-y-8">
@@ -128,7 +153,9 @@ function EditJobPage() {
         description={
           closed
             ? "This listing is closed and can no longer be edited."
-            : `${job.data?.companies?.name ?? "Company"} · Status: ${job.data?.status}`
+            : `${job.data?.companies?.name ?? "Company"} · ${JOB_STATUS_LABEL[status]}${
+                packedDeadline ? ` · Deadline ${fmtDeadline(packedDeadline)}` : ""
+              }`
         }
         actions={
           <div className="flex flex-wrap gap-2">
@@ -164,11 +191,17 @@ function EditJobPage() {
             {...form.register("description")}
             placeholder="Role details…"
           />
+          {form.formState.errors.description && (
+            <p className="text-xs text-destructive">{form.formState.errors.description.message}</p>
+          )}
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
             <Label htmlFor="location">Location</Label>
             <Input id="location" disabled={closed} {...form.register("location")} placeholder="Remote / City" />
+            {form.formState.errors.location && (
+              <p className="text-xs text-destructive">{form.formState.errors.location.message}</p>
+            )}
           </div>
           <div className="space-y-2">
             <Label htmlFor="salary_range">Salary range</Label>
@@ -180,24 +213,38 @@ function EditJobPage() {
             />
           </div>
         </div>
-        <div className="space-y-2">
-          <Label>Job type</Label>
-          <Select
-            value={form.watch("job_type")}
-            disabled={closed}
-            onValueChange={(v) => form.setValue("job_type", v as JobType, { shouldValidate: true })}
-          >
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {(Object.keys(JOB_TYPE_LABEL) as JobType[]).map((t) => (
-                <SelectItem key={t} value={t}>
-                  {JOB_TYPE_LABEL[t]}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label>Job type</Label>
+            <Select
+              value={form.watch("job_type")}
+              disabled={closed}
+              onValueChange={(v) => form.setValue("job_type", v as JobType, { shouldValidate: true })}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {(Object.keys(JOB_TYPE_LABEL) as JobType[]).map((t) => (
+                  <SelectItem key={t} value={t}>
+                    {JOB_TYPE_LABEL[t]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="application_deadline">Application deadline</Label>
+            <Input
+              id="application_deadline"
+              type="date"
+              disabled={closed}
+              {...form.register("application_deadline")}
+            />
+            {form.formState.errors.application_deadline && (
+              <p className="text-xs text-destructive">{form.formState.errors.application_deadline.message}</p>
+            )}
+          </div>
         </div>
         {!closed && (
           <Button type="submit" variant="signal" disabled={save.isPending}>

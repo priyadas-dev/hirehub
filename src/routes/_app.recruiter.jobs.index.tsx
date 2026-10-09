@@ -16,22 +16,24 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { JOB_TYPE_LABEL } from "@/lib/hirehub";
+import {
+  fmtDeadline,
+  JOB_STATUS_BADGE_CLASS,
+  JOB_STATUS_LABEL,
+  unpackJobDescription,
+  type JobStatus,
+} from "@/lib/job-fields";
 import { useAuth } from "@/lib/auth";
+import { cn } from "@/lib/utils";
 import { fmtDate, supabase } from "@/components/dashboard/parts";
 
 const searchSchema = z.object({
   status: z.enum(["pending", "approved", "closed"]).optional(),
+  q: z.string().optional(),
 });
-
-type JobStatus = "pending" | "approved" | "closed";
-
-const STATUS_LABEL: Record<JobStatus, string> = {
-  pending: "Pending",
-  approved: "Approved",
-  closed: "Closed",
-};
 
 export const Route = createFileRoute("/_app/recruiter/jobs/")({
   validateSearch: searchSchema,
@@ -50,17 +52,19 @@ function MyJobsPage() {
   const search = Route.useSearch();
   const navigate = Route.useNavigate();
   const qc = useQueryClient();
+  const titleQuery = (search.q ?? "").trim();
 
   const jobs = useQuery({
-    queryKey: ["recruiter-jobs", id, search.status],
+    queryKey: ["recruiter-jobs", id, search.status, titleQuery],
     enabled: !!id,
     queryFn: async () => {
       let q = supabase
         .from("jobs")
-        .select("id,title,location,job_type,status,created_at,companies(name),applications(count)")
+        .select("id,title,location,job_type,status,created_at,description,companies(name),applications(count)")
         .eq("recruiter_id", id!)
         .order("created_at", { ascending: false });
       if (search.status) q = q.eq("status", search.status);
+      if (titleQuery) q = q.ilike("title", `%${titleQuery}%`);
       const { data, error } = await q;
       if (error) throw error;
       return data;
@@ -94,6 +98,7 @@ function MyJobsPage() {
   });
 
   const filteredCount = jobs.data?.length ?? 0;
+  const hasFilters = !!search.status || !!titleQuery;
 
   return (
     <div className="space-y-8">
@@ -111,7 +116,21 @@ function MyJobsPage() {
       />
 
       <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex w-full flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+          <Input
+            value={search.q ?? ""}
+            onChange={(e) =>
+              void navigate({
+                search: (prev) => ({
+                  ...prev,
+                  q: e.target.value || undefined,
+                }),
+              })
+            }
+            placeholder="Search by job title…"
+            className="w-full sm:max-w-xs"
+            aria-label="Search by job title"
+          />
           <Select
             value={search.status ?? "all"}
             onValueChange={(v) =>
@@ -128,27 +147,28 @@ function MyJobsPage() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All statuses</SelectItem>
-              {(Object.keys(STATUS_LABEL) as JobStatus[]).map((s) => (
+              {(Object.keys(JOB_STATUS_LABEL) as JobStatus[]).map((s) => (
                 <SelectItem key={s} value={s}>
-                  {STATUS_LABEL[s]}
+                  {JOB_STATUS_LABEL[s]}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
-          {search.status && (
+          {hasFilters && (
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => void navigate({ search: (prev) => ({ ...prev, status: undefined }) })}
+              onClick={() => void navigate({ search: { status: undefined, q: undefined } })}
             >
-              Clear filter
+              Clear filters
             </Button>
           )}
         </div>
         {!jobs.isLoading && !jobs.isError && (
           <p className="text-sm text-muted-foreground">
             {filteredCount} listing{filteredCount === 1 ? "" : "s"}
-            {search.status ? ` · ${STATUS_LABEL[search.status]}` : ""}
+            {search.status ? ` · ${JOB_STATUS_LABEL[search.status]}` : ""}
+            {titleQuery ? ` · “${titleQuery}”` : ""}
           </p>
         )}
       </div>
@@ -163,6 +183,8 @@ function MyJobsPage() {
             const appCount = Array.isArray(j.applications) ? (j.applications[0]?.count ?? 0) : 0;
             const canEdit = j.status !== "closed";
             const canClose = j.status === "approved" || j.status === "pending";
+            const deadline = unpackJobDescription(j.description).applicationDeadline;
+            const status = j.status as JobStatus;
             return (
               <li
                 key={j.id}
@@ -171,13 +193,19 @@ function MyJobsPage() {
                 <div className="min-w-0 space-y-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <p className="truncate font-medium">{j.title}</p>
-                    <span className="rounded-full border px-2.5 py-0.5 text-xs font-medium capitalize">
-                      {j.status}
+                    <span
+                      className={cn(
+                        "rounded-full border px-2.5 py-0.5 text-xs font-medium",
+                        JOB_STATUS_BADGE_CLASS[status],
+                      )}
+                    >
+                      {JOB_STATUS_LABEL[status]}
                     </span>
                   </div>
                   <p className="text-xs text-muted-foreground">
                     {j.companies?.name ?? "Company"} · {j.location ?? "Remote"} · {JOB_TYPE_LABEL[j.job_type]} ·{" "}
                     {fmtDate(j.created_at)}
+                    {deadline ? ` · Deadline ${fmtDeadline(deadline)}` : ""}
                   </p>
                   <p className="text-xs text-muted-foreground">
                     {appCount} applicant{appCount === 1 ? "" : "s"}
@@ -231,19 +259,19 @@ function MyJobsPage() {
       ) : (
         <EmptyState
           icon={Briefcase}
-          title={search.status ? "No jobs match this filter" : "No job posts yet"}
+          title={hasFilters ? "No jobs match these filters" : "No job posts yet"}
           description={
-            search.status
-              ? "Try another status or clear the filter to see all listings."
+            hasFilters
+              ? "Try another title or status, or clear filters to see all listings."
               : "Create your company if you have not yet, then post a role. The company is active immediately; the job stays pending until an admin approves it."
           }
           action={
-            search.status ? (
+            hasFilters ? (
               <Button
                 variant="outline"
-                onClick={() => void navigate({ search: (prev) => ({ ...prev, status: undefined }) })}
+                onClick={() => void navigate({ search: { status: undefined, q: undefined } })}
               >
-                Clear filter
+                Clear filters
               </Button>
             ) : (
               <div className="flex flex-wrap justify-center gap-2">

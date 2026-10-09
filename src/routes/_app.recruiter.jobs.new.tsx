@@ -13,16 +13,21 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { JOB_TYPE_LABEL, type JobType } from "@/lib/hirehub";
+import { isDeadlineOnOrAfterToday, packJobDescription } from "@/lib/job-fields";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/components/dashboard/parts";
 
 const schema = z.object({
   company_id: z.string().min(1, "Select a company"),
   title: z.string().trim().min(2, "Title is required"),
-  description: z.string().trim().optional(),
-  location: z.string().trim().optional(),
+  description: z.string().trim().min(1, "Description is required"),
+  location: z.string().trim().min(1, "Location is required"),
   salary_range: z.string().trim().optional(),
   job_type: z.enum(["full_time", "part_time", "contract"]),
+  application_deadline: z
+    .string()
+    .min(1, "Application deadline is required")
+    .refine((v) => isDeadlineOnOrAfterToday(v), "Deadline must be today or in the future"),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -66,6 +71,7 @@ function PostJobPage() {
       location: "",
       salary_range: "",
       job_type: "full_time",
+      application_deadline: "",
     },
   });
 
@@ -82,8 +88,8 @@ function PostJobPage() {
         .from("jobs")
         .insert({
           title: values.title.trim(),
-          description: values.description?.trim() || null,
-          location: values.location?.trim() || null,
+          description: packJobDescription(values.description, values.application_deadline),
+          location: values.location.trim(),
           salary_range: values.salary_range?.trim() || null,
           job_type: values.job_type as JobType,
           company_id: values.company_id,
@@ -174,35 +180,53 @@ function PostJobPage() {
         <div className="space-y-2">
           <Label htmlFor="description">Description</Label>
           <Textarea id="description" rows={5} {...form.register("description")} placeholder="Role details…" />
+          {form.formState.errors.description && (
+            <p className="text-xs text-destructive">{form.formState.errors.description.message}</p>
+          )}
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
             <Label htmlFor="location">Location</Label>
             <Input id="location" {...form.register("location")} placeholder="Remote / City" />
+            {form.formState.errors.location && (
+              <p className="text-xs text-destructive">{form.formState.errors.location.message}</p>
+            )}
           </div>
           <div className="space-y-2">
             <Label htmlFor="salary_range">Salary range</Label>
             <Input id="salary_range" {...form.register("salary_range")} placeholder="e.g. $80k–$100k" />
           </div>
         </div>
-        <div className="space-y-2">
-          <Label>Job type</Label>
-          <Select
-            value={form.watch("job_type")}
-            onValueChange={(v) => form.setValue("job_type", v as JobType, { shouldValidate: true })}
-          >
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {(Object.keys(JOB_TYPE_LABEL) as JobType[]).map((t) => (
-                <SelectItem key={t} value={t}>
-                  {JOB_TYPE_LABEL[t]}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label>Job type</Label>
+            <Select
+              value={form.watch("job_type")}
+              onValueChange={(v) => form.setValue("job_type", v as JobType, { shouldValidate: true })}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {(Object.keys(JOB_TYPE_LABEL) as JobType[]).map((t) => (
+                  <SelectItem key={t} value={t}>
+                    {JOB_TYPE_LABEL[t]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="application_deadline">Application deadline</Label>
+            <Input id="application_deadline" type="date" {...form.register("application_deadline")} />
+            {form.formState.errors.application_deadline && (
+              <p className="text-xs text-destructive">{form.formState.errors.application_deadline.message}</p>
+            )}
+          </div>
         </div>
+        <p className="text-xs text-muted-foreground">
+          Status is always pending on submit. Only an admin can approve the listing for seekers.
+        </p>
         <Button type="submit" variant="signal" disabled={post.isPending}>
           {post.isPending ? "Submitting…" : "Submit for approval"}
         </Button>

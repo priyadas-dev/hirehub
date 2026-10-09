@@ -7,6 +7,14 @@ import { StatusBadge } from "@/components/status/StatusBadge";
 import type { ApplicationStatus } from "@/components/status/status";
 import { useAuth } from "@/lib/auth";
 import { useEnsureCompanyActive } from "@/lib/company-profile";
+import {
+  fmtDeadline,
+  JOB_STATUS_BADGE_CLASS,
+  JOB_STATUS_LABEL,
+  unpackJobDescription,
+  type JobStatus,
+} from "@/lib/job-fields";
+import { cn } from "@/lib/utils";
 import { countRows, fmtDate, Section, StatCard, supabase, useCounts } from "./parts";
 
 export function RecruiterDashboard() {
@@ -52,7 +60,7 @@ export function RecruiterDashboard() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("jobs")
-        .select("id,title,status,created_at,location,applications(count)")
+        .select("id,title,status,created_at,location,description,applications(count)")
         .eq("recruiter_id", id!)
         .order("created_at", { ascending: false })
         .limit(5);
@@ -100,9 +108,14 @@ export function RecruiterDashboard() {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
+            <Button variant="signal" size="lg" asChild>
+              <Link to="/recruiter/jobs/new">
+                <PlusSquare /> Post a job
+              </Link>
+            </Button>
             <Button variant="outline" size="lg" asChild>
-              <Link to="/recruiter/company">
-                <Building2 /> Company
+              <Link to="/recruiter/jobs">
+                <Briefcase /> My jobs
               </Link>
             </Button>
             <Button variant="outline" size="lg" asChild>
@@ -110,9 +123,9 @@ export function RecruiterDashboard() {
                 <Users /> Applicants
               </Link>
             </Button>
-            <Button variant="signal" size="lg" asChild>
-              <Link to="/recruiter/jobs/new">
-                <PlusSquare /> Post a job
+            <Button variant="outline" size="lg" asChild>
+              <Link to="/recruiter/company">
+                <Building2 /> Company
               </Link>
             </Button>
           </div>
@@ -171,6 +184,8 @@ export function RecruiterDashboard() {
             <ul className="surface-card divide-y">
               {recentJobs.data.map((j) => {
                 const appCount = Array.isArray(j.applications) ? (j.applications[0]?.count ?? 0) : 0;
+                const status = j.status as JobStatus;
+                const deadline = unpackJobDescription(j.description).applicationDeadline;
                 return (
                   <li key={j.id}>
                     <Link
@@ -183,10 +198,16 @@ export function RecruiterDashboard() {
                         <p className="text-xs text-muted-foreground">
                           {j.location ?? "Remote"} · {fmtDate(j.created_at)} · {appCount} applicant
                           {appCount === 1 ? "" : "s"}
+                          {deadline ? ` · Deadline ${fmtDeadline(deadline)}` : ""}
                         </p>
                       </div>
-                      <span className="rounded-full border px-2.5 py-1 text-xs font-medium capitalize">
-                        {j.status}
+                      <span
+                        className={cn(
+                          "rounded-full border px-2.5 py-1 text-xs font-medium",
+                          JOB_STATUS_BADGE_CLASS[status],
+                        )}
+                      >
+                        {JOB_STATUS_LABEL[status]}
                       </span>
                     </Link>
                   </li>
