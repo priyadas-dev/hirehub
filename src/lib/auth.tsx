@@ -47,18 +47,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<SessionUser | null>(null);
   const [loading, setLoading] = useState(true);
   const refresh = useCallback(async () => {
-    const s = await readSession();
+    let s: SessionUser | null = null;
+    try {
+      s = await readSession();
+    } catch (err) {
+      console.error("[auth] backend unavailable", err);
+    }
     setUser(s);
     setLoading(false);
     return s;
   }, []);
   useEffect(() => {
     void refresh();
-    const { data } = supabase.auth.onAuthStateChange((event) => {
-      if (event === "SIGNED_OUT") { setUser(null); return; }
-      if (event === "SIGNED_IN" || event === "USER_UPDATED") setTimeout(() => void refresh(), 0);
-    });
-    return () => data.subscription.unsubscribe();
+    try {
+      const { data } = supabase.auth.onAuthStateChange((event) => {
+        if (event === "SIGNED_OUT") { setUser(null); return; }
+        if (event === "SIGNED_IN" || event === "USER_UPDATED") setTimeout(() => void refresh(), 0);
+      });
+      return () => data.subscription.unsubscribe();
+    } catch (err) {
+      console.error("[auth] backend unavailable", err);
+      return undefined;
+    }
   }, [refresh]);
   const signOut = useCallback(async () => {
     await supabase.auth.signOut();
