@@ -88,7 +88,8 @@ function HeaderSearch({ user }: { user: SessionUser }) {
   const searchQ = useRouterState({
     select: (s) => {
       const search = s.location.search as Record<string, unknown>;
-      return typeof search.q === "string" ? search.q : "";
+      const q = search["q"];
+      return typeof q === "string" ? q : "";
     },
   });
   const [query, setQuery] = useState("");
@@ -119,7 +120,15 @@ function HeaderSearch({ user }: { user: SessionUser }) {
     if (target.to === "/recruiter/jobs") {
       void navigate({
         to: "/recruiter/jobs",
-        search: (prev) => ({ ...prev, q: target.search.q }),
+        search: (prev) => {
+          const status = prev.status;
+          const jobStatus =
+            status === "pending" || status === "approved" || status === "closed" ? status : undefined;
+          return {
+            ...(jobStatus !== undefined ? { status: jobStatus } : {}),
+            ...("q" in target.search && target.search.q !== undefined ? { q: target.search.q } : {}),
+          };
+        },
       });
       return;
     }

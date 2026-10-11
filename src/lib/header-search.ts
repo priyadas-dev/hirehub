@@ -7,10 +7,12 @@ export type HeaderSearchTarget =
 
 /** Role-aware destination for the shell header search box. */
 export function headerSearchTarget(role: Role, rawQuery: string): HeaderSearchTarget {
-  const q = rawQuery.trim() || undefined;
-  if (role === "recruiter") return { to: "/recruiter/jobs", search: { q } };
-  if (role === "admin") return { to: "/admin/jobs", search: { q } };
-  return { to: "/seeker/jobs", search: { q } };
+  const trimmed = rawQuery.trim();
+  // exactOptionalPropertyTypes: omit `q` when empty instead of `{ q: undefined }`.
+  const search = trimmed ? { q: trimmed } : {};
+  if (role === "recruiter") return { to: "/recruiter/jobs", search };
+  if (role === "admin") return { to: "/admin/jobs", search };
+  return { to: "/seeker/jobs", search };
 }
 
 export function headerSearchPlaceholder(role: Role): string {

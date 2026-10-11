@@ -74,7 +74,7 @@ function AuthPage() {
     toast.error("Google sign-in didn't work", {
       description:
         detail.toLowerCase().includes("exchange authorization code")
-          ? "Supabase could not finish Google's token exchange. Check that the Google Client ID and Enabled Client Secret match on project rropcdqzzdcsnnifdlgp, and that Google Cloud allows https://rropcdqzzdcsnnifdlgp.supabase.co/auth/v1/callback."
+          ? "Supabase could not finish Google's token exchange. Check that the Google Client ID and Client Secret match on project munqgybiuqpncxbgfvdp, and that Google Cloud allows https://munqgybiuqpncxbgfvdp.supabase.co/auth/v1/callback."
           : detail,
     });
     navigate({
@@ -202,6 +202,10 @@ function AuthPage() {
             {busy === "google" ? <Loader2 className="animate-spin" /> : <GoogleIcon />}
             Continue with Google
           </Button>
+          <p className="mt-2 text-center text-xs text-muted-foreground">
+            Used Google before on this project? Use the button above — that account has no email password.
+            Signup/reset &quot;too many attempts&quot; means wait 30–60 minutes or try a different email.
+          </p>
           <div className="my-6 flex items-center gap-3 text-xs text-muted-foreground">
             <span className="h-px flex-1 bg-border" /> or with email <span className="h-px flex-1 bg-border" />
           </div>
@@ -281,12 +285,22 @@ function Field({ id, label, error, ...props }: { id: string; label: string; erro
 
 function friendly(err: unknown): string {
   const msg = err instanceof Error ? err.message : typeof err === "object" && err && "message" in err ? String((err as { message: unknown }).message) : "";
+  const status =
+    typeof err === "object" && err && "status" in err ? Number((err as { status: unknown }).status) : undefined;
   const m = msg.toLowerCase();
-  if (m.includes("invalid login")) return "That email and password don't match. Please try again.";
-  if (m.includes("already registered") || m.includes("already been registered")) return "An account with this email already exists. Try signing in instead.";
+  if (status === 429 || m.includes("rate limit") || m.includes("too many") || m.includes("429")) {
+    return "Too many signup/reset attempts. Wait 30–60 minutes, then use Continue with Google or a different email.";
+  }
+  if (m.includes("invalid login") || m.includes("invalid credentials")) {
+    return "That email and password don't match on this Supabase project. If you used Google before, click Continue with Google (no password). Or Sign up with a new email after the rate limit cools down.";
+  }
+  if (m.includes("already registered") || m.includes("already been registered")) {
+    return "An account with this email already exists on this project. Try signing in, Google, or wait out the rate limit before reset.";
+  }
   if (m.includes("email not confirmed")) return "Please confirm your email first — check your inbox for the link.";
-  if (m.includes("password") && (m.includes("weak") || m.includes("pwned") || m.includes("least") || m.includes("characters"))) return "That password is too weak. Use at least 8 characters and avoid common passwords.";
-  if (m.includes("rate limit") || m.includes("too many")) return "Too many attempts. Please wait a minute and try again.";
+  if (m.includes("password") && (m.includes("weak") || m.includes("pwned") || m.includes("least") || m.includes("characters"))) {
+    return "That password is too weak. Use at least 8 characters and avoid common passwords.";
+  }
   if (m.includes("fetch") || m.includes("network")) return "Can't reach the server. Check your connection and try again.";
   return msg || "Something went wrong. Please try again.";
 }

@@ -19,7 +19,7 @@ describe("headerSearchTarget", () => {
   it("sends admins to approve-jobs with optional empty query cleared", () => {
     expect(headerSearchTarget("admin", "   ")).toEqual({
       to: "/admin/jobs",
-      search: { q: undefined },
+      search: {},
     });
   });
 

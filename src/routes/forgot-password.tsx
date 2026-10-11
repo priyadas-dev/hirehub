@@ -129,7 +129,9 @@ function friendly(err: unknown): string {
         ? String((err as { message: unknown }).message)
         : "";
   const m = msg.toLowerCase();
-  if (m.includes("rate limit") || m.includes("too many")) return "Too many attempts. Please wait a minute and try again.";
+  if (m.includes("rate limit") || m.includes("too many") || m.includes("429")) {
+    return "Too many reset emails. Wait 30–60 minutes, or sign in with Google / set a password in the Supabase Dashboard.";
+  }
   if (m.includes("fetch") || m.includes("network")) return "Can't reach the server. Check your connection and try again.";
   if (m.includes("redirect")) return "Password reset redirect isn't allowlisted yet. Ask an admin to add this site's /reset-password URL in Supabase Auth settings.";
   return msg || "Something went wrong. Please try again.";
