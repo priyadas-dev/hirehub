@@ -4,7 +4,7 @@
  */
 
 /** Local app Supabase project reference (hostname of VITE_SUPABASE_URL) — not a secret. */
-export const CONFIGURED_SUPABASE_PROJECT_REF = "rropcdqzzdcsnnifdlgp" as const;
+export const CONFIGURED_SUPABASE_PROJECT_REF = "munqgybiuqpncxbgfvdp" as const;
 
 /**
  * How to verify deadline migrations on the live project (run in Dashboard SQL Editor).

@@ -12,7 +12,7 @@ import {
 
 describe("assignment verification constants", () => {
   it("documents the configured Supabase project ref", () => {
-    expect(CONFIGURED_SUPABASE_PROJECT_REF).toBe("rropcdqzzdcsnnifdlgp");
+    expect(CONFIGURED_SUPABASE_PROJECT_REF).toBe("munqgybiuqpncxbgfvdp");
   });
 
   it("separates 0002 column check from 0003 INSERT policy check", () => {

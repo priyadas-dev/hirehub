@@ -241,10 +241,6 @@ function AuthPage() {
             {busy === "google" ? <Loader2 className="animate-spin" /> : <GoogleIcon />}
             Continue with Google
           </Button>
-          <p className="mt-2 text-center text-xs text-muted-foreground">
-            Used Google before on this project? Use the button above — that account has no email password.
-            Signup/reset &quot;too many attempts&quot; means wait 30–60 minutes or try a different email.
-          </p>
           <div className="my-6 flex items-center gap-3 text-xs text-muted-foreground">
             <span className="h-px flex-1 bg-border" /> or with email <span className="h-px flex-1 bg-border" />
           </div>
@@ -331,10 +327,10 @@ function friendly(err: unknown): string {
     return "Too many signup/reset attempts. Wait 30–60 minutes, then use Continue with Google or a different email.";
   }
   if (m.includes("invalid login") || m.includes("invalid credentials")) {
-    return "That email and password don't match on this Supabase project. If you used Google before, click Continue with Google (no password). Or Sign up with a new email after the rate limit cools down.";
+    return "That email and password don't match. If you signed up with Google, use Continue with Google instead.";
   }
   if (m.includes("already registered") || m.includes("already been registered")) {
-    return "An account with this email already exists on this project. Try signing in, Google, or wait out the rate limit before reset.";
+    return "An account with this email already exists. Try signing in or Continue with Google.";
   }
   if (m.includes("email not confirmed")) return "Please confirm your email first — check your inbox for the link.";
   if (m.includes("password") && (m.includes("weak") || m.includes("pwned") || m.includes("least") || m.includes("characters"))) {
