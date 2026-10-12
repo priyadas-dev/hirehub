@@ -49,8 +49,8 @@ export function parseNotifyApplicationStatusBody(
       error: "Identity fields are not accepted in the request body",
     };
   }
-  const applicationId = body.applicationId;
-  const status = body.status;
+  const applicationId = body["applicationId"];
+  const status = body["status"];
   if (typeof applicationId !== "string" || !UUID_RE.test(applicationId)) {
     return { ok: false, error: "applicationId must be a valid UUID" };
   }

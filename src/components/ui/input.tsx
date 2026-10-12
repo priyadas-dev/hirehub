@@ -12,6 +12,8 @@ const Input = React.forwardRef<HTMLInputElement, React.ComponentProps<"input">>(
           className,
         )}
         ref={ref}
+        // Browser extensions often inject attributes (e.g. fdprocessedid) before hydrate.
+        suppressHydrationWarning
         {...props}
       />
     );

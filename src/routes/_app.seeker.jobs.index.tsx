@@ -1,7 +1,8 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { Bookmark, Briefcase, ExternalLink, MapPin, Search, X } from "lucide-react";
+import { z } from "zod";
 import { CardSkeleton, EmptyState, ErrorState, PageHeader } from "@/components/feedback/States";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,10 +26,15 @@ import { JOB_TYPE_LABEL, type JobType } from "@/lib/hirehub";
 import { fmtDeadline, resolveJobDeadline, stripDeadlineMarker } from "@/lib/job-fields";
 import { fmtDate, supabase } from "@/components/dashboard/parts";
 
+const searchSchema = z.object({
+  q: z.string().optional(),
+});
+
 export const Route = createFileRoute("/_app/seeker/jobs/")({
+  validateSearch: searchSchema,
   head: () => ({
     meta: [
-      { title: "Browse Jobs ΓÇö HireHub" },
+      { title: "Browse Jobs — HireHub" },
       { name: "description", content: "Discover HireHub and live external remote roles." },
     ],
   }),
@@ -36,12 +42,27 @@ export const Route = createFileRoute("/_app/seeker/jobs/")({
 });
 
 function BrowseJobsPage() {
-  const [q, setQ] = useState("");
+  const search = Route.useSearch();
+  const navigate = Route.useNavigate();
+  const [q, setQ] = useState(search.q ?? "");
   const [location, setLocation] = useState("");
   const [locationOpen, setLocationOpen] = useState(false);
   const [category, setCategory] = useState<JobCategory | "all">("all");
   const [jobType, setJobType] = useState<BrowseJobType | "all">("all");
   const locationWrapRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const fromUrl = search.q ?? "";
+    setQ((current) => (current === fromUrl || current.trim() === fromUrl ? current : fromUrl));
+  }, [search.q]);
+
+  const setSearchQuery = (value: string) => {
+    setQ(value);
+    void navigate({
+      search: (prev) => ({ ...prev, q: value.trim() ? value : undefined }),
+      replace: true,
+    });
+  };
 
   const jobs = useQuery({
     queryKey: ["seeker-jobs"],
@@ -123,7 +144,7 @@ function BrowseJobsPage() {
   const liveTotal = liveJobs.data?.length ?? 0;
 
   const clearFilters = () => {
-    setQ("");
+    setSearchQuery("");
     setLocation("");
     setCategory("all");
     setJobType("all");
@@ -166,9 +187,9 @@ function BrowseJobsPage() {
               <Input
                 id="job-search"
                 className="pl-9"
-                placeholder="Title, company, skillsΓÇª"
+                placeholder="Title, company, skills…"
                 value={q}
-                onChange={(e) => setQ(e.target.value)}
+                onChange={(e) => setSearchQuery(e.target.value)}
                 autoComplete="off"
               />
             </div>

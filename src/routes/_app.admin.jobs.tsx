@@ -1,14 +1,22 @@
+import { useMemo } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ShieldCheck } from "lucide-react";
+import { Search, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
+import { z } from "zod";
 import { CardSkeleton, EmptyState, ErrorState, PageHeader } from "@/components/feedback/States";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { JOB_TYPE_LABEL } from "@/lib/hirehub";
 import { useAuth } from "@/lib/auth";
 import { fmtDate, supabase } from "@/components/dashboard/parts";
 
+const searchSchema = z.object({
+  q: z.string().optional(),
+});
+
 export const Route = createFileRoute("/_app/admin/jobs")({
+  validateSearch: searchSchema,
   head: () => ({
     meta: [
       { title: "Approve jobs — HireHub" },
@@ -22,6 +30,9 @@ function AdminJobsPage() {
   const { user } = useAuth();
   const id = user?.id;
   const qc = useQueryClient();
+  const search = Route.useSearch();
+  const navigate = Route.useNavigate();
+  const q = search.q?.trim().toLowerCase() ?? "";
 
   const jobs = useQuery({
     queryKey: ["admin-jobs", id],
@@ -55,8 +66,17 @@ function AdminJobsPage() {
     onError: (e: Error) => toast.error("Could not update job", { description: e.message }),
   });
 
-  const pending = jobs.data?.filter((j) => j.status === "pending") ?? [];
-  const others = jobs.data?.filter((j) => j.status !== "pending") ?? [];
+  const filtered = useMemo(() => {
+    const list = jobs.data ?? [];
+    if (!q) return list;
+    return list.filter((j) => {
+      const hay = `${j.title} ${j.companies?.name ?? ""} ${j.location ?? ""}`.toLowerCase();
+      return hay.includes(q);
+    });
+  }, [jobs.data, q]);
+
+  const pending = filtered.filter((j) => j.status === "pending");
+  const others = filtered.filter((j) => j.status !== "pending");
 
   return (
     <div className="space-y-8">
@@ -65,6 +85,25 @@ function AdminJobsPage() {
         title="Approve jobs"
         description="Approve pending listings so seekers can browse and apply. Close roles that should leave the board."
       />
+
+      <div className="relative max-w-md">
+        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          className="pl-9"
+          placeholder="Search by title, company, or location…"
+          value={search.q ?? ""}
+          onChange={(e) =>
+            void navigate({
+              search: (prev) => ({
+                ...prev,
+                q: e.target.value.trim() ? e.target.value : undefined,
+              }),
+              replace: true,
+            })
+          }
+          autoComplete="off"
+        />
+      </div>
 
       {jobs.isLoading ? (
         <CardSkeleton rows={4} />
@@ -77,12 +116,15 @@ function AdminJobsPage() {
             {pending.length ? (
               <ul className="surface-card divide-y">
                 {pending.map((j) => (
-                  <li key={j.id} className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+                  <li
+                    key={j.id}
+                    className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between"
+                  >
                     <div className="min-w-0">
                       <p className="truncate font-medium">{j.title}</p>
                       <p className="text-xs text-muted-foreground">
-                        {j.companies?.name ?? "Company"} · {j.location ?? "Remote"} · {JOB_TYPE_LABEL[j.job_type]} ·{" "}
-                        {fmtDate(j.created_at)}
+                        {j.companies?.name ?? "Company"} · {j.location ?? "Remote"} ·{" "}
+                        {JOB_TYPE_LABEL[j.job_type]} · {fmtDate(j.created_at)}
                       </p>
                     </div>
                     <div className="flex flex-wrap gap-2">
@@ -107,7 +149,13 @@ function AdminJobsPage() {
                 ))}
               </ul>
             ) : (
-              <EmptyState icon={ShieldCheck} title="No pending jobs" description="All submitted roles are reviewed." />
+              <EmptyState
+                icon={ShieldCheck}
+                title={q ? "No pending jobs match" : "No pending jobs"}
+                description={
+                  q ? "Try another search term or clear the header search." : "All submitted roles are reviewed."
+                }
+              />
             )}
           </section>
 
@@ -116,7 +164,10 @@ function AdminJobsPage() {
               <h2 className="text-lg font-semibold">Reviewed jobs</h2>
               <ul className="surface-card divide-y">
                 {others.map((j) => (
-                  <li key={j.id} className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+                  <li
+                    key={j.id}
+                    className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between"
+                  >
                     <div className="min-w-0">
                       <p className="truncate font-medium">{j.title}</p>
                       <p className="text-xs text-muted-foreground">
@@ -124,7 +175,9 @@ function AdminJobsPage() {
                       </p>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="rounded-full border px-2.5 py-1 text-xs font-medium capitalize">{j.status}</span>
+                      <span className="rounded-full border px-2.5 py-1 text-xs font-medium capitalize">
+                        {j.status}
+                      </span>
                       {j.status === "approved" && (
                         <Button
                           size="sm"

@@ -52,7 +52,11 @@ export function businessCalendarDate(
 /** True for a real Gregorian calendar day (rejects 2026-02-30, 2026-13-01). */
 export function isRealCalendarDate(value: string | null | undefined): value is string {
   if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
-  const [y, m, d] = value.split("-").map(Number);
+  const parts = value.split("-").map(Number);
+  const y = parts[0];
+  const m = parts[1];
+  const d = parts[2];
+  if (y === undefined || m === undefined || d === undefined) return false;
   const dt = new Date(y, m - 1, d);
   return dt.getFullYear() === y && dt.getMonth() === m - 1 && dt.getDate() === d;
 }
@@ -90,9 +94,11 @@ export function resolveJobDeadline(
   columnDeadline: string | null | undefined,
   description: string | null | undefined,
 ): string | null {
-  if (isRealCalendarDate(columnDeadline)) return columnDeadline;
+  // Copy before the type-predicate: a failed `value is string` guard would narrow the binding to `never`.
   if (typeof columnDeadline === "string") {
-    const dateOnly = columnDeadline.slice(0, 10);
+    const raw = `${columnDeadline}`;
+    if (isRealCalendarDate(columnDeadline)) return columnDeadline;
+    const dateOnly = raw.slice(0, 10);
     if (isRealCalendarDate(dateOnly)) return dateOnly;
   }
   return unpackJobDescription(description).applicationDeadline;
@@ -158,7 +164,11 @@ export function canSetApplicationDeadline(
 
 export function fmtDeadline(isoDate: string | null | undefined): string | null {
   if (!isRealCalendarDate(isoDate)) return null;
-  const [y, m, d] = isoDate.split("-").map(Number);
+  const parts = isoDate.split("-").map(Number);
+  const y = parts[0];
+  const m = parts[1];
+  const d = parts[2];
+  if (y === undefined || m === undefined || d === undefined) return null;
   return new Date(y, m - 1, d).toLocaleDateString(undefined, {
     month: "short",
     day: "numeric",
