@@ -1,9 +1,13 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ArrowRight, Briefcase, Search, ShieldCheck } from "lucide-react";
+import { ArrowRight, Briefcase, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Logo, LogoMark } from "@/components/brand/Logo";
+import { AboutSection } from "@/components/marketing/AboutSection";
+import { ContactSection } from "@/components/marketing/ContactSection";
+import { LandingFooter } from "@/components/marketing/LandingFooter";
 import { StatusTracker } from "@/components/status/StatusTracker";
 import { StatusBadge } from "@/components/status/StatusBadge";
+import type { AuthIntent } from "@/lib/auth-intent";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -17,10 +21,24 @@ export const Route = createFileRoute("/")({
   component: Landing,
 });
 
-const ROLES = [
-  { icon: Search, title: "Job Seekers", text: "Discover roles that fit and follow every application from applied to hired." },
-  { icon: Briefcase, title: "Recruiters", text: "Post openings, review candidates, and move people forward with clarity." },
-  { icon: ShieldCheck, title: "Admins", text: "Keep the marketplace trustworthy with oversight across users and listings." },
+const ROLE_CARDS: {
+  icon: typeof Search;
+  title: string;
+  text: string;
+  intent: AuthIntent;
+}[] = [
+  {
+    icon: Search,
+    title: "Job Seekers",
+    text: "Discover roles that fit and follow every application from applied to hired.",
+    intent: "seeker",
+  },
+  {
+    icon: Briefcase,
+    title: "Recruiters",
+    text: "Post openings, review candidates, and move people forward with clarity.",
+    intent: "recruiter",
+  },
 ];
 
 function Landing() {
@@ -102,19 +120,30 @@ function Landing() {
         </div>
       </section>
 
-      <section className="mx-auto grid max-w-6xl stagger-children gap-4 px-4 pb-20 sm:px-6 sm:pb-24 md:grid-cols-3">
-        {ROLES.map(({ icon: Icon, title, text }) => (
-          <article key={title} className="surface-card interactive-card group p-6 sm:p-7">
+      <section className="mx-auto grid max-w-6xl stagger-children gap-4 px-4 pb-20 sm:px-6 sm:pb-24 md:grid-cols-2">
+        {ROLE_CARDS.map(({ icon: Icon, title, text, intent }) => (
+          <Link
+            key={title}
+            to="/auth"
+            search={{ intent }}
+            aria-label={`${title} — sign in or create an account`}
+            className="surface-card interactive-card group block rounded-xl p-6 outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:p-7"
+          >
             <div className="flex size-11 items-center justify-center rounded-xl bg-surface text-signal ring-1 ring-border transition-colors group-hover:bg-signal-soft group-hover:ring-signal/20">
-              <Icon className="size-5" />
+              <Icon className="size-5" aria-hidden />
             </div>
             <h2 className="mt-5 text-lg font-semibold tracking-tight">{title}</h2>
             <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{text}</p>
-          </article>
+            <p className="mt-4 text-sm font-medium text-signal opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+              Continue to sign in or sign up →
+            </p>
+          </Link>
         ))}
       </section>
 
-      <footer className="border-t py-8 text-center text-sm text-muted-foreground">© 2026 HireHub</footer>
+      <AboutSection />
+      <ContactSection />
+      <LandingFooter />
     </div>
   );
 }

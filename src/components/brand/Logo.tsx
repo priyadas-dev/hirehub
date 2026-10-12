@@ -1,4 +1,4 @@
-import { Link } from "@tanstack/react-router";
+import { Link, useRouterState } from "@tanstack/react-router";
 import { cn } from "@/lib/utils";
 
 export function LogoMark({ className }: { className?: string }) {
@@ -18,9 +18,29 @@ export function LogoMark({ className }: { className?: string }) {
   );
 }
 
-export function Logo({ to = "/", className }: { to?: string; className?: string }) {
+type LogoProps = {
+  to?: "/" | "/seeker" | "/recruiter" | "/admin" | "/dashboard";
+  className?: string;
+};
+
+export function Logo({ to = "/", className }: LogoProps) {
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const isHomeTarget = to === "/";
+
   return (
-    <Link to={to} className={cn("inline-flex items-center gap-2.5 rounded-md", className)} aria-label="HireHub home">
+    <Link
+      to={to}
+      className={cn(
+        "inline-flex items-center gap-2.5 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        className,
+      )}
+      aria-label="HireHub home"
+      onClick={(e) => {
+        if (!isHomeTarget || pathname !== "/") return;
+        e.preventDefault();
+        window.scrollTo({ top: 0, left: 0, behavior: "smooth" });
+      }}
+    >
       <LogoMark />
       <span className="text-[17px] font-semibold tracking-tight">HireHub</span>
     </Link>

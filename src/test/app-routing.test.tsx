@@ -14,6 +14,7 @@ describe("App routing", () => {
 
   it.each([
     "/auth",
+    "/support",
     "/forgot-password",
     "/reset-password",
     "/seeker",
