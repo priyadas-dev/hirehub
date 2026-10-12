@@ -9,14 +9,29 @@ import { Label } from "@/components/ui/label";
 import { Logo } from "@/components/brand/Logo";
 import { StatusTracker } from "@/components/status/StatusTracker";
 import { ROLE_HOME, useAuth } from "@/lib/auth";
+import {
+  AUTH_INTENT_LABEL,
+  intentToSignupRole,
+  parseAuthIntent,
+  type AuthIntent,
+  type SignupRole,
+} from "@/lib/auth-intent";
 import { supabase } from "@/integrations/supabase/client";
-import { lovable } from "@/integrations/lovable/index";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/auth")({
-  validateSearch: (s: Record<string, unknown>): { redirect?: string; mode?: "signup" } => ({
+  validateSearch: (s: Record<string, unknown>): {
+    redirect?: string;
+    mode?: "signup";
+    intent?: AuthIntent;
+    error?: string;
+    error_description?: string;
+  } => ({
     ...(typeof s["redirect"] === "string" ? { redirect: s["redirect"] } : {}),
     ...(s["mode"] === "signup" ? { mode: "signup" as const } : {}),
+    ...(parseAuthIntent(s["intent"]) ? { intent: parseAuthIntent(s["intent"]) } : {}),
+    ...(typeof s["error"] === "string" ? { error: s["error"] } : {}),
+    ...(typeof s["error_description"] === "string" ? { error_description: s["error_description"] } : {}),
   }),
   head: () => ({
     meta: [
@@ -29,7 +44,6 @@ export const Route = createFileRoute("/auth")({
   component: AuthPage,
 });
 
-type SignupRole = "job_seeker" | "recruiter";
 const ROLES: { id: SignupRole; label: string; desc: string; icon: typeof Search }[] = [
   { id: "job_seeker", label: "Job Seeker", desc: "Find and apply to roles", icon: Search },
   { id: "recruiter", label: "Recruiter", desc: "Post jobs, hire talent", icon: Briefcase },
@@ -44,12 +58,18 @@ const schema = z.object({
 function AuthPage() {
   const search = Route.useSearch();
   const [mode, setMode] = useState<"signin" | "signup">(search.mode === "signup" ? "signup" : "signin");
-  const [role, setRole] = useState<SignupRole>("job_seeker");
+  const [role, setRole] = useState<SignupRole>(() =>
+    search.intent ? intentToSignupRole(search.intent) : "job_seeker",
+  );
   const [errors, setErrors] = useState<Partial<Record<string, string>>>({});
   const [busy, setBusy] = useState<"form" | "google" | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const { user, refresh } = useAuth();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (search.intent) setRole(intentToSignupRole(search.intent));
+  }, [search.intent]);
 
   function goHome(r: keyof typeof ROLE_HOME) {
     const dest = search.redirect;
@@ -59,6 +79,29 @@ function AuthPage() {
     }
     navigate({ to: ROLE_HOME[r], replace: true });
   }
+
+  // Surface OAuth provider failures returned by Supabase on redirect
+  // (e.g. /auth?error=server_error&error_description=failed+to+exchange...).
+  useEffect(() => {
+    if (!search.error) return;
+    const detail = (search.error_description ?? search.error).replace(/\+/g, " ");
+    toast.error("Google sign-in didn't work", {
+      description:
+        detail.toLowerCase().includes("exchange authorization code")
+          ? "Supabase could not finish Google's token exchange. Check that the Google Client ID and Client Secret match on project munqgybiuqpncxbgfvdp, and that Google Cloud allows https://munqgybiuqpncxbgfvdp.supabase.co/auth/v1/callback."
+          : detail,
+    });
+    navigate({
+      to: "/auth",
+      search: {
+        ...(search.redirect ? { redirect: search.redirect } : {}),
+        ...(search.mode ? { mode: search.mode } : {}),
+        ...(search.intent ? { intent: search.intent } : {}),
+      },
+      replace: true,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search.error, search.error_description]);
 
   // Already signed in (including after returning from Google) → go to role area.
   useEffect(() => {
@@ -120,14 +163,19 @@ function AuthPage() {
   async function onGoogle() {
     setBusy("google");
     try {
-      const result = await lovable.auth.signInWithOAuth("google", { redirect_uri: `${window.location.origin}/auth` });
-      if (result.error) throw result.error;
-      if (result.redirected) return;
-      const s = await refresh();
-      if (s) goHome(s.role);
+      // Supabase Google OAuth (works on localhost + Vercel). Requires Google provider
+      // enabled and redirect URLs allowlisted in Supabase Auth settings — see
+      // GOOGLE_OAUTH_REDIRECT_URLS in src/lib/assignment-verification.ts.
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: `${window.location.origin}/auth`,
+        },
+      });
+      if (error) throw error;
+      // Browser navigates to Google; session is restored on return to /auth.
     } catch (err) {
       toast.error("Google sign-in didn't work", { description: friendly(err) });
-    } finally {
       setBusy(null);
     }
   }
@@ -138,7 +186,17 @@ function AuthPage() {
         <div className="flex items-center justify-between">
           <Logo />
           <Button variant="ghost" size="sm" asChild>
-            <Link to="/"><ArrowLeft /> Home</Link>
+            <Link
+              to="/"
+              onClick={(e) => {
+                if (typeof window !== "undefined" && window.location.pathname === "/") {
+                  e.preventDefault();
+                  window.scrollTo({ top: 0, left: 0, behavior: "smooth" });
+                }
+              }}
+            >
+              <ArrowLeft /> Home
+            </Link>
           </Button>
         </div>
         <div className="mx-auto my-auto w-full max-w-sm animate-fade-up py-12">
@@ -146,6 +204,17 @@ function AuthPage() {
           <p className="mt-2 text-sm text-muted-foreground">
             {mode === "signin" ? "Sign in to continue to your workspace." : "Start hiring or get hired in minutes."}
           </p>
+
+          {search.intent && (
+            <p className="mt-4 rounded-lg border border-signal/25 bg-signal-soft/50 px-3 py-2 text-sm text-foreground">
+              <span className="font-medium">{AUTH_INTENT_LABEL[search.intent]}</span>
+              <span className="text-muted-foreground">
+                {mode === "signup" ? " — create your account as a " : " — signing in as a "}
+                {search.intent === "recruiter" ? "recruiter" : "job seeker"}
+                {mode === "signin" ? ". Your workspace follows your saved profile role." : "."}
+              </span>
+            </p>
+          )}
 
           <div className="mt-8 grid grid-cols-2 rounded-lg bg-muted p-1 text-sm" role="tablist">
             {(["signin", "signup"] as const).map((m) => (
@@ -172,6 +241,10 @@ function AuthPage() {
             {busy === "google" ? <Loader2 className="animate-spin" /> : <GoogleIcon />}
             Continue with Google
           </Button>
+          <p className="mt-2 text-center text-xs text-muted-foreground">
+            Used Google before on this project? Use the button above — that account has no email password.
+            Signup/reset &quot;too many attempts&quot; means wait 30–60 minutes or try a different email.
+          </p>
           <div className="my-6 flex items-center gap-3 text-xs text-muted-foreground">
             <span className="h-px flex-1 bg-border" /> or with email <span className="h-px flex-1 bg-border" />
           </div>
@@ -199,6 +272,16 @@ function AuthPage() {
             {mode === "signup" && <Field id="name" label="Full name" autoComplete="name" error={errors["name"]} />}
             <Field id="email" label="Email" type="email" autoComplete="email" error={errors["email"]} />
             <Field id="password" label="Password" type="password" autoComplete={mode === "signin" ? "current-password" : "new-password"} error={errors["password"]} />
+            {mode === "signin" && (
+              <div className="-mt-2 flex justify-end">
+                <Link
+                  to="/forgot-password"
+                  className="text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+                >
+                  Forgot password?
+                </Link>
+              </div>
+            )}
 
             <Button type="submit" variant="signal" size="lg" className="w-full" disabled={!!busy}>
               {busy === "form" && <Loader2 className="animate-spin" />}
@@ -241,12 +324,25 @@ function Field({ id, label, error, ...props }: { id: string; label: string; erro
 
 function friendly(err: unknown): string {
   const msg = err instanceof Error ? err.message : typeof err === "object" && err && "message" in err ? String((err as { message: unknown }).message) : "";
+  const status =
+    typeof err === "object" && err && "status" in err ? Number((err as { status: unknown }).status) : undefined;
   const m = msg.toLowerCase();
-  if (m.includes("invalid login")) return "That email and password don't match. Please try again.";
-  if (m.includes("already registered") || m.includes("already been registered")) return "An account with this email already exists. Try signing in instead.";
+  if (status === 429 || m.includes("rate limit") || m.includes("too many") || m.includes("429")) {
+    return "Too many signup/reset attempts. Wait 30–60 minutes, then use Continue with Google or a different email.";
+  }
+  if (m.includes("invalid login") || m.includes("invalid credentials")) {
+    return "That email and password don't match on this Supabase project. If you used Google before, click Continue with Google (no password). Or Sign up with a new email after the rate limit cools down.";
+  }
+  if (m.includes("already registered") || m.includes("already been registered")) {
+    return "An account with this email already exists on this project. Try signing in, Google, or wait out the rate limit before reset.";
+  }
   if (m.includes("email not confirmed")) return "Please confirm your email first — check your inbox for the link.";
-  if (m.includes("password") && (m.includes("weak") || m.includes("pwned") || m.includes("least") || m.includes("characters"))) return "That password is too weak. Use at least 8 characters and avoid common passwords.";
-  if (m.includes("rate limit") || m.includes("too many")) return "Too many attempts. Please wait a minute and try again.";
+  if (m.includes("password") && (m.includes("weak") || m.includes("pwned") || m.includes("least") || m.includes("characters"))) {
+    return "That password is too weak. Use at least 8 characters and avoid common passwords.";
+  }
+  if (m.includes("over_email_send_rate_limit") || (m.includes("email") && m.includes("rate limit"))) {
+    return "Too many confirmation emails sent. Wait about an hour, check spam, or sign in with Google. For local demo you can turn off Confirm email in Supabase Auth → Providers → Email.";
+  }
   if (m.includes("fetch") || m.includes("network")) return "Can't reach the server. Check your connection and try again.";
   return msg || "Something went wrong. Please try again.";
 }

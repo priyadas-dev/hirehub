@@ -28,7 +28,9 @@ export function SidebarNav({ role, onNavigate }: { role: Role; onNavigate?: () =
           <span key={item.label} aria-disabled className={cn(base, "cursor-default text-muted-foreground/70")}>
             <Icon className="size-4" />
             {item.label}
-            <span className="ml-auto rounded-md border px-1.5 py-0.5 text-[10px] uppercase tracking-wider">Soon</span>
+            {item.soon && (
+              <span className="ml-auto rounded-md border px-1.5 py-0.5 text-[10px] uppercase tracking-wider">Soon</span>
+            )}
           </span>
         );
       })}
@@ -46,7 +48,11 @@ export function AppSidebar({ role }: { role: Role }) {
       <SidebarNav role={role} />
       <div className="mt-auto rounded-xl border bg-card p-4 shadow-xs">
         <p className="text-sm font-medium">Your journey starts here</p>
-        <p className="mt-1 text-xs text-muted-foreground">Items marked Soon open in upcoming releases.</p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          {role === "recruiter"
+            ? "Create your company, then post jobs. Listings go live for seekers after admin approval."
+            : "Use the links above to move through hiring on HireHub."}
+        </p>
       </div>
     </aside>
   );

@@ -22,7 +22,7 @@ function AppLayout() {
       <AppSidebar role={u.role} />
       <div className="flex min-w-0 flex-1 flex-col">
         <AppHeader user={u} />
-        <main className="mx-auto w-full max-w-6xl flex-1 animate-fade-up px-4 py-8 sm:px-6 lg:px-10 lg:py-12">
+        <main className="mx-auto w-full max-w-6xl flex-1 animate-fade-up px-4 py-6 sm:px-6 sm:py-8 lg:px-10 lg:py-12">
           <Outlet />
         </main>
       </div>

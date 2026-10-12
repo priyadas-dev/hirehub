@@ -12,10 +12,35 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as AuthRouteImport } from './routes/auth'
+import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
+import { Route as ResetPasswordRouteImport } from './routes/reset-password'
+import { Route as SupportRouteImport } from './routes/support'
 import { Route as AppAdminRouteImport } from './routes/_app.admin'
 import { Route as AppDashboardRouteImport } from './routes/_app.dashboard'
 import { Route as AppRecruiterRouteImport } from './routes/_app.recruiter'
 import { Route as AppSeekerRouteImport } from './routes/_app.seeker'
+import { Route as AppAdminIndexRouteImport } from './routes/_app.admin.index'
+import { Route as AppAdminApplicationsRouteImport } from './routes/_app.admin.applications'
+import { Route as AppAdminCompaniesRouteImport } from './routes/_app.admin.companies'
+import { Route as AppAdminJobsRouteImport } from './routes/_app.admin.jobs'
+import { Route as AppAdminReportsRouteImport } from './routes/_app.admin.reports'
+import { Route as AppAdminUsersRouteImport } from './routes/_app.admin.users'
+import { Route as AppRecruiterIndexRouteImport } from './routes/_app.recruiter.index'
+import { Route as AppRecruiterApplicantsRouteImport } from './routes/_app.recruiter.applicants'
+import { Route as AppRecruiterCompanyRouteImport } from './routes/_app.recruiter.company'
+import { Route as AppRecruiterJobsRouteImport } from './routes/_app.recruiter.jobs'
+import { Route as AppSeekerIndexRouteImport } from './routes/_app.seeker.index'
+import { Route as AppSeekerApplicationsRouteImport } from './routes/_app.seeker.applications'
+import { Route as AppSeekerJobsRouteImport } from './routes/_app.seeker.jobs'
+import { Route as AppSeekerProfileRouteImport } from './routes/_app.seeker.profile'
+import { Route as AppSeekerSavedRouteImport } from './routes/_app.seeker.saved'
+import { Route as AppRecruiterJobsIndexRouteImport } from './routes/_app.recruiter.jobs.index'
+import { Route as AppRecruiterJobsNewRouteImport } from './routes/_app.recruiter.jobs.new'
+import { Route as AppSeekerApplicationsIndexRouteImport } from './routes/_app.seeker.applications.index'
+import { Route as AppSeekerApplicationsApplicationIdRouteImport } from './routes/_app.seeker.applications.$applicationId'
+import { Route as AppSeekerJobsIndexRouteImport } from './routes/_app.seeker.jobs.index'
+import { Route as AppSeekerJobsJobIdRouteImport } from './routes/_app.seeker.jobs.$jobId'
+import { Route as AppRecruiterJobsJobIdEditRouteImport } from './routes/_app.recruiter.jobs.$jobId.edit'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -29,6 +54,21 @@ const AppRoute = AppRouteImport.update({
 const AuthRoute = AuthRouteImport.update({
   id: '/auth',
   path: '/auth',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
+  id: '/forgot-password',
+  path: '/forgot-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ResetPasswordRoute = ResetPasswordRouteImport.update({
+  id: '/reset-password',
+  path: '/reset-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SupportRoute = SupportRouteImport.update({
+  id: '/support',
+  path: '/support',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AppAdminRoute = AppAdminRouteImport.update({
@@ -51,53 +91,319 @@ const AppSeekerRoute = AppSeekerRouteImport.update({
   path: '/seeker',
   getParentRoute: () => AppRoute,
 } as any)
+const AppAdminIndexRoute = AppAdminIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AppAdminRoute,
+} as any)
+const AppAdminApplicationsRoute = AppAdminApplicationsRouteImport.update({
+  id: '/applications',
+  path: '/applications',
+  getParentRoute: () => AppAdminRoute,
+} as any)
+const AppAdminCompaniesRoute = AppAdminCompaniesRouteImport.update({
+  id: '/companies',
+  path: '/companies',
+  getParentRoute: () => AppAdminRoute,
+} as any)
+const AppAdminJobsRoute = AppAdminJobsRouteImport.update({
+  id: '/jobs',
+  path: '/jobs',
+  getParentRoute: () => AppAdminRoute,
+} as any)
+const AppAdminReportsRoute = AppAdminReportsRouteImport.update({
+  id: '/reports',
+  path: '/reports',
+  getParentRoute: () => AppAdminRoute,
+} as any)
+const AppAdminUsersRoute = AppAdminUsersRouteImport.update({
+  id: '/users',
+  path: '/users',
+  getParentRoute: () => AppAdminRoute,
+} as any)
+const AppRecruiterIndexRoute = AppRecruiterIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AppRecruiterRoute,
+} as any)
+const AppRecruiterApplicantsRoute = AppRecruiterApplicantsRouteImport.update({
+  id: '/applicants',
+  path: '/applicants',
+  getParentRoute: () => AppRecruiterRoute,
+} as any)
+const AppRecruiterCompanyRoute = AppRecruiterCompanyRouteImport.update({
+  id: '/company',
+  path: '/company',
+  getParentRoute: () => AppRecruiterRoute,
+} as any)
+const AppRecruiterJobsRoute = AppRecruiterJobsRouteImport.update({
+  id: '/jobs',
+  path: '/jobs',
+  getParentRoute: () => AppRecruiterRoute,
+} as any)
+const AppSeekerIndexRoute = AppSeekerIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AppSeekerRoute,
+} as any)
+const AppSeekerApplicationsRoute = AppSeekerApplicationsRouteImport.update({
+  id: '/applications',
+  path: '/applications',
+  getParentRoute: () => AppSeekerRoute,
+} as any)
+const AppSeekerJobsRoute = AppSeekerJobsRouteImport.update({
+  id: '/jobs',
+  path: '/jobs',
+  getParentRoute: () => AppSeekerRoute,
+} as any)
+const AppSeekerProfileRoute = AppSeekerProfileRouteImport.update({
+  id: '/profile',
+  path: '/profile',
+  getParentRoute: () => AppSeekerRoute,
+} as any)
+const AppSeekerSavedRoute = AppSeekerSavedRouteImport.update({
+  id: '/saved',
+  path: '/saved',
+  getParentRoute: () => AppSeekerRoute,
+} as any)
+const AppRecruiterJobsIndexRoute = AppRecruiterJobsIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AppRecruiterJobsRoute,
+} as any)
+const AppRecruiterJobsNewRoute = AppRecruiterJobsNewRouteImport.update({
+  id: '/new',
+  path: '/new',
+  getParentRoute: () => AppRecruiterJobsRoute,
+} as any)
+const AppSeekerApplicationsIndexRoute =
+  AppSeekerApplicationsIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => AppSeekerApplicationsRoute,
+  } as any)
+const AppSeekerApplicationsApplicationIdRoute =
+  AppSeekerApplicationsApplicationIdRouteImport.update({
+    id: '/$applicationId',
+    path: '/$applicationId',
+    getParentRoute: () => AppSeekerApplicationsRoute,
+  } as any)
+const AppSeekerJobsIndexRoute = AppSeekerJobsIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AppSeekerJobsRoute,
+} as any)
+const AppSeekerJobsJobIdRoute = AppSeekerJobsJobIdRouteImport.update({
+  id: '/$jobId',
+  path: '/$jobId',
+  getParentRoute: () => AppSeekerJobsRoute,
+} as any)
+const AppRecruiterJobsJobIdEditRoute =
+  AppRecruiterJobsJobIdEditRouteImport.update({
+    id: '/$jobId/edit',
+    path: '/$jobId/edit',
+    getParentRoute: () => AppRecruiterJobsRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
-  '/admin': typeof AppAdminRoute
+  '/forgot-password': typeof ForgotPasswordRoute
+  '/reset-password': typeof ResetPasswordRoute
+  '/support': typeof SupportRoute
+  '/admin': typeof AppAdminRouteWithChildren
   '/dashboard': typeof AppDashboardRoute
-  '/recruiter': typeof AppRecruiterRoute
-  '/seeker': typeof AppSeekerRoute
+  '/recruiter': typeof AppRecruiterRouteWithChildren
+  '/seeker': typeof AppSeekerRouteWithChildren
+  '/admin/applications': typeof AppAdminApplicationsRoute
+  '/admin/companies': typeof AppAdminCompaniesRoute
+  '/admin/jobs': typeof AppAdminJobsRoute
+  '/admin/reports': typeof AppAdminReportsRoute
+  '/admin/users': typeof AppAdminUsersRoute
+  '/recruiter/applicants': typeof AppRecruiterApplicantsRoute
+  '/recruiter/company': typeof AppRecruiterCompanyRoute
+  '/recruiter/jobs': typeof AppRecruiterJobsRouteWithChildren
+  '/seeker/applications': typeof AppSeekerApplicationsRouteWithChildren
+  '/seeker/jobs': typeof AppSeekerJobsRouteWithChildren
+  '/seeker/profile': typeof AppSeekerProfileRoute
+  '/seeker/saved': typeof AppSeekerSavedRoute
+  '/admin/': typeof AppAdminIndexRoute
+  '/recruiter/': typeof AppRecruiterIndexRoute
+  '/seeker/': typeof AppSeekerIndexRoute
+  '/recruiter/jobs/new': typeof AppRecruiterJobsNewRoute
+  '/seeker/applications/$applicationId': typeof AppSeekerApplicationsApplicationIdRoute
+  '/seeker/jobs/$jobId': typeof AppSeekerJobsJobIdRoute
+  '/recruiter/jobs/': typeof AppRecruiterJobsIndexRoute
+  '/seeker/applications/': typeof AppSeekerApplicationsIndexRoute
+  '/seeker/jobs/': typeof AppSeekerJobsIndexRoute
+  '/recruiter/jobs/$jobId/edit': typeof AppRecruiterJobsJobIdEditRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
-  '/admin': typeof AppAdminRoute
+  '/forgot-password': typeof ForgotPasswordRoute
+  '/reset-password': typeof ResetPasswordRoute
+  '/support': typeof SupportRoute
   '/dashboard': typeof AppDashboardRoute
-  '/recruiter': typeof AppRecruiterRoute
-  '/seeker': typeof AppSeekerRoute
+  '/admin/applications': typeof AppAdminApplicationsRoute
+  '/admin/companies': typeof AppAdminCompaniesRoute
+  '/admin/jobs': typeof AppAdminJobsRoute
+  '/admin/reports': typeof AppAdminReportsRoute
+  '/admin/users': typeof AppAdminUsersRoute
+  '/recruiter/applicants': typeof AppRecruiterApplicantsRoute
+  '/recruiter/company': typeof AppRecruiterCompanyRoute
+  '/seeker/profile': typeof AppSeekerProfileRoute
+  '/seeker/saved': typeof AppSeekerSavedRoute
+  '/admin': typeof AppAdminIndexRoute
+  '/recruiter': typeof AppRecruiterIndexRoute
+  '/seeker': typeof AppSeekerIndexRoute
+  '/recruiter/jobs/new': typeof AppRecruiterJobsNewRoute
+  '/seeker/applications/$applicationId': typeof AppSeekerApplicationsApplicationIdRoute
+  '/seeker/jobs/$jobId': typeof AppSeekerJobsJobIdRoute
+  '/recruiter/jobs': typeof AppRecruiterJobsIndexRoute
+  '/seeker/applications': typeof AppSeekerApplicationsIndexRoute
+  '/seeker/jobs': typeof AppSeekerJobsIndexRoute
+  '/recruiter/jobs/$jobId/edit': typeof AppRecruiterJobsJobIdEditRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/_app': typeof AppRouteWithChildren
   '/auth': typeof AuthRoute
-  '/_app/admin': typeof AppAdminRoute
+  '/forgot-password': typeof ForgotPasswordRoute
+  '/reset-password': typeof ResetPasswordRoute
+  '/support': typeof SupportRoute
+  '/_app/admin': typeof AppAdminRouteWithChildren
   '/_app/dashboard': typeof AppDashboardRoute
-  '/_app/recruiter': typeof AppRecruiterRoute
-  '/_app/seeker': typeof AppSeekerRoute
+  '/_app/recruiter': typeof AppRecruiterRouteWithChildren
+  '/_app/seeker': typeof AppSeekerRouteWithChildren
+  '/_app/admin/applications': typeof AppAdminApplicationsRoute
+  '/_app/admin/companies': typeof AppAdminCompaniesRoute
+  '/_app/admin/jobs': typeof AppAdminJobsRoute
+  '/_app/admin/reports': typeof AppAdminReportsRoute
+  '/_app/admin/users': typeof AppAdminUsersRoute
+  '/_app/recruiter/applicants': typeof AppRecruiterApplicantsRoute
+  '/_app/recruiter/company': typeof AppRecruiterCompanyRoute
+  '/_app/recruiter/jobs': typeof AppRecruiterJobsRouteWithChildren
+  '/_app/seeker/applications': typeof AppSeekerApplicationsRouteWithChildren
+  '/_app/seeker/jobs': typeof AppSeekerJobsRouteWithChildren
+  '/_app/seeker/profile': typeof AppSeekerProfileRoute
+  '/_app/seeker/saved': typeof AppSeekerSavedRoute
+  '/_app/admin/': typeof AppAdminIndexRoute
+  '/_app/recruiter/': typeof AppRecruiterIndexRoute
+  '/_app/seeker/': typeof AppSeekerIndexRoute
+  '/_app/recruiter/jobs/new': typeof AppRecruiterJobsNewRoute
+  '/_app/seeker/applications/$applicationId': typeof AppSeekerApplicationsApplicationIdRoute
+  '/_app/seeker/jobs/$jobId': typeof AppSeekerJobsJobIdRoute
+  '/_app/recruiter/jobs/': typeof AppRecruiterJobsIndexRoute
+  '/_app/seeker/applications/': typeof AppSeekerApplicationsIndexRoute
+  '/_app/seeker/jobs/': typeof AppSeekerJobsIndexRoute
+  '/_app/recruiter/jobs/$jobId/edit': typeof AppRecruiterJobsJobIdEditRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/auth' | '/admin' | '/dashboard' | '/recruiter' | '/seeker'
+  fullPaths:
+    | '/'
+    | '/auth'
+    | '/forgot-password'
+    | '/reset-password'
+    | '/support'
+    | '/admin'
+    | '/dashboard'
+    | '/recruiter'
+    | '/seeker'
+    | '/admin/applications'
+    | '/admin/companies'
+    | '/admin/jobs'
+    | '/admin/reports'
+    | '/admin/users'
+    | '/recruiter/applicants'
+    | '/recruiter/company'
+    | '/recruiter/jobs'
+    | '/seeker/applications'
+    | '/seeker/jobs'
+    | '/seeker/profile'
+    | '/seeker/saved'
+    | '/admin/'
+    | '/recruiter/'
+    | '/seeker/'
+    | '/recruiter/jobs/new'
+    | '/seeker/applications/$applicationId'
+    | '/seeker/jobs/$jobId'
+    | '/recruiter/jobs/'
+    | '/seeker/applications/'
+    | '/seeker/jobs/'
+    | '/recruiter/jobs/$jobId/edit'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/auth' | '/admin' | '/dashboard' | '/recruiter' | '/seeker'
+  to:
+    | '/'
+    | '/auth'
+    | '/forgot-password'
+    | '/reset-password'
+    | '/support'
+    | '/dashboard'
+    | '/admin/applications'
+    | '/admin/companies'
+    | '/admin/jobs'
+    | '/admin/reports'
+    | '/admin/users'
+    | '/recruiter/applicants'
+    | '/recruiter/company'
+    | '/seeker/profile'
+    | '/seeker/saved'
+    | '/admin'
+    | '/recruiter'
+    | '/seeker'
+    | '/recruiter/jobs/new'
+    | '/seeker/applications/$applicationId'
+    | '/seeker/jobs/$jobId'
+    | '/recruiter/jobs'
+    | '/seeker/applications'
+    | '/seeker/jobs'
+    | '/recruiter/jobs/$jobId/edit'
   id:
     | '__root__'
     | '/'
     | '/_app'
     | '/auth'
+    | '/forgot-password'
+    | '/reset-password'
+    | '/support'
     | '/_app/admin'
     | '/_app/dashboard'
     | '/_app/recruiter'
     | '/_app/seeker'
+    | '/_app/admin/applications'
+    | '/_app/admin/companies'
+    | '/_app/admin/jobs'
+    | '/_app/admin/reports'
+    | '/_app/admin/users'
+    | '/_app/recruiter/applicants'
+    | '/_app/recruiter/company'
+    | '/_app/recruiter/jobs'
+    | '/_app/seeker/applications'
+    | '/_app/seeker/jobs'
+    | '/_app/seeker/profile'
+    | '/_app/seeker/saved'
+    | '/_app/admin/'
+    | '/_app/recruiter/'
+    | '/_app/seeker/'
+    | '/_app/recruiter/jobs/new'
+    | '/_app/seeker/applications/$applicationId'
+    | '/_app/seeker/jobs/$jobId'
+    | '/_app/recruiter/jobs/'
+    | '/_app/seeker/applications/'
+    | '/_app/seeker/jobs/'
+    | '/_app/recruiter/jobs/$jobId/edit'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AppRoute: typeof AppRouteWithChildren
   AuthRoute: typeof AuthRoute
+  ForgotPasswordRoute: typeof ForgotPasswordRoute
+  ResetPasswordRoute: typeof ResetPasswordRoute
+  SupportRoute: typeof SupportRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -121,6 +427,27 @@ declare module '@tanstack/react-router' {
       path: '/auth'
       fullPath: '/auth'
       preLoaderRoute: typeof AuthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/forgot-password': {
+      id: '/forgot-password'
+      path: '/forgot-password'
+      fullPath: '/forgot-password'
+      preLoaderRoute: typeof ForgotPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reset-password': {
+      id: '/reset-password'
+      path: '/reset-password'
+      fullPath: '/reset-password'
+      preLoaderRoute: typeof ResetPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/support': {
+      id: '/support'
+      path: '/support'
+      fullPath: '/support'
+      preLoaderRoute: typeof SupportRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_app/admin': {
@@ -151,21 +478,280 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppSeekerRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/admin/': {
+      id: '/_app/admin/'
+      path: '/'
+      fullPath: '/admin/'
+      preLoaderRoute: typeof AppAdminIndexRouteImport
+      parentRoute: typeof AppAdminRoute
+    }
+    '/_app/admin/applications': {
+      id: '/_app/admin/applications'
+      path: '/applications'
+      fullPath: '/admin/applications'
+      preLoaderRoute: typeof AppAdminApplicationsRouteImport
+      parentRoute: typeof AppAdminRoute
+    }
+    '/_app/admin/companies': {
+      id: '/_app/admin/companies'
+      path: '/companies'
+      fullPath: '/admin/companies'
+      preLoaderRoute: typeof AppAdminCompaniesRouteImport
+      parentRoute: typeof AppAdminRoute
+    }
+    '/_app/admin/jobs': {
+      id: '/_app/admin/jobs'
+      path: '/jobs'
+      fullPath: '/admin/jobs'
+      preLoaderRoute: typeof AppAdminJobsRouteImport
+      parentRoute: typeof AppAdminRoute
+    }
+    '/_app/admin/reports': {
+      id: '/_app/admin/reports'
+      path: '/reports'
+      fullPath: '/admin/reports'
+      preLoaderRoute: typeof AppAdminReportsRouteImport
+      parentRoute: typeof AppAdminRoute
+    }
+    '/_app/admin/users': {
+      id: '/_app/admin/users'
+      path: '/users'
+      fullPath: '/admin/users'
+      preLoaderRoute: typeof AppAdminUsersRouteImport
+      parentRoute: typeof AppAdminRoute
+    }
+    '/_app/recruiter/': {
+      id: '/_app/recruiter/'
+      path: '/'
+      fullPath: '/recruiter/'
+      preLoaderRoute: typeof AppRecruiterIndexRouteImport
+      parentRoute: typeof AppRecruiterRoute
+    }
+    '/_app/recruiter/applicants': {
+      id: '/_app/recruiter/applicants'
+      path: '/applicants'
+      fullPath: '/recruiter/applicants'
+      preLoaderRoute: typeof AppRecruiterApplicantsRouteImport
+      parentRoute: typeof AppRecruiterRoute
+    }
+    '/_app/recruiter/company': {
+      id: '/_app/recruiter/company'
+      path: '/company'
+      fullPath: '/recruiter/company'
+      preLoaderRoute: typeof AppRecruiterCompanyRouteImport
+      parentRoute: typeof AppRecruiterRoute
+    }
+    '/_app/recruiter/jobs': {
+      id: '/_app/recruiter/jobs'
+      path: '/jobs'
+      fullPath: '/recruiter/jobs'
+      preLoaderRoute: typeof AppRecruiterJobsRouteImport
+      parentRoute: typeof AppRecruiterRoute
+    }
+    '/_app/seeker/': {
+      id: '/_app/seeker/'
+      path: '/'
+      fullPath: '/seeker/'
+      preLoaderRoute: typeof AppSeekerIndexRouteImport
+      parentRoute: typeof AppSeekerRoute
+    }
+    '/_app/seeker/applications': {
+      id: '/_app/seeker/applications'
+      path: '/applications'
+      fullPath: '/seeker/applications'
+      preLoaderRoute: typeof AppSeekerApplicationsRouteImport
+      parentRoute: typeof AppSeekerRoute
+    }
+    '/_app/seeker/jobs': {
+      id: '/_app/seeker/jobs'
+      path: '/jobs'
+      fullPath: '/seeker/jobs'
+      preLoaderRoute: typeof AppSeekerJobsRouteImport
+      parentRoute: typeof AppSeekerRoute
+    }
+    '/_app/seeker/profile': {
+      id: '/_app/seeker/profile'
+      path: '/profile'
+      fullPath: '/seeker/profile'
+      preLoaderRoute: typeof AppSeekerProfileRouteImport
+      parentRoute: typeof AppSeekerRoute
+    }
+    '/_app/seeker/saved': {
+      id: '/_app/seeker/saved'
+      path: '/saved'
+      fullPath: '/seeker/saved'
+      preLoaderRoute: typeof AppSeekerSavedRouteImport
+      parentRoute: typeof AppSeekerRoute
+    }
+    '/_app/recruiter/jobs/': {
+      id: '/_app/recruiter/jobs/'
+      path: '/'
+      fullPath: '/recruiter/jobs/'
+      preLoaderRoute: typeof AppRecruiterJobsIndexRouteImport
+      parentRoute: typeof AppRecruiterJobsRoute
+    }
+    '/_app/recruiter/jobs/new': {
+      id: '/_app/recruiter/jobs/new'
+      path: '/new'
+      fullPath: '/recruiter/jobs/new'
+      preLoaderRoute: typeof AppRecruiterJobsNewRouteImport
+      parentRoute: typeof AppRecruiterJobsRoute
+    }
+    '/_app/seeker/applications/': {
+      id: '/_app/seeker/applications/'
+      path: '/'
+      fullPath: '/seeker/applications/'
+      preLoaderRoute: typeof AppSeekerApplicationsIndexRouteImport
+      parentRoute: typeof AppSeekerApplicationsRoute
+    }
+    '/_app/seeker/applications/$applicationId': {
+      id: '/_app/seeker/applications/$applicationId'
+      path: '/$applicationId'
+      fullPath: '/seeker/applications/$applicationId'
+      preLoaderRoute: typeof AppSeekerApplicationsApplicationIdRouteImport
+      parentRoute: typeof AppSeekerApplicationsRoute
+    }
+    '/_app/seeker/jobs/': {
+      id: '/_app/seeker/jobs/'
+      path: '/'
+      fullPath: '/seeker/jobs/'
+      preLoaderRoute: typeof AppSeekerJobsIndexRouteImport
+      parentRoute: typeof AppSeekerJobsRoute
+    }
+    '/_app/seeker/jobs/$jobId': {
+      id: '/_app/seeker/jobs/$jobId'
+      path: '/$jobId'
+      fullPath: '/seeker/jobs/$jobId'
+      preLoaderRoute: typeof AppSeekerJobsJobIdRouteImport
+      parentRoute: typeof AppSeekerJobsRoute
+    }
+    '/_app/recruiter/jobs/$jobId/edit': {
+      id: '/_app/recruiter/jobs/$jobId/edit'
+      path: '/$jobId/edit'
+      fullPath: '/recruiter/jobs/$jobId/edit'
+      preLoaderRoute: typeof AppRecruiterJobsJobIdEditRouteImport
+      parentRoute: typeof AppRecruiterJobsRoute
+    }
   }
 }
 
+interface AppAdminRouteChildren {
+  AppAdminApplicationsRoute: typeof AppAdminApplicationsRoute
+  AppAdminCompaniesRoute: typeof AppAdminCompaniesRoute
+  AppAdminJobsRoute: typeof AppAdminJobsRoute
+  AppAdminReportsRoute: typeof AppAdminReportsRoute
+  AppAdminUsersRoute: typeof AppAdminUsersRoute
+  AppAdminIndexRoute: typeof AppAdminIndexRoute
+}
+
+const AppAdminRouteChildren: AppAdminRouteChildren = {
+  AppAdminApplicationsRoute: AppAdminApplicationsRoute,
+  AppAdminCompaniesRoute: AppAdminCompaniesRoute,
+  AppAdminJobsRoute: AppAdminJobsRoute,
+  AppAdminReportsRoute: AppAdminReportsRoute,
+  AppAdminUsersRoute: AppAdminUsersRoute,
+  AppAdminIndexRoute: AppAdminIndexRoute,
+}
+
+const AppAdminRouteWithChildren = AppAdminRoute._addFileChildren(
+  AppAdminRouteChildren,
+)
+
+interface AppRecruiterJobsRouteChildren {
+  AppRecruiterJobsNewRoute: typeof AppRecruiterJobsNewRoute
+  AppRecruiterJobsIndexRoute: typeof AppRecruiterJobsIndexRoute
+  AppRecruiterJobsJobIdEditRoute: typeof AppRecruiterJobsJobIdEditRoute
+}
+
+const AppRecruiterJobsRouteChildren: AppRecruiterJobsRouteChildren = {
+  AppRecruiterJobsNewRoute: AppRecruiterJobsNewRoute,
+  AppRecruiterJobsIndexRoute: AppRecruiterJobsIndexRoute,
+  AppRecruiterJobsJobIdEditRoute: AppRecruiterJobsJobIdEditRoute,
+}
+
+const AppRecruiterJobsRouteWithChildren =
+  AppRecruiterJobsRoute._addFileChildren(AppRecruiterJobsRouteChildren)
+
+interface AppRecruiterRouteChildren {
+  AppRecruiterApplicantsRoute: typeof AppRecruiterApplicantsRoute
+  AppRecruiterCompanyRoute: typeof AppRecruiterCompanyRoute
+  AppRecruiterJobsRoute: typeof AppRecruiterJobsRouteWithChildren
+  AppRecruiterIndexRoute: typeof AppRecruiterIndexRoute
+}
+
+const AppRecruiterRouteChildren: AppRecruiterRouteChildren = {
+  AppRecruiterApplicantsRoute: AppRecruiterApplicantsRoute,
+  AppRecruiterCompanyRoute: AppRecruiterCompanyRoute,
+  AppRecruiterJobsRoute: AppRecruiterJobsRouteWithChildren,
+  AppRecruiterIndexRoute: AppRecruiterIndexRoute,
+}
+
+const AppRecruiterRouteWithChildren = AppRecruiterRoute._addFileChildren(
+  AppRecruiterRouteChildren,
+)
+
+interface AppSeekerApplicationsRouteChildren {
+  AppSeekerApplicationsApplicationIdRoute: typeof AppSeekerApplicationsApplicationIdRoute
+  AppSeekerApplicationsIndexRoute: typeof AppSeekerApplicationsIndexRoute
+}
+
+const AppSeekerApplicationsRouteChildren: AppSeekerApplicationsRouteChildren = {
+  AppSeekerApplicationsApplicationIdRoute:
+    AppSeekerApplicationsApplicationIdRoute,
+  AppSeekerApplicationsIndexRoute: AppSeekerApplicationsIndexRoute,
+}
+
+const AppSeekerApplicationsRouteWithChildren =
+  AppSeekerApplicationsRoute._addFileChildren(
+    AppSeekerApplicationsRouteChildren,
+  )
+
+interface AppSeekerJobsRouteChildren {
+  AppSeekerJobsJobIdRoute: typeof AppSeekerJobsJobIdRoute
+  AppSeekerJobsIndexRoute: typeof AppSeekerJobsIndexRoute
+}
+
+const AppSeekerJobsRouteChildren: AppSeekerJobsRouteChildren = {
+  AppSeekerJobsJobIdRoute: AppSeekerJobsJobIdRoute,
+  AppSeekerJobsIndexRoute: AppSeekerJobsIndexRoute,
+}
+
+const AppSeekerJobsRouteWithChildren = AppSeekerJobsRoute._addFileChildren(
+  AppSeekerJobsRouteChildren,
+)
+
+interface AppSeekerRouteChildren {
+  AppSeekerApplicationsRoute: typeof AppSeekerApplicationsRouteWithChildren
+  AppSeekerJobsRoute: typeof AppSeekerJobsRouteWithChildren
+  AppSeekerProfileRoute: typeof AppSeekerProfileRoute
+  AppSeekerSavedRoute: typeof AppSeekerSavedRoute
+  AppSeekerIndexRoute: typeof AppSeekerIndexRoute
+}
+
+const AppSeekerRouteChildren: AppSeekerRouteChildren = {
+  AppSeekerApplicationsRoute: AppSeekerApplicationsRouteWithChildren,
+  AppSeekerJobsRoute: AppSeekerJobsRouteWithChildren,
+  AppSeekerProfileRoute: AppSeekerProfileRoute,
+  AppSeekerSavedRoute: AppSeekerSavedRoute,
+  AppSeekerIndexRoute: AppSeekerIndexRoute,
+}
+
+const AppSeekerRouteWithChildren = AppSeekerRoute._addFileChildren(
+  AppSeekerRouteChildren,
+)
+
 interface AppRouteChildren {
-  AppAdminRoute: typeof AppAdminRoute
+  AppAdminRoute: typeof AppAdminRouteWithChildren
   AppDashboardRoute: typeof AppDashboardRoute
-  AppRecruiterRoute: typeof AppRecruiterRoute
-  AppSeekerRoute: typeof AppSeekerRoute
+  AppRecruiterRoute: typeof AppRecruiterRouteWithChildren
+  AppSeekerRoute: typeof AppSeekerRouteWithChildren
 }
 
 const AppRouteChildren: AppRouteChildren = {
-  AppAdminRoute: AppAdminRoute,
+  AppAdminRoute: AppAdminRouteWithChildren,
   AppDashboardRoute: AppDashboardRoute,
-  AppRecruiterRoute: AppRecruiterRoute,
-  AppSeekerRoute: AppSeekerRoute,
+  AppRecruiterRoute: AppRecruiterRouteWithChildren,
+  AppSeekerRoute: AppSeekerRouteWithChildren,
 }
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
@@ -174,6 +760,9 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AppRoute: AppRouteWithChildren,
   AuthRoute: AuthRoute,
+  ForgotPasswordRoute: ForgotPasswordRoute,
+  ResetPasswordRoute: ResetPasswordRoute,
+  SupportRoute: SupportRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
