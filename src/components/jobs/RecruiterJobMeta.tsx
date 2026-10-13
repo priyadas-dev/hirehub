@@ -14,7 +14,7 @@ type MetaItemProps = {
   icon: ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
   label: string;
   value: string;
-  className?: string;
+  className?: string | undefined;
 };
 
 function MetaItem({ icon: Icon, label, value, className }: MetaItemProps) {

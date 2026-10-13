@@ -79,6 +79,9 @@ export const GOOGLE_OAUTH_REDIRECT_URLS = [
   "http://localhost:8080/auth",
   "http://localhost:8081/auth",
   "http://localhost:8082/auth",
+  "http://localhost:8083/auth",
+  "http://localhost:8084/auth",
+  "http://localhost:8085/auth",
   "https://YOUR_VERCEL_PROJECT.vercel.app/auth",
 ] as const;
 
@@ -92,8 +95,29 @@ export const PASSWORD_RESET_REDIRECT_URLS = [
   "http://localhost:8080/reset-password",
   "http://localhost:8081/reset-password",
   "http://localhost:8082/reset-password",
+  "http://localhost:8083/reset-password",
+  "http://localhost:8084/reset-password",
+  "http://localhost:8085/reset-password",
   "https://YOUR_VERCEL_PROJECT.vercel.app/reset-password",
 ] as const;
+
+/**
+ * Bootstrap the first admin (Dashboard → SQL Editor) after
+ * PROPOSED_0007_bootstrap_admin_role_guard.sql is applied — or with the trigger
+ * temporarily disabled if 0007 is not applied yet.
+ * Replace the email with your admin account. Signup never creates admins.
+ */
+export const ADMIN_BOOTSTRAP_SQL = `
+-- Prefer applying PROPOSED_0007 first, then:
+UPDATE public.profiles
+SET role = 'admin'
+WHERE email = 'YOUR_ADMIN_EMAIL@example.com';
+
+-- If UPDATE fails with "Only admins can change roles" before 0007:
+-- ALTER TABLE public.profiles DISABLE TRIGGER profiles_protect_role;
+-- UPDATE public.profiles SET role = 'admin' WHERE email = 'YOUR_ADMIN_EMAIL@example.com';
+-- ALTER TABLE public.profiles ENABLE TRIGGER profiles_protect_role;
+`.trim();
 
 /**
  * Live demo checklist (manual on Vercel URL — not automated here).

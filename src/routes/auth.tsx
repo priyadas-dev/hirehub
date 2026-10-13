@@ -26,13 +26,16 @@ export const Route = createFileRoute("/auth")({
     intent?: AuthIntent;
     error?: string;
     error_description?: string;
-  } => ({
-    ...(typeof s["redirect"] === "string" ? { redirect: s["redirect"] } : {}),
-    ...(s["mode"] === "signup" ? { mode: "signup" as const } : {}),
-    ...(parseAuthIntent(s["intent"]) ? { intent: parseAuthIntent(s["intent"]) } : {}),
-    ...(typeof s["error"] === "string" ? { error: s["error"] } : {}),
-    ...(typeof s["error_description"] === "string" ? { error_description: s["error_description"] } : {}),
-  }),
+  } => {
+    const intent = parseAuthIntent(s["intent"]);
+    return {
+      ...(typeof s["redirect"] === "string" ? { redirect: s["redirect"] } : {}),
+      ...(s["mode"] === "signup" ? { mode: "signup" as const } : {}),
+      ...(intent ? { intent } : {}),
+      ...(typeof s["error"] === "string" ? { error: s["error"] } : {}),
+      ...(typeof s["error_description"] === "string" ? { error_description: s["error_description"] } : {}),
+    };
+  },
   head: () => ({
     meta: [
       { title: "Sign in — HireHub" },
@@ -151,7 +154,14 @@ function AuthPage() {
       }
       const s = await refresh();
       if (!s) throw new Error("Could not load your profile");
-      toast.success(mode === "signup" ? "Welcome to HireHub" : "Welcome back");
+      toast.success(mode === "signup" ? "Welcome to HireHub" : "Welcome back", {
+        description:
+          s.role === "admin"
+            ? "Opening your admin workspace."
+            : s.role === "recruiter"
+              ? "Opening your recruiter workspace."
+              : "Opening your job seeker workspace. Admin access requires role=admin on your profile (not available at signup).",
+      });
       goHome(s.role);
     } catch (err) {
       toast.error(friendly(err));

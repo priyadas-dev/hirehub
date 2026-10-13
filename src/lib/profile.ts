@@ -19,19 +19,25 @@ export const resumeUrlSchema = z
   .optional()
   .refine((v) => !v || /^https?:\/\/\S+/i.test(v), "Resume must be a full URL starting with http:// or https://");
 
+/** Contact fields users may edit on their own profile — never includes `role` or Auth email. */
+export function buildOwnProfileUpdate(fields: OwnProfileFields) {
+  const parsed = ownProfileSchema.parse(fields);
+  return {
+    full_name: parsed.full_name.trim(),
+    phone: parsed.phone?.trim() || null,
+  };
+}
+
 /**
  * Update the authenticated user's profile contact fields.
  * Always scopes by `auth.uid()` via the caller's id — never accepts a target user id from the UI.
  * Does not touch `role` (DB trigger `protect_profile_role` also blocks non-admin role changes).
+ * Does not write Auth email into profiles — email changes must go through Supabase Auth.
  */
 export async function updateOwnProfile(userId: string, fields: OwnProfileFields) {
-  const parsed = ownProfileSchema.parse(fields);
   const { data, error } = await supabase
     .from("profiles")
-    .update({
-      full_name: parsed.full_name.trim(),
-      phone: parsed.phone?.trim() || null,
-    })
+    .update(buildOwnProfileUpdate(fields))
     .eq("id", userId)
     .select("id,full_name,email,phone,role")
     .maybeSingle();

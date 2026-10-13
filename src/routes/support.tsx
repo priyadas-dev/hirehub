@@ -33,8 +33,9 @@ function SupportPage() {
       <main className="mx-auto max-w-2xl px-4 py-10 sm:px-6 sm:py-14">
         <h1 className="font-display text-3xl tracking-tight sm:text-4xl">Contact support</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Have a question about finding a job, posting a vacancy, or using HireHub? Send a message below. If
-          automatic delivery is unavailable, we open a Gmail draft so you can send it from your inbox.
+          Have a question about finding a job, posting a vacancy, or using HireHub? Anyone can send a message
+          below — no account required. If automatic delivery is unavailable, we open a Gmail draft so you can send
+          it from your inbox.
         </p>
 
         <div className="mt-8 grid gap-3 sm:grid-cols-2">

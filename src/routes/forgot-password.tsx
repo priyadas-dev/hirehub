@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Logo } from "@/components/brand/Logo";
+import { passwordResetRedirectUrl } from "@/lib/password-recovery";
 import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/forgot-password")({
@@ -42,13 +43,15 @@ function ForgotPasswordPage() {
     setBusy(true);
     try {
       // Origin matches the host serving HireHub (localhost or deployed URL).
-      const redirectTo = `${window.location.origin}/reset-password`;
       const { error: resetError } = await supabase.auth.resetPasswordForEmail(parsed.data.email, {
-        redirectTo,
+        redirectTo: passwordResetRedirectUrl(),
       });
       if (resetError) throw resetError;
+      // Same success copy whether or not the email exists (avoid account enumeration).
       setSentTo(parsed.data.email);
-      toast.success("Check your email for a reset link");
+      toast.success("Check your email", {
+        description: "If an account exists for that address, a reset link is on the way.",
+      });
     } catch (err) {
       toast.error(friendly(err));
     } finally {

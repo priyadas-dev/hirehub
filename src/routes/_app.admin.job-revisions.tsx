@@ -134,7 +134,7 @@ function AdminJobRevisionsPage() {
         <EmptyState
           icon={FileDiff}
           title="Revisions not enabled yet"
-          description="Apply proposed migrations 0004 → 0005 → 0006 on the database to enable job revision review."
+          description="Apply proposed migrations 0004 → 0005 → 0006a (commit) → 0006b on the database to enable job revision review. Do not run the PROPOSED_0006 pointer file."
         />
       </div>
     );

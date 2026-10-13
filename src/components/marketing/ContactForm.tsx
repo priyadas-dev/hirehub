@@ -115,7 +115,8 @@ export function ContactForm({ className }: { className?: string }) {
           <div className="space-y-2">
             <p className="font-medium text-foreground">Message sent</p>
             <p className="text-muted-foreground">
-              Thanks — your enquiry was accepted for delivery. We&apos;ll follow up using the email you provided.
+              Thanks — your message was accepted by our email provider. We&apos;ll reply using the address you
+              provided.
             </p>
             <Button type="button" variant="outline" size="sm" className="bg-card" onClick={() => setSent(false)}>
               Send another message
@@ -135,8 +136,9 @@ export function ContactForm({ className }: { className?: string }) {
             <div className="space-y-2">
               <p className="font-medium text-foreground">Open your email draft to finish</p>
               <p className="text-muted-foreground">
-                Automatic email sending is not set up on this server yet. We opened a Gmail draft addressed to
-                support with your message. Send it from your inbox to complete.
+                Automatic delivery is unavailable on this server right now (missing Resend config, or free-plan
+                recipient limits). We opened a Gmail draft to support with your message — send it from your inbox to
+                complete. This is not a confirmed server send.
               </p>
             </div>
           </div>
@@ -266,7 +268,7 @@ function Field({
 }: {
   id: string;
   label: string;
-  error?: string;
+  error?: string | undefined;
   value: string;
   onChange: (value: string) => void;
   disabled?: boolean;

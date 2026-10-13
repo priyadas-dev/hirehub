@@ -6,6 +6,7 @@ import { Section, StatCard, supabase } from "@/components/dashboard/parts";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
 import { STATUS_META, type ApplicationStatus } from "@/components/status/status";
 import { useAuth } from "@/lib/auth";
+import { JOB_STATUS_LABEL, type JobStatus } from "@/lib/job-fields";
 import { Briefcase, Building2, FileText, Users } from "lucide-react";
 
 export const Route = createFileRoute("/_app/admin/reports")({
@@ -36,11 +37,14 @@ const roleChartConfig = {
   admin: { label: "Admins", color: "var(--chart-1)" },
 } satisfies ChartConfig;
 
+const JOB_STATUS_ORDER: JobStatus[] = ["pending", "approved", "rejected", "closed"];
+
 const jobChartConfig = {
   count: { label: "Jobs" },
-  pending: { label: "Pending", color: "var(--chart-4)" },
-  approved: { label: "Approved", color: "var(--chart-1)" },
-  closed: { label: "Closed", color: "var(--chart-5)" },
+  pending: { label: JOB_STATUS_LABEL.pending, color: "var(--chart-4)" },
+  approved: { label: JOB_STATUS_LABEL.approved, color: "var(--chart-1)" },
+  rejected: { label: JOB_STATUS_LABEL.rejected, color: "var(--status-rejected)" },
+  closed: { label: JOB_STATUS_LABEL.closed, color: "var(--chart-5)" },
 } satisfies ChartConfig;
 
 function AdminReportsPage() {
@@ -68,7 +72,7 @@ function AdminReportsPage() {
       const byRole = { job_seeker: 0, recruiter: 0, admin: 0 };
       for (const p of profiles.data) byRole[p.role] += 1;
 
-      const byJobStatus = { pending: 0, approved: 0, closed: 0 };
+      const byJobStatus = Object.fromEntries(JOB_STATUS_ORDER.map((s) => [s, 0])) as Record<JobStatus, number>;
       for (const j of jobs.data) byJobStatus[j.status] += 1;
 
       const hired = byStatus.hired;
@@ -94,9 +98,9 @@ function AdminReportsPage() {
           count: byRole[role],
           fill: `var(--color-${role})`,
         })),
-        jobBars: (["pending", "approved", "closed"] as const).map((status) => ({
+        jobBars: JOB_STATUS_ORDER.map((status) => ({
           status,
-          label: status.charAt(0).toUpperCase() + status.slice(1),
+          label: JOB_STATUS_LABEL[status],
           count: byJobStatus[status],
           fill: `var(--color-${status})`,
         })),

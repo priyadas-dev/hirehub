@@ -18,34 +18,52 @@ export const SUPPORT_PHONE_TEL = "+8801806085616" as const;
 
 export const SUPPORT_TEL_HREF = `tel:${SUPPORT_PHONE_TEL}` as const;
 
-/** Server-only contact delivery env names (never use VITE_ prefix). */
+/** Server-only contact delivery env names (never use a VITE_ prefix). */
 export const CONTACT_SERVER_ENV = {
   resendApiKey: "RESEND_API_KEY",
   fromEmail: "CONTACT_FROM_EMAIL",
   toEmail: "CONTACT_TO_EMAIL",
 } as const;
 
+/** Safer single-line sanitizer used by the schema. */
+export function sanitizeContactLine(value: string): string {
+  return value
+    .replace(/\t/g, " ")
+    .replace(/[\u0000-\u001F\u007F]/g, "")
+    .replace(/ {2,}/g, " ")
+    .trim();
+}
+
+/** Multi-line message sanitizer — collapses excessive blank lines. */
+export function sanitizeContactMessage(value: string): string {
+  return value
+    .replace(/\r\n/g, "\n")
+    .replace(/\t/g, " ")
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "")
+    .replace(/[ ]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 export const contactMessageSchema = z.object({
   fullName: z
     .string()
-    .trim()
-    .min(2, "Enter your full name")
-    .max(100, "Name is too long"),
+    .transform(sanitizeContactLine)
+    .pipe(z.string().min(2, "Enter your full name").max(100, "Name is too long")),
   email: z
     .string()
     .trim()
+    .toLowerCase()
     .email("Enter a valid email address")
     .max(255, "Email is too long"),
   subject: z
     .string()
-    .trim()
-    .min(3, "Enter a short subject")
-    .max(120, "Subject is too long"),
+    .transform(sanitizeContactLine)
+    .pipe(z.string().min(3, "Enter a short subject").max(120, "Subject is too long")),
   message: z
     .string()
-    .trim()
-    .min(10, "Tell us a bit more (at least 10 characters)")
-    .max(2000, "Message is too long"),
+    .transform(sanitizeContactMessage)
+    .pipe(z.string().min(10, "Tell us a bit more (at least 10 characters)").max(2000, "Message is too long")),
   /** Honeypot — bots fill this; humans leave it empty. */
   companyWebsite: z.string().max(200).optional().default(""),
 });
@@ -60,6 +78,55 @@ export type ContactSubmitResult =
       message: string;
       fieldErrors?: Partial<Record<keyof ContactMessageInput, string>>;
     };
+
+export type ResendContactPayload = {
+  from: string;
+  to: string[];
+  reply_to: string;
+  subject: string;
+  text: string;
+};
+
+/**
+ * Build the Resend JSON body for a visitor contact submission.
+ * - `from` is always the configured HireHub sender (never the visitor).
+ * - `reply_to` is the visitor's validated email.
+ * - `to` is CONTACT_TO_EMAIL (or SUPPORT_EMAIL default).
+ */
+export function buildResendContactPayload(input: {
+  from: string;
+  to: string;
+  visitorName: string;
+  visitorEmail: string;
+  subject: string;
+  message: string;
+}): ResendContactPayload {
+  const from = input.from.trim();
+  const to = input.to.trim();
+  const visitorEmail = input.visitorEmail.trim().toLowerCase();
+  if (!from) throw new Error("Missing configured From address.");
+  if (!to) throw new Error("Missing configured To address.");
+  if (!visitorEmail) throw new Error("Missing visitor email.");
+  // Hard rule: never use the visitor as From.
+  if (from.toLowerCase().includes(visitorEmail)) {
+    throw new Error("Visitor email must not be used as From.");
+  }
+
+  return {
+    from,
+    to: [to],
+    reply_to: visitorEmail,
+    subject: `[HireHub] ${input.subject}`,
+    text: [
+      "HireHub contact form",
+      "",
+      `From: ${input.visitorName} <${visitorEmail}>`,
+      `Subject: ${input.subject}`,
+      "",
+      input.message,
+    ].join("\n"),
+  };
+}
 
 /** Prefill mailto to support when server email delivery is unavailable. */
 export function buildContactMailtoDraft(input: {

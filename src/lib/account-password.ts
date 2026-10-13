@@ -1,26 +1,53 @@
 import { z } from "zod";
 import { supabase } from "@/integrations/supabase/client";
 
+/** Shared strength rules for new passwords (never log or persist these values). */
+export function passwordStrengthIssue(password: string): string | null {
+  if (password.length < 8) return "At least 8 characters";
+  if (password.length > 128) return "Password is too long";
+  if (!/[A-Za-z]/.test(password) || !/[0-9]/.test(password)) {
+    return "Use letters and at least one number";
+  }
+  return null;
+}
+
+const newPasswordField = z
+  .string()
+  .min(8, "At least 8 characters")
+  .max(128)
+  .superRefine((value, ctx) => {
+    const issue = passwordStrengthIssue(value);
+    if (issue && issue !== "At least 8 characters") {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: issue });
+    }
+  });
+
 export const changePasswordSchema = z
   .object({
     currentPassword: z.string().min(1, "Current password is required"),
-    newPassword: z.string().min(8, "At least 8 characters").max(128),
-    confirmPassword: z.string().min(8, "At least 8 characters").max(128),
+    newPassword: newPasswordField,
+    confirmPassword: z.string().min(1, "Confirm your new password"),
+  })
+  .refine((v) => v.newPassword === v.confirmPassword, {
+    message: "Passwords don't match",
+    path: ["confirmPassword"],
+  })
+  .refine((v) => v.currentPassword !== v.newPassword, {
+    message: "New password must be different from the current password",
+    path: ["newPassword"],
+  });
+
+export const setPasswordSchema = z
+  .object({
+    newPassword: newPasswordField,
+    confirmPassword: z.string().min(1, "Confirm your new password"),
   })
   .refine((v) => v.newPassword === v.confirmPassword, {
     message: "Passwords don't match",
     path: ["confirmPassword"],
   });
 
-export const setPasswordSchema = z
-  .object({
-    newPassword: z.string().min(8, "At least 8 characters").max(128),
-    confirmPassword: z.string().min(8, "At least 8 characters").max(128),
-  })
-  .refine((v) => v.newPassword === v.confirmPassword, {
-    message: "Passwords don't match",
-    path: ["confirmPassword"],
-  });
+export const resetPasswordSchema = setPasswordSchema;
 
 export type PasswordAuthMode = "change" | "set";
 
