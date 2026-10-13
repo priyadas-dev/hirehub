@@ -6,6 +6,7 @@ import { CardSkeleton, EmptyState, ErrorState, PageHeader } from "@/components/f
 import { StatusTracker } from "@/components/status/StatusTracker";
 import { StatusBadge } from "@/components/status/StatusBadge";
 import type { ApplicationStatus } from "@/components/status/status";
+import { RoleWelcome } from "@/components/dashboard/RoleWelcome";
 import { useAuth } from "@/lib/auth";
 import { countRows, fmtDate, Section, StatCard, supabase, useCounts } from "./parts";
 
@@ -54,6 +55,7 @@ export function SeekerDashboard() {
 
   return (
     <div className="space-y-8 sm:space-y-10">
+      {user ? <RoleWelcome userId={user.id} fullName={user.name} role="seeker" /> : null}
       <PageHeader
         eyebrow="Job Seeker workspace"
         title={`Good to see you, ${user?.name.split(" ")[0] ?? "there"}.`}

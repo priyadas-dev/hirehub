@@ -20,6 +20,9 @@ export type Database = {
           created_at: string
           id: string
           job_id: string
+          portfolio_url: string | null
+          resume_file_name: string | null
+          resume_storage_path: string | null
           resume_url: string | null
           seeker_id: string
           status: Database["public"]["Enums"]["application_status"]
@@ -29,6 +32,9 @@ export type Database = {
           created_at?: string
           id?: string
           job_id: string
+          portfolio_url?: string | null
+          resume_file_name?: string | null
+          resume_storage_path?: string | null
           resume_url?: string | null
           seeker_id: string
           status?: Database["public"]["Enums"]["application_status"]
@@ -38,6 +44,9 @@ export type Database = {
           created_at?: string
           id?: string
           job_id?: string
+          portfolio_url?: string | null
+          resume_file_name?: string | null
+          resume_storage_path?: string | null
           resume_url?: string | null
           seeker_id?: string
           status?: Database["public"]["Enums"]["application_status"]
@@ -64,6 +73,7 @@ export type Database = {
           created_at: string
           id: string
           industry: string | null
+          logo_url: string | null
           name: string
           recruiter_id: string
           rejection_reason: string | null
@@ -74,6 +84,7 @@ export type Database = {
           created_at?: string
           id?: string
           industry?: string | null
+          logo_url?: string | null
           name: string
           recruiter_id: string
           rejection_reason?: string | null
@@ -84,6 +95,7 @@ export type Database = {
           created_at?: string
           id?: string
           industry?: string | null
+          logo_url?: string | null
           name?: string
           recruiter_id?: string
           rejection_reason?: string | null
@@ -167,6 +179,8 @@ export type Database = {
           full_name: string | null
           id: string
           phone: string | null
+          resume_file_name: string | null
+          resume_storage_path: string | null
           role: Database["public"]["Enums"]["user_role"]
         }
         Insert: {
@@ -175,6 +189,8 @@ export type Database = {
           full_name?: string | null
           id: string
           phone?: string | null
+          resume_file_name?: string | null
+          resume_storage_path?: string | null
           role?: Database["public"]["Enums"]["user_role"]
         }
         Update: {
@@ -183,6 +199,8 @@ export type Database = {
           full_name?: string | null
           id?: string
           phone?: string | null
+          resume_file_name?: string | null
+          resume_storage_path?: string | null
           role?: Database["public"]["Enums"]["user_role"]
         }
         Relationships: []

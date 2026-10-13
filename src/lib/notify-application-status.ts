@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { ApplicationStatus } from "@/components/status/status";
+import { nextApplicationStatuses } from "@/lib/hirehub";
 
 export const NOTIFY_APPLICATION_STATUS_FN = "notify-application-status" as const;
 
@@ -32,8 +33,20 @@ export type NotifyApplicationStatusResult = {
   };
 };
 
+export class NotifyApplicationStatusError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "NotifyApplicationStatusError";
+  }
+}
+
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/** Matches Edge Function + DB trigger dedupe so retries do not duplicate rows. */
+export function applicationStatusDedupeKey(applicationId: string, status: ApplicationStatus): string {
+  return `application_status:${applicationId}:${status}`;
+}
 
 /** Validate request body shape only — never trust identity fields from the client. */
 export function parseNotifyApplicationStatusBody(
@@ -74,8 +87,8 @@ export function isAuthorizedApplicationNotifier(args: {
   return args.callerId === args.jobRecruiterId;
 }
 
-/** Response when auth succeeds but no email provider / notifications table exists. */
-export function buildPendingProviderResult(notification: {
+/** Response shape when the edge function records an in-app notification. */
+export function buildDeliveredNotificationResult(notification: {
   applicationId: string;
   status: ApplicationStatus;
   seekerId: string;
@@ -84,33 +97,72 @@ export function buildPendingProviderResult(notification: {
 }): NotifyApplicationStatusResult {
   return {
     ok: true,
-    delivered: false,
-    deliveryStatus: "pending_provider",
-    reason:
-      "Notification authorized, but no email provider or notifications table is configured yet",
+    delivered: true,
+    deliveryStatus: "delivered",
+    reason: "In-app notification recorded for the seeker",
     notification,
   };
 }
 
 /**
- * Best-effort invoke after a successful status UPDATE.
- * Failures are swallowed by the caller so they never undo the status change.
+ * Invoke deployed notify-application-status after a successful status UPDATE.
+ * Throws when the Edge Function invoke fails or delivery is not confirmed —
+ * callers must not toast success in that case.
  */
 export async function requestApplicationStatusNotification(
   applicationId: string,
   status: ApplicationStatus,
-): Promise<NotifyApplicationStatusResult | null> {
+): Promise<NotifyApplicationStatusResult> {
   const parsed = parseNotifyApplicationStatusBody({ applicationId, status });
-  if (!parsed.ok) return null;
+  if (!parsed.ok) {
+    throw new NotifyApplicationStatusError(parsed.error);
+  }
 
   const { data, error } = await supabase.functions.invoke(NOTIFY_APPLICATION_STATUS_FN, {
     body: parsed.value,
   });
 
   if (error) {
-    console.warn("[notify-application-status] invoke failed", error.message);
-    return null;
+    throw new NotifyApplicationStatusError(
+      error.message || "Could not create the seeker notification",
+    );
   }
 
-  return data as NotifyApplicationStatusResult;
+  const result = data as NotifyApplicationStatusResult | null;
+  if (!result?.ok || !result.delivered) {
+    throw new NotifyApplicationStatusError(
+      result?.reason || "Could not create the seeker notification",
+    );
+  }
+
+  return result;
+}
+
+/**
+ * Persist a pipeline transition, then require in-app notification delivery.
+ * Used by recruiter and admin UIs so both paths share the same Edge Function.
+ */
+export async function updateApplicationStatusWithNotification(input: {
+  applicationId: string;
+  from: ApplicationStatus;
+  status: ApplicationStatus;
+}): Promise<NotifyApplicationStatusResult> {
+  const allowed = nextApplicationStatuses(input.from);
+  if (!allowed.includes(input.status)) {
+    throw new Error(`Cannot move from ${input.from} to ${input.status}`);
+  }
+
+  const { data, error } = await supabase
+    .from("applications")
+    .update({ status: input.status })
+    .eq("id", input.applicationId)
+    .eq("status", input.from)
+    .select("id");
+
+  if (error) throw error;
+  if (!data?.length) {
+    throw new Error("Status was already changed. Refresh and try again.");
+  }
+
+  return requestApplicationStatusNotification(input.applicationId, input.status);
 }

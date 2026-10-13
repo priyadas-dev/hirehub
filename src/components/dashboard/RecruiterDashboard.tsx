@@ -16,6 +16,7 @@ import {
   type JobStatus,
 } from "@/lib/job-fields";
 import { cn } from "@/lib/utils";
+import { RoleWelcome } from "@/components/dashboard/RoleWelcome";
 import { countRows, fmtDate, Section, StatCard, supabase, useCounts } from "./parts";
 
 export function RecruiterDashboard() {
@@ -91,6 +92,7 @@ export function RecruiterDashboard() {
 
   return (
     <div className="space-y-10">
+      {user ? <RoleWelcome userId={user.id} fullName={user.name} role="recruiter" /> : null}
       <header className="relative overflow-hidden rounded-2xl border bg-status-interview-soft/60 p-5 sm:p-8">
         <div
           className="pointer-events-none absolute -right-10 -top-10 size-40 rounded-full bg-status-interview/15 blur-3xl"

@@ -29,6 +29,9 @@ describe("company image validation", () => {
 
     const notImage = new File([new Uint8Array(8)], "notes.txt", { type: "text/plain" });
     expect(validateCompanyImageFile(notImage).ok).toBe(false);
+
+    const svg = new File([new Uint8Array(8)], "logo.svg", { type: "image/svg+xml" });
+    expect(validateCompanyImageFile(svg).ok).toBe(false);
   });
 
   it("does not claim persistence without schema + storage", () => {

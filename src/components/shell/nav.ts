@@ -44,7 +44,7 @@ export const NAV: Record<Role, NavItem[]> = {
     { label: "Post a Job", icon: PlusSquare, to: "/recruiter/jobs/new" },
     { label: "My Job Posts", icon: Briefcase, to: "/recruiter/jobs" },
     { label: "Applicants", icon: Users, to: "/recruiter/applicants" },
-    { label: "Profile", icon: Building2, to: "/recruiter/company" },
+    { label: "Company Profile", icon: Building2, to: "/recruiter/company" },
     { label: "Settings", icon: Settings, to: "/settings" },
   ],
   admin: [

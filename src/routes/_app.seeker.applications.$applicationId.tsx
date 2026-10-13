@@ -1,12 +1,14 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { ResumeOpenLink } from "@/components/applications/ResumeOpenLink";
 import { CardSkeleton, ErrorState, PageHeader } from "@/components/feedback/States";
 import { StatusBadge } from "@/components/status/StatusBadge";
 import { StatusTracker } from "@/components/status/StatusTracker";
 import type { ApplicationStatus } from "@/components/status/status";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth";
+import { isMissingSchemaError } from "@/lib/hirehub-storage";
 import { fmtDate, supabase } from "@/components/dashboard/parts";
 
 export const Route = createFileRoute("/_app/seeker/applications/$applicationId")({
@@ -27,14 +29,33 @@ function ApplicationDetailPage() {
     queryKey: ["seeker-application", applicationId],
     enabled: !!id,
     queryFn: async () => {
-      const { data, error } = await supabase
+      const withStorage = await supabase
         .from("applications")
-        .select("id,status,created_at,cover_note,resume_url,jobs(id,title,location,companies(name))")
+        .select(
+          "id,status,created_at,cover_note,resume_url,resume_storage_path,resume_file_name,portfolio_url,jobs(id,title,location,companies(name))",
+        )
         .eq("id", applicationId)
         .eq("seeker_id", id!)
         .maybeSingle();
-      if (error) throw error;
-      return data;
+      if (withStorage.error && isMissingSchemaError(withStorage.error.message)) {
+        const fallback = await supabase
+          .from("applications")
+          .select("id,status,created_at,cover_note,resume_url,jobs(id,title,location,companies(name))")
+          .eq("id", applicationId)
+          .eq("seeker_id", id!)
+          .maybeSingle();
+        if (fallback.error) throw fallback.error;
+        return fallback.data
+          ? {
+              ...fallback.data,
+              resume_storage_path: null as string | null,
+              resume_file_name: null as string | null,
+              portfolio_url: null as string | null,
+            }
+          : null;
+      }
+      if (withStorage.error) throw withStorage.error;
+      return withStorage.data;
     },
   });
 
@@ -108,11 +129,26 @@ function ApplicationDetailPage() {
           <p className="font-medium">Cover note</p>
           <p className="whitespace-pre-wrap text-muted-foreground">{a.cover_note || "No cover note."}</p>
         </div>
-        {a.resume_url && (
+        {(a.resume_storage_path || a.resume_url) && (
           <div className="space-y-2 text-sm">
             <p className="font-medium">Resume</p>
-            <a className="text-signal underline break-all" href={a.resume_url} target="_blank" rel="noreferrer">
-              {a.resume_url}
+            <ResumeOpenLink
+              storagePath={a.resume_storage_path}
+              legacyUrl={a.resume_url}
+              fileName={a.resume_file_name || (a.resume_url ? "Open resume link" : "Open resume")}
+            />
+          </div>
+        )}
+        {a.portfolio_url && (
+          <div className="space-y-2 text-sm">
+            <p className="font-medium">Portfolio</p>
+            <a
+              className="break-all text-signal underline"
+              href={a.portfolio_url}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              {a.portfolio_url}
             </a>
           </div>
         )}

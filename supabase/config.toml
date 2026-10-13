@@ -1,5 +1,5 @@
 project_id = "munqgybiuqpncxbgfvdp"
 
-# Local Edge Function definitions (not deployed by this change).
+# Edge Function: recruiter/admin status updates → seeker in-app notification.
 [functions.notify-application-status]
 verify_jwt = true

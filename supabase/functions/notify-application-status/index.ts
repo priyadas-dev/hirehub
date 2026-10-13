@@ -4,8 +4,8 @@
  * Accepts { applicationId, status } only.
  * Identity / ownership are resolved from the caller's JWT + database — never from the body.
  *
- * Delivery: PENDING. No email provider or notifications table is configured in this project.
- * This function authorizes the request and returns a structured pending_provider result.
+ * Delivery: inserts an in-app notification for the seeker (idempotent via dedupe_key).
+ * DB triggers may already create the same row; ON CONFLICT keeps this safe.
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 
@@ -77,7 +77,8 @@ Deno.serve(async (req) => {
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY");
-  if (!supabaseUrl || !supabaseAnonKey) {
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!supabaseUrl || !supabaseAnonKey || !serviceRoleKey) {
     return json(500, { ok: false, error: "Server configuration error" });
   }
 
@@ -142,13 +143,41 @@ Deno.serve(async (req) => {
     });
   }
 
-  // DELIVERY PENDING: no email provider credentials and no notifications table in this project.
+  const jobTitle = job.title || "a job";
+  const dedupeKey = `application_status:${application.id}:${application.status}`;
+
+  // Service role inserts only after JWT authz above. Matches trigger dedupe so retries are safe.
+  const admin = createClient(supabaseUrl, serviceRoleKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+
+  const { error: notifyError } = await admin.from("notifications").upsert(
+    {
+      recipient_id: application.seeker_id,
+      type: "application_status",
+      title: "Application update",
+      body: `Your application for ${jobTitle} is now ${application.status}.`,
+      entity_type: "application",
+      entity_id: application.id,
+      link_path: `/seeker/applications/${application.id}`,
+      dedupe_key: dedupeKey,
+    },
+    { onConflict: "recipient_id,dedupe_key", ignoreDuplicates: true },
+  );
+
+  if (notifyError) {
+    return json(500, {
+      ok: false,
+      error: "Failed to write in-app notification",
+      detail: notifyError.message,
+    });
+  }
+
   return json(200, {
     ok: true,
-    delivered: false,
-    deliveryStatus: "pending_provider",
-    reason:
-      "Notification authorized, but no email provider or notifications table is configured yet",
+    delivered: true,
+    deliveryStatus: "delivered",
+    reason: "In-app notification recorded for the seeker",
     notification: {
       applicationId: application.id,
       status: application.status,
