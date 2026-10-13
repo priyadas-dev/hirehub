@@ -1,14 +1,16 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Search, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { z } from "zod";
+import { RejectReasonDialog } from "@/components/admin/RejectReasonDialog";
 import { CardSkeleton, EmptyState, ErrorState, PageHeader } from "@/components/feedback/States";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { JOB_TYPE_LABEL } from "@/lib/hirehub";
 import { useAuth } from "@/lib/auth";
+import { adminReviewJob } from "@/lib/review-api";
 import { fmtDate, supabase } from "@/components/dashboard/parts";
 
 const searchSchema = z.object({
@@ -20,7 +22,7 @@ export const Route = createFileRoute("/_app/admin/jobs")({
   head: () => ({
     meta: [
       { title: "Approve jobs — HireHub" },
-      { name: "description", content: "Review and approve pending job listings." },
+      { name: "description", content: "Review, approve, or reject pending job listings." },
     ],
   }),
   component: AdminJobsPage,
@@ -33,6 +35,7 @@ function AdminJobsPage() {
   const search = Route.useSearch();
   const navigate = Route.useNavigate();
   const q = search.q?.trim().toLowerCase() ?? "";
+  const [rejectId, setRejectId] = useState<string | null>(null);
 
   const jobs = useQuery({
     queryKey: ["admin-jobs", id],
@@ -40,30 +43,54 @@ function AdminJobsPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("jobs")
-        .select("id,title,location,job_type,status,created_at,companies(name)")
+        .select("id,title,location,job_type,status,rejection_reason,created_at,companies(name)")
         .order("created_at", { ascending: false });
-      if (error) throw error;
+      if (error) {
+        // Pre-migration: rejection_reason column may be missing.
+        const fallback = await supabase
+          .from("jobs")
+          .select("id,title,location,job_type,status,created_at,companies(name)")
+          .order("created_at", { ascending: false });
+        if (fallback.error) throw fallback.error;
+        return (fallback.data ?? []).map((j) => ({ ...j, rejection_reason: null as string | null }));
+      }
       return data;
     },
   });
 
-  const updateStatus = useMutation({
-    mutationFn: async ({ jobId, status }: { jobId: string; status: "approved" | "closed" }) => {
-      const { error } = await supabase.from("jobs").update({ status }).eq("id", jobId);
+  const review = useMutation({
+    mutationFn: (input: { jobId: string; decision: "approve" | "reject"; reason?: string }) =>
+      adminReviewJob(input),
+    onSuccess: async (_, vars) => {
+      toast.success(vars.decision === "approve" ? "Job approved" : "Job rejected");
+      setRejectId(null);
+      await invalidateJobQueries(qc);
+    },
+    onError: (e: Error) => toast.error("Could not review job", { description: e.message }),
+  });
+
+  const closeJob = useMutation({
+    mutationFn: async (jobId: string) => {
+      const { error } = await supabase.from("jobs").update({ status: "closed" }).eq("id", jobId);
       if (error) throw error;
     },
-    onSuccess: async (_, vars) => {
-      toast.success(vars.status === "approved" ? "Job approved" : "Job closed");
-      await qc.invalidateQueries({ queryKey: ["admin-jobs"] });
-      await qc.invalidateQueries({ queryKey: ["admin-attention"] });
-      await qc.invalidateQueries({ queryKey: ["dash-counts"] });
-      await qc.invalidateQueries({ queryKey: ["seeker-jobs"] });
-      await qc.invalidateQueries({ queryKey: ["seeker-recommended"] });
-      await qc.invalidateQueries({ queryKey: ["recruiter-jobs"] });
-      await qc.invalidateQueries({ queryKey: ["rec-jobs"] });
-      await qc.invalidateQueries({ queryKey: ["admin-reports"] });
+    onSuccess: async () => {
+      toast.success("Job closed");
+      await invalidateJobQueries(qc);
     },
-    onError: (e: Error) => toast.error("Could not update job", { description: e.message }),
+    onError: (e: Error) => toast.error("Could not close job", { description: e.message }),
+  });
+
+  const reopenJob = useMutation({
+    mutationFn: async (jobId: string) => {
+      const { error } = await supabase.from("jobs").update({ status: "approved" }).eq("id", jobId);
+      if (error) throw error;
+    },
+    onSuccess: async () => {
+      toast.success("Job re-opened");
+      await invalidateJobQueries(qc);
+    },
+    onError: (e: Error) => toast.error("Could not re-open job", { description: e.message }),
   });
 
   const filtered = useMemo(() => {
@@ -83,7 +110,7 @@ function AdminJobsPage() {
       <PageHeader
         eyebrow="Admin"
         title="Approve jobs"
-        description="Approve pending listings so seekers can browse and apply. Close roles that should leave the board."
+        description="Approve or reject pending listings. Rejection requires a reason. Close approved roles that should leave the board."
       />
 
       <div className="relative max-w-md">
@@ -131,18 +158,18 @@ function AdminJobsPage() {
                       <Button
                         size="sm"
                         variant="signal"
-                        disabled={updateStatus.isPending}
-                        onClick={() => updateStatus.mutate({ jobId: j.id, status: "approved" })}
+                        disabled={review.isPending}
+                        onClick={() => review.mutate({ jobId: j.id, decision: "approve" })}
                       >
                         Approve
                       </Button>
                       <Button
                         size="sm"
                         variant="outline"
-                        disabled={updateStatus.isPending}
-                        onClick={() => updateStatus.mutate({ jobId: j.id, status: "closed" })}
+                        disabled={review.isPending}
+                        onClick={() => setRejectId(j.id)}
                       >
-                        Close
+                        Reject
                       </Button>
                     </div>
                   </li>
@@ -173,6 +200,9 @@ function AdminJobsPage() {
                       <p className="text-xs text-muted-foreground">
                         {j.companies?.name ?? "Company"} · {fmtDate(j.created_at)}
                       </p>
+                      {j.status === "rejected" && j.rejection_reason && (
+                        <p className="mt-1 text-xs text-destructive">Reason: {j.rejection_reason}</p>
+                      )}
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="rounded-full border px-2.5 py-1 text-xs font-medium capitalize">
@@ -182,8 +212,8 @@ function AdminJobsPage() {
                         <Button
                           size="sm"
                           variant="outline"
-                          disabled={updateStatus.isPending}
-                          onClick={() => updateStatus.mutate({ jobId: j.id, status: "closed" })}
+                          disabled={closeJob.isPending}
+                          onClick={() => closeJob.mutate(j.id)}
                         >
                           Close
                         </Button>
@@ -192,8 +222,8 @@ function AdminJobsPage() {
                         <Button
                           size="sm"
                           variant="outline"
-                          disabled={updateStatus.isPending}
-                          onClick={() => updateStatus.mutate({ jobId: j.id, status: "approved" })}
+                          disabled={reopenJob.isPending}
+                          onClick={() => reopenJob.mutate(j.id)}
                         >
                           Re-open
                         </Button>
@@ -206,6 +236,31 @@ function AdminJobsPage() {
           )}
         </>
       )}
+
+      <RejectReasonDialog
+        open={!!rejectId}
+        onOpenChange={(open) => {
+          if (!open) setRejectId(null);
+        }}
+        title="Reject job"
+        busy={review.isPending}
+        onConfirm={(reason) => {
+          if (!rejectId) return;
+          review.mutate({ jobId: rejectId, decision: "reject", reason });
+        }}
+      />
     </div>
   );
+}
+
+async function invalidateJobQueries(qc: ReturnType<typeof useQueryClient>) {
+  await qc.invalidateQueries({ queryKey: ["admin-jobs"] });
+  await qc.invalidateQueries({ queryKey: ["admin-attention"] });
+  await qc.invalidateQueries({ queryKey: ["dash-counts"] });
+  await qc.invalidateQueries({ queryKey: ["seeker-jobs"] });
+  await qc.invalidateQueries({ queryKey: ["seeker-recommended"] });
+  await qc.invalidateQueries({ queryKey: ["recruiter-jobs"] });
+  await qc.invalidateQueries({ queryKey: ["rec-jobs"] });
+  await qc.invalidateQueries({ queryKey: ["admin-reports"] });
+  await qc.invalidateQueries({ queryKey: ["notifications"] });
 }

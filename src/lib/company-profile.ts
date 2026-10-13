@@ -17,13 +17,19 @@ export function buildCreateCompanyPayload(recruiterId: string, fields: CompanyFi
 
 /**
  * Fields a recruiter may update on their own company.
- * Never includes status — only admins approve companies (assignment requirement).
+ * Status is omitted except when resubmitting a rejected company to pending.
  */
-export function buildSaveCompanyPayload(fields: CompanyFields) {
+export function buildSaveCompanyPayload(
+  fields: CompanyFields,
+  options?: { resubmitForReview?: boolean },
+) {
   return {
     name: fields.name,
     industry: fields.industry,
     website: fields.website,
+    ...(options?.resubmitForReview
+      ? { status: "pending" as const, rejection_reason: null }
+      : {}),
   };
 }
 
@@ -51,10 +57,11 @@ export async function saveCompanyProfile(
   companyId: string,
   recruiterId: string,
   fields: CompanyFields,
+  options?: { resubmitForReview?: boolean },
 ) {
   const { data, error } = await supabase
     .from("companies")
-    .update(buildSaveCompanyPayload(fields))
+    .update(buildSaveCompanyPayload(fields, options))
     .eq("id", companyId)
     .eq("recruiter_id", recruiterId)
     .select("id,status");

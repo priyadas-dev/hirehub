@@ -3,8 +3,8 @@ import { ArrowLeft, Mail, Phone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/brand/Logo";
 import { ContactForm } from "@/components/marketing/ContactForm";
+import { ContactEmailLinks, ContactPhoneLink } from "@/components/marketing/ContactDetails";
 import { HomeNavLink } from "@/components/marketing/HomeNavLink";
-import { SUPPORT_EMAIL, SUPPORT_PHONE_DISPLAY } from "@/lib/contact";
 
 export const Route = createFileRoute("/support")({
   head: () => ({
@@ -33,8 +33,8 @@ function SupportPage() {
       <main className="mx-auto max-w-2xl px-4 py-10 sm:px-6 sm:py-14">
         <h1 className="font-display text-3xl tracking-tight sm:text-4xl">Contact support</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Have a question about finding a job, posting a vacancy, or using HireHub? Send a message below. We only
-          show success after the server confirms your enquiry was accepted for delivery.
+          Have a question about finding a job, posting a vacancy, or using HireHub? Send a message below. If
+          automatic delivery is unavailable, we open a Gmail draft so you can send it from your inbox.
         </p>
 
         <div className="mt-8 grid gap-3 sm:grid-cols-2">
@@ -42,19 +42,14 @@ function SupportPage() {
             <Mail className="mt-0.5 size-4 shrink-0 text-signal" aria-hidden />
             <div className="min-w-0">
               <p className="text-xs font-medium text-muted-foreground">Email</p>
-              <a
-                href={`mailto:${SUPPORT_EMAIL}`}
-                className="mt-0.5 block break-all text-sm font-medium underline-offset-4 hover:underline"
-              >
-                {SUPPORT_EMAIL}
-              </a>
+              <ContactEmailLinks compact className="mt-0.5" />
             </div>
           </div>
           <div className="surface-card flex gap-3 p-4">
-            <Phone className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden />
+            <Phone className="mt-0.5 size-4 shrink-0 text-signal" aria-hidden />
             <div>
               <p className="text-xs font-medium text-muted-foreground">Phone</p>
-              <p className="mt-0.5 text-sm font-medium">{SUPPORT_PHONE_DISPLAY}</p>
+              <ContactPhoneLink compact />
             </div>
           </div>
         </div>

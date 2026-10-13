@@ -21,12 +21,14 @@ export const JOB_STATUS_LABEL: Record<JobStatus, string> = {
   pending: "Pending",
   approved: "Approved",
   closed: "Closed",
+  rejected: "Rejected",
 };
 
 export const JOB_STATUS_BADGE_CLASS: Record<JobStatus, string> = {
   pending: "border-status-interview/40 bg-status-interview-soft/60 text-status-interview",
   approved: "border-status-hired/40 bg-status-hired-soft/60 text-status-hired",
   closed: "border-border bg-muted/60 text-muted-foreground",
+  rejected: "border-destructive/40 bg-destructive/10 text-destructive",
 };
 
 /** YYYY-MM-DD for `now` in the HireHub business timezone (mirrors SQL timezone(...)). */

@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { contactMessageSchema, SUPPORT_EMAIL } from "@/lib/contact";
+import {
+  buildContactGmailDraft,
+  buildContactMailtoDraft,
+  contactMessageSchema,
+  SUPPORT_EMAIL,
+  SUPPORT_GMAIL_COMPOSE_HREF,
+  SUPPORT_MAILTO_HREF,
+  SUPPORT_PHONE_TEL,
+  SUPPORT_TEL_HREF,
+} from "@/lib/contact";
 
 describe("contactMessageSchema", () => {
   const valid = {
@@ -39,5 +48,29 @@ describe("contactMessageSchema", () => {
 
   it("exposes the verified public support email", () => {
     expect(SUPPORT_EMAIL).toBe("priya.das@sjinnovation.com");
+  });
+
+  it("builds Gmail compose and mailto links to the support inbox", () => {
+    expect(SUPPORT_MAILTO_HREF).toBe(`mailto:${SUPPORT_EMAIL}`);
+    expect(SUPPORT_GMAIL_COMPOSE_HREF).toContain("mail.google.com/mail/");
+    expect(SUPPORT_GMAIL_COMPOSE_HREF).toContain(encodeURIComponent(SUPPORT_EMAIL));
+  });
+
+  it("builds an international tel link for the dialer", () => {
+    expect(SUPPORT_PHONE_TEL).toBe("+8801806085616");
+    expect(SUPPORT_TEL_HREF).toBe("tel:+8801806085616");
+  });
+
+  it("builds draft links addressed to support", () => {
+    const draft = {
+      fullName: "Priya Das",
+      email: "seeker@example.com",
+      subject: "Help",
+      message: "Need assistance with my application.",
+    };
+    expect(buildContactMailtoDraft(draft)).toContain(`mailto:${SUPPORT_EMAIL}`);
+    expect(buildContactMailtoDraft(draft)).toContain(encodeURIComponent("[HireHub] Help"));
+    expect(buildContactGmailDraft(draft)).toContain("mail.google.com/mail/");
+    expect(buildContactGmailDraft(draft)).toContain(encodeURIComponent(SUPPORT_EMAIL));
   });
 });

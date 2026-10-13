@@ -66,6 +66,7 @@ export type Database = {
           industry: string | null
           name: string
           recruiter_id: string
+          rejection_reason: string | null
           status: Database["public"]["Enums"]["company_status"]
           website: string | null
         }
@@ -75,6 +76,7 @@ export type Database = {
           industry?: string | null
           name: string
           recruiter_id: string
+          rejection_reason?: string | null
           status?: Database["public"]["Enums"]["company_status"]
           website?: string | null
         }
@@ -84,6 +86,7 @@ export type Database = {
           industry?: string | null
           name?: string
           recruiter_id?: string
+          rejection_reason?: string | null
           status?: Database["public"]["Enums"]["company_status"]
           website?: string | null
         }
@@ -107,6 +110,7 @@ export type Database = {
           job_type: Database["public"]["Enums"]["job_type"]
           location: string | null
           recruiter_id: string
+          rejection_reason: string | null
           salary_range: string | null
           status: Database["public"]["Enums"]["job_status"]
           title: string
@@ -120,6 +124,7 @@ export type Database = {
           job_type?: Database["public"]["Enums"]["job_type"]
           location?: string | null
           recruiter_id: string
+          rejection_reason?: string | null
           salary_range?: string | null
           status?: Database["public"]["Enums"]["job_status"]
           title: string
@@ -133,6 +138,7 @@ export type Database = {
           job_type?: Database["public"]["Enums"]["job_type"]
           location?: string | null
           recruiter_id?: string
+          rejection_reason?: string | null
           salary_range?: string | null
           status?: Database["public"]["Enums"]["job_status"]
           title?: string
@@ -181,6 +187,90 @@ export type Database = {
         }
         Relationships: []
       }
+      job_revisions: {
+        Row: {
+          id: string
+          job_id: string
+          submitted_by: string
+          title: string
+          description: string | null
+          location: string | null
+          job_type: Database["public"]["Enums"]["job_type"]
+          salary_range: string | null
+          application_deadline: string | null
+          baseline_title: string
+          baseline_description: string | null
+          baseline_location: string | null
+          baseline_job_type: Database["public"]["Enums"]["job_type"]
+          baseline_salary_range: string | null
+          baseline_application_deadline: string | null
+          status: Database["public"]["Enums"]["review_status"]
+          rejection_reason: string | null
+          reviewed_by: string | null
+          reviewed_at: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          job_id: string
+          submitted_by: string
+          title: string
+          description?: string | null
+          location?: string | null
+          job_type: Database["public"]["Enums"]["job_type"]
+          salary_range?: string | null
+          application_deadline?: string | null
+          baseline_title: string
+          baseline_description?: string | null
+          baseline_location?: string | null
+          baseline_job_type: Database["public"]["Enums"]["job_type"]
+          baseline_salary_range?: string | null
+          baseline_application_deadline?: string | null
+          status?: Database["public"]["Enums"]["review_status"]
+          rejection_reason?: string | null
+          reviewed_by?: string | null
+          reviewed_at?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          job_id?: string
+          submitted_by?: string
+          title?: string
+          description?: string | null
+          location?: string | null
+          job_type?: Database["public"]["Enums"]["job_type"]
+          salary_range?: string | null
+          application_deadline?: string | null
+          baseline_title?: string
+          baseline_description?: string | null
+          baseline_location?: string | null
+          baseline_job_type?: Database["public"]["Enums"]["job_type"]
+          baseline_salary_range?: string | null
+          baseline_application_deadline?: string | null
+          status?: Database["public"]["Enums"]["review_status"]
+          rejection_reason?: string | null
+          reviewed_by?: string | null
+          reviewed_at?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "job_revisions_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "job_revisions_submitted_by_fkey"
+            columns: ["submitted_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       saved_jobs: {
         Row: {
           created_at: string
@@ -226,6 +316,30 @@ export type Database = {
         Args: { _r: Database["public"]["Enums"]["user_role"] }
         Returns: boolean
       }
+      admin_review_company: {
+        Args: { _company_id: string; _decision: string; _reason?: string | null }
+        Returns: Database["public"]["Tables"]["companies"]["Row"]
+      }
+      admin_review_job: {
+        Args: { _job_id: string; _decision: string; _reason?: string | null }
+        Returns: Database["public"]["Tables"]["jobs"]["Row"]
+      }
+      submit_job_revision: {
+        Args: {
+          _job_id: string
+          _title: string
+          _description: string | null
+          _location: string | null
+          _job_type: Database["public"]["Enums"]["job_type"]
+          _salary_range: string | null
+          _application_deadline: string | null
+        }
+        Returns: Database["public"]["Tables"]["job_revisions"]["Row"]
+      }
+      admin_review_job_revision: {
+        Args: { _revision_id: string; _decision: string; _reason?: string | null }
+        Returns: Database["public"]["Tables"]["job_revisions"]["Row"]
+      }
     }
     Enums: {
       application_status:
@@ -234,9 +348,10 @@ export type Database = {
         | "interview"
         | "hired"
         | "rejected"
-      company_status: "pending" | "approved"
-      job_status: "pending" | "approved" | "closed"
+      company_status: "pending" | "approved" | "rejected"
+      job_status: "pending" | "approved" | "closed" | "rejected"
       job_type: "full_time" | "part_time" | "contract"
+      review_status: "pending" | "approved" | "rejected"
       user_role: "job_seeker" | "recruiter" | "admin"
     }
     CompositeTypes: {
@@ -372,9 +487,10 @@ export const Constants = {
         "hired",
         "rejected",
       ],
-      company_status: ["pending", "approved"],
-      job_status: ["pending", "approved", "closed"],
+      company_status: ["pending", "approved", "rejected"],
+      job_status: ["pending", "approved", "closed", "rejected"],
       job_type: ["full_time", "part_time", "contract"],
+      review_status: ["pending", "approved", "rejected"],
       user_role: ["job_seeker", "recruiter", "admin"],
     },
   },

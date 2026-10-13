@@ -22,6 +22,12 @@ import {
   stripDeadlineMarker,
   type JobStatus,
 } from "@/lib/job-fields";
+import {
+  canDirectEditLiveJob,
+  canSubmitJobRevision,
+  jobContentChanged,
+} from "@/lib/job-revisions";
+import { submitJobRevision, isReviewSchemaUnavailable } from "@/lib/review-api";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/components/dashboard/parts";
 
@@ -39,7 +45,7 @@ type FormValues = z.infer<typeof schema>;
 export const Route = createFileRoute("/_app/recruiter/jobs/$jobId/edit")({
   head: () => ({
     meta: [
-      { title: "Edit job ΓÇö HireHub" },
+      { title: "Edit job — HireHub" },
       { name: "description", content: "Update your job listing details." },
     ],
   }),
@@ -57,16 +63,66 @@ function EditJobPage() {
     queryKey: ["recruiter-job", jobId, id],
     enabled: !!id && !!jobId,
     queryFn: async () => {
-      const { data, error } = await supabase
+      const primary = await supabase
         .from("jobs")
         .select(
-          "id,title,description,location,salary_range,job_type,status,company_id,application_deadline,companies(name)",
+          "id,title,description,location,salary_range,job_type,status,company_id,application_deadline,rejection_reason,companies(name)",
         )
         .eq("id", jobId)
         .eq("recruiter_id", id!)
         .maybeSingle();
-      if (error) throw error;
-      if (!data) throw new Error("Job not found");
+      if (primary.error) {
+        const fallback = await supabase
+          .from("jobs")
+          .select(
+            "id,title,description,location,salary_range,job_type,status,company_id,application_deadline,companies(name)",
+          )
+          .eq("id", jobId)
+          .eq("recruiter_id", id!)
+          .maybeSingle();
+        if (fallback.error) throw fallback.error;
+        if (!fallback.data) throw new Error("Job not found");
+        return { ...fallback.data, rejection_reason: null as string | null };
+      }
+      if (!primary.data) throw new Error("Job not found");
+      return primary.data;
+    },
+  });
+
+  const pendingRevision = useQuery({
+    queryKey: ["recruiter-job-pending-revision", jobId, id],
+    enabled: !!id && !!jobId && job.data?.status === "approved",
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("job_revisions")
+        .select("id,status,created_at,rejection_reason")
+        .eq("job_id", jobId)
+        .eq("status", "pending")
+        .maybeSingle();
+      if (error) {
+        if (isReviewSchemaUnavailable(error)) return null;
+        throw error;
+      }
+      return data;
+    },
+  });
+
+  const latestRejectedRevision = useQuery({
+    queryKey: ["recruiter-job-rejected-revision", jobId, id],
+    enabled: !!id && !!jobId && job.data?.status === "approved" && !pendingRevision.data,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("job_revisions")
+        .select("id,status,created_at,rejection_reason")
+        .eq("job_id", jobId)
+        .eq("status", "rejected")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error) {
+        if (isReviewSchemaUnavailable(error)) return null;
+        throw error;
+      }
       return data;
     },
   });
@@ -99,57 +155,105 @@ function EditJobPage() {
 
   const save = useMutation({
     mutationFn: async (values: FormValues) => {
-      if (!id) throw new Error("Not signed in");
-      if (job.data?.status === "closed") {
-        throw new Error("Closed jobs cannot be edited. Post a new listing instead.");
+      if (!id || !job.data) throw new Error("Not signed in");
+      if (job.data.status === "closed" || job.data.status === "rejected") {
+        throw new Error("This listing cannot be edited.");
       }
 
-      const previousDeadline = resolveJobDeadline(job.data?.application_deadline, job.data?.description);
+      const previousDeadline = resolveJobDeadline(job.data.application_deadline, job.data.description);
       if (!canSetApplicationDeadline(values.application_deadline, previousDeadline)) {
         throw new Error("Deadline must be today or a future date (or leave the current expired deadline unchanged).");
       }
 
-      const deadlineExtended =
-        previousDeadline !== values.application_deadline &&
-        isApplicationDeadlinePassed(previousDeadline) &&
-        !isApplicationDeadlinePassed(values.application_deadline);
+      const proposed = {
+        title: values.title.trim(),
+        description: stripDeadlineMarker(values.description).trim() || null,
+        location: values.location.trim(),
+        salary_range: values.salary_range?.trim() || null,
+        job_type: values.job_type as JobType,
+        application_deadline: values.application_deadline,
+      };
 
-      // Ownership: recruiter_id filter; status is never written here (no re-approval).
+      // Approved jobs: submit revision — live row stays unchanged until admin approves.
+      if (job.data.status === "approved") {
+        const gate = canSubmitJobRevision({
+          jobStatus: job.data.status,
+          hasPendingRevision: !!pendingRevision.data,
+          isOwner: true,
+        });
+        if (!gate.ok) throw new Error(gate.reason);
+
+        const live = {
+          title: job.data.title,
+          description: stripDeadlineMarker(job.data.description) || null,
+          location: job.data.location,
+          salary_range: job.data.salary_range,
+          job_type: job.data.job_type,
+          application_deadline: previousDeadline,
+        };
+        if (!jobContentChanged(live, proposed)) {
+          throw new Error("No changes to submit.");
+        }
+
+        await submitJobRevision({
+          jobId,
+          title: proposed.title,
+          description: proposed.description,
+          location: proposed.location,
+          job_type: proposed.job_type,
+          salary_range: proposed.salary_range,
+          application_deadline: proposed.application_deadline,
+        });
+        return { mode: "revision" as const };
+      }
+
+      if (!canDirectEditLiveJob(job.data.status)) {
+        throw new Error("This job cannot be edited directly.");
+      }
+
       const { data, error } = await supabase
         .from("jobs")
         .update({
-          title: values.title.trim(),
-          description: stripDeadlineMarker(values.description).trim() || null,
-          location: values.location.trim(),
-          salary_range: values.salary_range?.trim() || null,
-          job_type: values.job_type as JobType,
-          application_deadline: values.application_deadline,
+          title: proposed.title,
+          description: proposed.description,
+          location: proposed.location,
+          salary_range: proposed.salary_range,
+          job_type: proposed.job_type,
+          application_deadline: proposed.application_deadline,
         })
         .eq("id", jobId)
         .eq("recruiter_id", id)
-        .neq("status", "closed")
+        .eq("status", "pending")
         .select("id,status,application_deadline");
       if (error) throw error;
-      if (!data?.length) throw new Error("Job could not be updated. It may already be closed or not owned by you.");
-      return { deadlineExtended, row: data[0] };
+      if (!data?.length) throw new Error("Job could not be updated.");
+      return { mode: "direct" as const };
     },
     onSuccess: async (result) => {
-      toast.success(result.deadlineExtended ? "Deadline extended ΓÇö applications can reopen" : "Job updated");
+      if (result.mode === "revision") {
+        toast.success("Changes submitted for admin review", {
+          description: "Your live listing stays unchanged until an admin approves.",
+        });
+      } else {
+        toast.success("Job updated");
+      }
       await qc.invalidateQueries({ queryKey: ["recruiter-jobs"] });
       await qc.invalidateQueries({ queryKey: ["recruiter-job", jobId] });
-      await qc.invalidateQueries({ queryKey: ["rec-jobs"] });
-      await qc.invalidateQueries({ queryKey: ["seeker-jobs"] });
-      await qc.invalidateQueries({ queryKey: ["seeker-recommended"] });
-      await qc.invalidateQueries({ queryKey: ["seeker-job", jobId] });
+      await qc.invalidateQueries({ queryKey: ["recruiter-job-pending-revision", jobId] });
+      await qc.invalidateQueries({ queryKey: ["admin-job-revisions"] });
+      await qc.invalidateQueries({ queryKey: ["notifications"] });
       void navigate({ to: "/recruiter/jobs" });
     },
-    onError: (e: Error) => toast.error("Could not update job", { description: e.message }),
+    onError: (e: Error) => toast.error("Could not save job", { description: e.message }),
   });
 
   if (job.isLoading) return <CardSkeleton rows={6} />;
   if (job.isError) return <ErrorState onRetry={() => void job.refetch()} />;
 
   const closed = job.data?.status === "closed";
+  const rejected = job.data?.status === "rejected";
+  const approved = job.data?.status === "approved";
+  const locked = closed || rejected || !!pendingRevision.data;
   const status = (job.data?.status ?? "pending") as JobStatus;
   const currentDeadline = resolveJobDeadline(job.data?.application_deadline, job.data?.description);
   const deadlineExpired = isApplicationDeadlinePassed(currentDeadline);
@@ -161,16 +265,21 @@ function EditJobPage() {
         eyebrow="Recruiter"
         title="Edit job"
         description={
-          closed
-            ? "This listing is closed and can no longer be edited."
-            : `${job.data?.companies?.name ?? "Company"} ┬╖ ${JOB_STATUS_LABEL[status]}${
-                deadlineLabel ? ` ┬╖ Deadline ${deadlineLabel}${deadlineExpired ? " (expired)" : ""}` : ""
+          closed || rejected
+            ? `This listing is ${status} and can no longer be edited.`
+            : `${job.data?.companies?.name ?? "Company"} · ${JOB_STATUS_LABEL[status]}${
+                deadlineLabel ? ` · Deadline ${deadlineLabel}${deadlineExpired ? " (expired)" : ""}` : ""
               }`
         }
         actions={
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" asChild>
-              <Link to="/recruiter/jobs">Back to jobs</Link>
+              <Link to="/recruiter/jobs/$jobId" params={{ jobId }}>
+                Back to details
+              </Link>
+            </Button>
+            <Button variant="outline" asChild>
+              <Link to="/recruiter/jobs">All job posts</Link>
             </Button>
             <Button variant="outline" asChild>
               <Link to="/recruiter/applicants" search={{ jobId }}>
@@ -181,10 +290,38 @@ function EditJobPage() {
         }
       />
 
-      {deadlineExpired && !closed && (
+      {rejected && job.data?.rejection_reason && (
+        <div className="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm">
+          <p className="font-medium text-destructive">This job was rejected</p>
+          <p className="mt-1 text-muted-foreground">{job.data.rejection_reason}</p>
+        </div>
+      )}
+
+      {approved && pendingRevision.data && (
         <div className="rounded-xl border border-status-interview/30 bg-status-interview-soft/40 px-4 py-3 text-sm">
-          The application deadline has expired. Set a new date of today or later to reopen applications. Extending the
-          deadline does not change approval status or existing applications.
+          Proposed edits are pending admin review. The live approved listing is unchanged for job seekers until an admin
+          decides.
+        </div>
+      )}
+
+      {approved && !pendingRevision.data && latestRejectedRevision.data?.rejection_reason && (
+        <div className="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm">
+          <p className="font-medium text-destructive">Latest revision was rejected</p>
+          <p className="mt-1 text-muted-foreground">{latestRejectedRevision.data.rejection_reason}</p>
+          <p className="mt-1 text-xs text-muted-foreground">Your live approved listing was not changed. You can submit a new revision.</p>
+        </div>
+      )}
+
+      {approved && !pendingRevision.data && (
+        <div className="rounded-xl border bg-card px-4 py-3 text-sm text-muted-foreground">
+          Saving submits proposed changes for admin approval. Job seekers continue to see the current approved version
+          until then.
+        </div>
+      )}
+
+      {deadlineExpired && !locked && (
+        <div className="rounded-xl border border-status-interview/30 bg-status-interview-soft/40 px-4 py-3 text-sm">
+          The application deadline has expired. Set a new date of today or later to reopen applications.
         </div>
       )}
 
@@ -194,20 +331,14 @@ function EditJobPage() {
       >
         <div className="space-y-2">
           <Label htmlFor="title">Job title</Label>
-          <Input id="title" disabled={closed} {...form.register("title")} placeholder="Senior Engineer" />
+          <Input id="title" disabled={locked} {...form.register("title")} placeholder="Senior Engineer" />
           {form.formState.errors.title && (
             <p className="text-xs text-destructive">{form.formState.errors.title.message}</p>
           )}
         </div>
         <div className="space-y-2">
           <Label htmlFor="description">Description</Label>
-          <Textarea
-            id="description"
-            rows={5}
-            disabled={closed}
-            {...form.register("description")}
-            placeholder="Role detailsΓÇª"
-          />
+          <Textarea id="description" rows={5} disabled={locked} {...form.register("description")} />
           {form.formState.errors.description && (
             <p className="text-xs text-destructive">{form.formState.errors.description.message}</p>
           )}
@@ -215,19 +346,14 @@ function EditJobPage() {
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
             <Label htmlFor="location">Location</Label>
-            <Input id="location" disabled={closed} {...form.register("location")} placeholder="Remote / City" />
+            <Input id="location" disabled={locked} {...form.register("location")} placeholder="Remote / City" />
             {form.formState.errors.location && (
               <p className="text-xs text-destructive">{form.formState.errors.location.message}</p>
             )}
           </div>
           <div className="space-y-2">
             <Label htmlFor="salary_range">Salary range</Label>
-            <Input
-              id="salary_range"
-              disabled={closed}
-              {...form.register("salary_range")}
-              placeholder="e.g. $80kΓÇô$100k"
-            />
+            <Input id="salary_range" disabled={locked} {...form.register("salary_range")} />
           </div>
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
@@ -235,7 +361,7 @@ function EditJobPage() {
             <Label>Job type</Label>
             <Select
               value={form.watch("job_type")}
-              disabled={closed}
+              disabled={locked}
               onValueChange={(v) => form.setValue("job_type", v as JobType, { shouldValidate: true })}
             >
               <SelectTrigger>
@@ -255,25 +381,25 @@ function EditJobPage() {
             <DeadlineDatePicker
               id="application_deadline"
               value={form.watch("application_deadline")}
-              disabled={closed}
+              disabled={locked}
               disablePast
-              placeholder={deadlineExpired ? "Extend deadlineΓÇª" : "Pick a deadline"}
+              placeholder={deadlineExpired ? "Extend deadline…" : "Pick a deadline"}
               onChange={(iso) => form.setValue("application_deadline", iso, { shouldValidate: true })}
             />
-            {deadlineLabel && (
-              <p className="text-xs text-muted-foreground">
-                Current: {deadlineLabel}
-                {deadlineExpired ? " ┬╖ Expired ΓÇö extend to reopen applications" : " ┬╖ Open through end of day (Asia/Dhaka)"}
-              </p>
-            )}
             {form.formState.errors.application_deadline && (
               <p className="text-xs text-destructive">{form.formState.errors.application_deadline.message}</p>
             )}
           </div>
         </div>
-        {!closed && (
+        {!locked && (
           <Button type="submit" variant="signal" disabled={save.isPending}>
-            {save.isPending ? "SavingΓÇª" : deadlineExpired ? "Extend deadline & save" : "Save changes"}
+            {save.isPending
+              ? "Saving…"
+              : approved
+                ? "Submit for admin review"
+                : deadlineExpired
+                  ? "Extend deadline & save"
+                  : "Save changes"}
           </Button>
         )}
       </form>

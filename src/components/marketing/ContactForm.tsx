@@ -1,11 +1,16 @@
 import { useId, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { CheckCircle2, Loader2 } from "lucide-react";
+import { CheckCircle2, Loader2, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { contactMessageSchema, type ContactMessageInput } from "@/lib/contact";
+import {
+  buildContactGmailDraft,
+  buildContactMailtoDraft,
+  contactMessageSchema,
+  type ContactMessageInput,
+} from "@/lib/contact";
 import { submitContactMessage } from "@/lib/submit-contact";
 
 type FormValues = {
@@ -24,6 +29,8 @@ const EMPTY: FormValues = {
   companyWebsite: "",
 };
 
+type DraftLinks = { gmail: string; mailto: string };
+
 export function ContactForm({ className }: { className?: string }) {
   const submit = useServerFn(submitContactMessage);
   const formId = useId();
@@ -32,9 +39,24 @@ export function ContactForm({ className }: { className?: string }) {
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
+  const [draftLinks, setDraftLinks] = useState<DraftLinks | null>(null);
 
   function update<K extends keyof FormValues>(key: K, value: FormValues[K]) {
     setValues((prev) => ({ ...prev, [key]: value }));
+  }
+
+  function openEmailDraft(data: {
+    fullName: string;
+    email: string;
+    subject: string;
+    message: string;
+  }): DraftLinks {
+    const links = {
+      gmail: buildContactGmailDraft(data),
+      mailto: buildContactMailtoDraft(data),
+    };
+    window.open(links.gmail, "_blank", "noopener,noreferrer");
+    return links;
   }
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -49,12 +71,14 @@ export function ContactForm({ className }: { className?: string }) {
         >,
       );
       setFormError(null);
+      setDraftLinks(null);
       setSent(false);
       return;
     }
 
     setErrors({});
     setFormError(null);
+    setDraftLinks(null);
     setBusy(true);
     try {
       const result = await submit({ data: parsed.data });
@@ -65,7 +89,14 @@ export function ContactForm({ className }: { className?: string }) {
       }
       if (!result.ok) {
         if (result.fieldErrors) setErrors(result.fieldErrors);
-        setFormError(result.message);
+        if (result.code === "provider_not_configured") {
+          // Honest fallback: open a prefilled draft to support (does not claim server delivery).
+          const links = openEmailDraft(parsed.data);
+          setDraftLinks(links);
+          setFormError(null);
+        } else {
+          setFormError(result.message);
+        }
         setSent(false);
       }
     } catch {
@@ -78,11 +109,7 @@ export function ContactForm({ className }: { className?: string }) {
 
   if (sent) {
     return (
-      <div
-        className={className}
-        role="status"
-        aria-live="polite"
-      >
+      <div className={className} role="status" aria-live="polite">
         <div className="flex gap-3 rounded-xl border border-signal/30 bg-signal-soft/50 p-5 text-sm">
           <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-signal" aria-hidden />
           <div className="space-y-2">
@@ -90,14 +117,47 @@ export function ContactForm({ className }: { className?: string }) {
             <p className="text-muted-foreground">
               Thanks — your enquiry was accepted for delivery. We&apos;ll follow up using the email you provided.
             </p>
+            <Button type="button" variant="outline" size="sm" className="bg-card" onClick={() => setSent(false)}>
+              Send another message
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (draftLinks) {
+    return (
+      <div className={className} role="status" aria-live="polite">
+        <div className="space-y-4 rounded-xl border border-signal/30 bg-signal-soft/40 p-5 text-sm">
+          <div className="flex gap-3">
+            <Mail className="mt-0.5 size-5 shrink-0 text-signal" aria-hidden />
+            <div className="space-y-2">
+              <p className="font-medium text-foreground">Open your email draft to finish</p>
+              <p className="text-muted-foreground">
+                Automatic email sending is not set up on this server yet. We opened a Gmail draft addressed to
+                support with your message. Send it from your inbox to complete.
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Button variant="signal" size="sm" className="shadow-signal" asChild>
+              <a href={draftLinks.gmail} target="_blank" rel="noopener noreferrer">
+                Open Gmail draft
+              </a>
+            </Button>
+            <Button variant="outline" size="sm" className="bg-card" asChild>
+              <a href={draftLinks.mailto}>Open email app</a>
+            </Button>
             <Button
               type="button"
-              variant="outline"
+              variant="ghost"
               size="sm"
-              className="bg-card"
-              onClick={() => setSent(false)}
+              onClick={() => {
+                setDraftLinks(null);
+              }}
             >
-              Send another message
+              Edit message
             </Button>
           </div>
         </div>
@@ -107,7 +167,6 @@ export function ContactForm({ className }: { className?: string }) {
 
   return (
     <form onSubmit={onSubmit} className={className} noValidate aria-busy={busy}>
-      {/* Honeypot — visually hidden from assistive tech as decorative trap */}
       <div className="absolute -left-[9999px] top-auto h-px w-px overflow-hidden" aria-hidden="true">
         <label htmlFor={`${formId}-company`}>Company website</label>
         <input
@@ -189,7 +248,7 @@ export function ContactForm({ className }: { className?: string }) {
           )}
         </Button>
         <p className="text-xs text-muted-foreground">
-          Success is shown only after the server confirms your message was accepted for delivery.
+          If automatic delivery is unavailable, we open a Gmail draft to support so you can send it yourself.
         </p>
       </div>
     </form>

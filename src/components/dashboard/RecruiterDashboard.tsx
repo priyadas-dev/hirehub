@@ -3,11 +3,13 @@ import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { CardSkeleton, EmptyState, ErrorState } from "@/components/feedback/States";
+import { RecruiterJobMeta } from "@/components/jobs/RecruiterJobMeta";
 import { StatusBadge } from "@/components/status/StatusBadge";
 import type { ApplicationStatus } from "@/components/status/status";
 import { useAuth } from "@/lib/auth";
 import {
   fmtDeadline,
+  isApplicationDeadlinePassed,
   JOB_STATUS_BADGE_CLASS,
   JOB_STATUS_LABEL,
   resolveJobDeadline,
@@ -103,7 +105,7 @@ export function RecruiterDashboard() {
               Welcome back, {user?.name.split(" ")[0] ?? "there"}.
             </h1>
             <p className="mt-2 max-w-lg text-sm leading-relaxed text-muted-foreground">
-              Create your company and wait for admin approval, then post a job ΓÇö listings also need admin approval
+              Create your company and wait for admin approval, then post a job — listings also need admin approval
               before seekers can apply.
             </p>
           </div>
@@ -200,24 +202,27 @@ export function RecruiterDashboard() {
                 const appCount = Array.isArray(j.applications) ? (j.applications[0]?.count ?? 0) : 0;
                 const status = j.status as JobStatus;
                 const deadline = resolveJobDeadline(j.application_deadline, j.description);
+                const deadlineLabel = fmtDeadline(deadline);
                 return (
                   <li key={j.id}>
                     <Link
-                      to="/recruiter/jobs/$jobId/edit"
+                      to="/recruiter/jobs/$jobId"
                       params={{ jobId: j.id }}
-                      className="flex items-center justify-between gap-4 px-5 py-4 transition-colors hover:bg-muted/40"
+                      className="flex flex-col gap-3 px-4 py-4 transition-colors hover:bg-muted/40 sm:flex-row sm:items-start sm:justify-between sm:gap-4 sm:px-5"
                     >
-                      <div className="min-w-0">
-                        <p className="truncate font-medium">{j.title}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {j.location ?? "Remote"} ┬╖ {fmtDate(j.created_at)} ┬╖ {appCount} applicant
-                          {appCount === 1 ? "" : "s"}
-                          {deadline ? ` ┬╖ Deadline ${fmtDeadline(deadline)}` : ""}
-                        </p>
+                      <div className="min-w-0 flex-1 space-y-2">
+                        <p className="font-medium leading-snug text-foreground">{j.title}</p>
+                        <RecruiterJobMeta
+                          location={j.location}
+                          createdAt={j.created_at}
+                          applicantCount={appCount}
+                          deadlineLabel={deadlineLabel}
+                          deadlineExpired={isApplicationDeadlinePassed(deadline)}
+                        />
                       </div>
                       <span
                         className={cn(
-                          "rounded-full border px-2.5 py-1 text-xs font-medium",
+                          "shrink-0 self-start rounded-full border px-2.5 py-1 text-xs font-medium sm:mt-0.5",
                           JOB_STATUS_BADGE_CLASS[status],
                         )}
                       >
@@ -273,7 +278,7 @@ export function RecruiterDashboard() {
                         {a.profiles?.full_name || a.profiles?.email || "Applicant"}
                       </p>
                       <p className="truncate text-xs text-muted-foreground">
-                        {a.jobs.title} ┬╖ {fmtDate(a.created_at)}
+                        {a.jobs.title} · {fmtDate(a.created_at)}
                       </p>
                     </div>
                     <StatusBadge status={a.status as ApplicationStatus} />

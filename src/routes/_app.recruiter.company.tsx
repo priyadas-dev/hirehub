@@ -1,17 +1,19 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Building2, PlusSquare } from "lucide-react";
+import { Building2, PlusSquare, Settings } from "lucide-react";
 import { toast } from "sonner";
 import { CardSkeleton, EmptyState, ErrorState, PageHeader } from "@/components/feedback/States";
+import { ContactProfileCard } from "@/components/profile/ContactProfileCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/lib/auth";
 import { createPendingCompany, saveCompanyProfile } from "@/lib/company-profile";
+import { fetchOwnProfile } from "@/lib/profile";
 import { fmtDate, supabase } from "@/components/dashboard/parts";
 
 const schema = z.object({
@@ -30,30 +32,47 @@ export const Route = createFileRoute("/_app/recruiter/company")({
   head: () => ({
     meta: [
       { title: "Company profile — HireHub" },
-      { name: "description", content: "Create or update your company profile." },
+      { name: "description", content: "Your recruiter contact details and company profile." },
     ],
   }),
   component: CompanyPage,
 });
 
 function CompanyPage() {
-  const { user } = useAuth();
+  const { user, refresh } = useAuth();
   const id = user?.id;
   const qc = useQueryClient();
+  const [editingCompany, setEditingCompany] = useState(false);
+
+  const contact = useQuery({
+    queryKey: ["recruiter-contact", id],
+    enabled: !!id,
+    queryFn: () => fetchOwnProfile(id!),
+  });
 
   const company = useQuery({
     queryKey: ["recruiter-company", id],
     enabled: !!id,
     queryFn: async () => {
-      const { data, error } = await supabase
+      const primary = await supabase
         .from("companies")
-        .select("id,name,industry,website,status,created_at")
+        .select("id,name,industry,website,status,rejection_reason,created_at")
         .eq("recruiter_id", id!)
         .order("created_at", { ascending: true })
         .limit(1)
         .maybeSingle();
-      if (error) throw error;
-      return data;
+      if (primary.error) {
+        const fallback = await supabase
+          .from("companies")
+          .select("id,name,industry,website,status,created_at")
+          .eq("recruiter_id", id!)
+          .order("created_at", { ascending: true })
+          .limit(1)
+          .maybeSingle();
+        if (fallback.error) throw fallback.error;
+        return fallback.data ? { ...fallback.data, rejection_reason: null as string | null } : null;
+      }
+      return primary.data;
     },
   });
 
@@ -69,8 +88,14 @@ function CompanyPage() {
         industry: company.data.industry ?? "",
         website: company.data.website ?? "",
       });
+    } else if (company.isSuccess && !company.data) {
+      form.reset({ name: "", industry: "", website: "" });
     }
-  }, [company.data, form]);
+  }, [company.data, company.isSuccess, form]);
+
+  useEffect(() => {
+    if (company.isSuccess && !company.data) setEditingCompany(true);
+  }, [company.isSuccess, company.data]);
 
   const save = useMutation({
     mutationFn: async (values: FormValues) => {
@@ -81,7 +106,9 @@ function CompanyPage() {
         website: values.website?.trim() || null,
       };
       if (company.data?.id) {
-        return saveCompanyProfile(company.data.id, id, payload);
+        return saveCompanyProfile(company.data.id, id, payload, {
+          resubmitForReview: company.data.status === "rejected",
+        });
       }
       await createPendingCompany(id, payload);
       return { status: "pending" as const };
@@ -93,6 +120,7 @@ function CompanyPage() {
       } else {
         toast.success("Company updated");
       }
+      setEditingCompany(false);
       await qc.invalidateQueries({ queryKey: ["recruiter-company", id] });
       await qc.invalidateQueries({ queryKey: ["recruiter-companies"] });
       await qc.invalidateQueries({ queryKey: ["admin-companies"] });
@@ -102,46 +130,90 @@ function CompanyPage() {
     onError: (e: Error) => toast.error("Could not save company", { description: e.message }),
   });
 
-  if (company.isLoading) return <CardSkeleton rows={5} />;
+  if (contact.isLoading || company.isLoading) return <CardSkeleton rows={6} />;
+  if (contact.isError) return <ErrorState onRetry={() => void contact.refetch()} />;
   if (company.isError) return <ErrorState onRetry={() => void company.refetch()} />;
 
   const profile = company.data;
   const exists = !!profile;
   const pending = profile?.status === "pending";
   const approved = profile?.status === "approved";
+  const rejected = profile?.status === "rejected";
 
   return (
     <div className="space-y-8">
       <PageHeader
         eyebrow="Recruiter"
-        title="Company profile"
-        description="Create your company profile. An admin must approve it before it is fully active. Job posts also need a separate admin approval."
+        title="Profile"
+        description="Your contact details and company information. An admin must approve the company before it is fully active."
         actions={
-          approved ? (
-            <Button variant="signal" asChild>
-              <Link to="/recruiter/jobs/new">
-                <PlusSquare /> Post a job
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" size="sm" asChild>
+              <Link to="/settings">
+                <Settings /> Settings
               </Link>
             </Button>
-          ) : undefined
+            {approved ? (
+              <Button variant="signal" size="sm" asChild>
+                <Link to="/recruiter/jobs/new">
+                  <PlusSquare /> Post a job
+                </Link>
+              </Button>
+            ) : null}
+          </div>
         }
       />
 
-      {!exists && (
-        <EmptyState
-          icon={Building2}
-          title="No company yet"
-          description="Add your company name, industry, and website. After you save, an admin reviews and approves the profile."
-          className="py-8"
+      {user && contact.data && (
+        <ContactProfileCard
+          userId={user.id}
+          role={user.role}
+          email={contact.data.email}
+          fullName={contact.data.full_name ?? ""}
+          phone={contact.data.phone}
+          queryKey={["recruiter-contact", id]}
+          onSaved={async () => {
+            await refresh();
+            await contact.refetch();
+          }}
         />
       )}
 
-      {pending && (
-        <div className="rounded-2xl border border-status-interview/40 bg-status-interview-soft/50 px-4 py-3 text-sm sm:px-5">
-          <span className="font-medium">{profile?.name}</span> is pending admin approval. You can edit details while
-          you wait. Job posts also need admin approval before seekers can apply.
+      <section className="space-y-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-semibold tracking-tight">Company information</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Shown to admins during review. Logo is not in the current schema.
+            </p>
+          </div>
+          {exists && !editingCompany && (
+            <Button type="button" variant="outline" size="sm" onClick={() => setEditingCompany(true)}>
+              Edit company
+            </Button>
+          )}
         </div>
-      )}
+
+        {!exists && !editingCompany && (
+          <EmptyState
+            icon={Building2}
+            title="No company yet"
+            description="Add your company name, industry, and website. After you save, an admin reviews and approves the profile."
+            className="py-8"
+            action={
+              <Button variant="signal" onClick={() => setEditingCompany(true)}>
+                Create company profile
+              </Button>
+            }
+          />
+        )}
+
+        {pending && (
+          <div className="rounded-2xl border border-status-interview/40 bg-status-interview-soft/50 px-4 py-3 text-sm sm:px-5">
+            <span className="font-medium">{profile?.name}</span> is pending admin approval. You can edit details while
+            you wait. Job posts also need admin approval before seekers can apply.
+          </div>
+        )}
 
       {approved && (
         <div className="rounded-2xl border bg-card px-4 py-3 text-sm sm:px-5">
@@ -150,42 +222,109 @@ function CompanyPage() {
         </div>
       )}
 
-      <form
-        className="surface-card max-w-xl space-y-5 p-5 sm:p-6"
-        onSubmit={form.handleSubmit((v) => save.mutate(v))}
-      >
-        {profile?.created_at && (
-          <p className="text-sm text-muted-foreground">Created {fmtDate(profile.created_at)}</p>
+      {rejected && (
+        <div className="rounded-2xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm sm:px-5">
+          <p className="font-medium text-destructive">
+            <span className="text-foreground">{profile?.name}</span> was rejected
+          </p>
+          {profile?.rejection_reason && (
+            <p className="mt-1 text-muted-foreground">Reason: {profile.rejection_reason}</p>
+          )}
+          <p className="mt-1 text-xs text-muted-foreground">
+            Update your company details below. An admin must approve again before you can post jobs.
+          </p>
+        </div>
+      )}
+
+        {exists && !editingCompany && (
+          <dl className="surface-card grid gap-4 p-5 sm:grid-cols-2 sm:p-6">
+            <div className="sm:col-span-2">
+              <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Company name</dt>
+              <dd className="mt-1 text-sm font-medium">{profile?.name}</dd>
+            </div>
+            <div>
+              <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Industry</dt>
+              <dd className="mt-1 text-sm font-medium">{profile?.industry || "—"}</dd>
+            </div>
+            <div>
+              <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Website</dt>
+              <dd className="mt-1 break-all text-sm font-medium">
+                {profile?.website ? (
+                  <a href={profile.website} className="text-signal underline-offset-4 hover:underline" target="_blank" rel="noopener noreferrer">
+                    {profile.website}
+                  </a>
+                ) : (
+                  "—"
+                )}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Status</dt>
+              <dd className="mt-1 text-sm font-medium capitalize">{profile?.status}</dd>
+            </div>
+            {profile?.created_at && (
+              <div>
+                <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Created</dt>
+                <dd className="mt-1 text-sm font-medium">{fmtDate(profile.created_at)}</dd>
+              </div>
+            )}
+          </dl>
         )}
-        <div className="space-y-2">
-          <Label htmlFor="name">Company name</Label>
-          <Input id="name" {...form.register("name")} placeholder="Acme Corp" />
-          {form.formState.errors.name && (
-            <p className="text-xs text-destructive">{form.formState.errors.name.message}</p>
-          )}
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="industry">Industry</Label>
-          <Input id="industry" {...form.register("industry")} placeholder="Technology" />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="website">Website</Label>
-          <Input id="website" {...form.register("website")} placeholder="https://…" />
-          {form.formState.errors.website && (
-            <p className="text-xs text-destructive">{form.formState.errors.website.message}</p>
-          )}
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button type="submit" variant="signal" disabled={save.isPending}>
-            {save.isPending ? "Saving…" : exists ? "Save changes" : "Submit for approval"}
-          </Button>
-          {exists && (
-            <Button type="button" variant="outline" asChild>
-              <Link to="/recruiter/jobs">My job posts</Link>
-            </Button>
-          )}
-        </div>
-      </form>
+
+        {editingCompany && (
+          <form
+            className="surface-card max-w-xl space-y-5 p-5 sm:p-6"
+            onSubmit={form.handleSubmit((v) => save.mutate(v))}
+          >
+            <div className="space-y-2">
+              <Label htmlFor="name">Company name</Label>
+              <Input id="name" {...form.register("name")} placeholder="Acme Corp" />
+              {form.formState.errors.name && (
+                <p className="text-xs text-destructive">{form.formState.errors.name.message}</p>
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="industry">Industry</Label>
+              <Input id="industry" {...form.register("industry")} placeholder="Technology" />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="website">Website</Label>
+              <Input id="website" {...form.register("website")} placeholder="https://…" />
+              {form.formState.errors.website && (
+                <p className="text-xs text-destructive">{form.formState.errors.website.message}</p>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button type="submit" variant="signal" disabled={save.isPending}>
+                {save.isPending
+              ? "Saving…"
+              : !exists
+                ? "Submit for approval"
+                : rejected
+                  ? "Save & resubmit for approval"
+                  : "Save changes"}
+              </Button>
+              {exists && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={save.isPending}
+                  onClick={() => {
+                    form.reset({
+                      name: profile!.name,
+                      industry: profile!.industry ?? "",
+                      website: profile!.website ?? "",
+                    });
+                    setEditingCompany(false);
+                  }}
+                >
+                  Cancel
+                </Button>
+              )}
+            </div>
+          </form>
+        )}
+      </section>
     </div>
   );
 }
