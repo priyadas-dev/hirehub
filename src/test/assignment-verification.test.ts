@@ -26,7 +26,7 @@ describe("assignment verification constants", () => {
   it("pauses notify expansion and AI until core demo is ready", () => {
     expect(NOTIFY_EDGE_FUNCTION_DECISION.assignmentMandatory).toBe(false);
     expect(NOTIFY_EDGE_FUNCTION_DECISION.expandNotifyFunctionsBeforeDemo).toBe(false);
-    expect(NOTIFY_EDGE_FUNCTION_DECISION.deliveryStatus).toBe("pending_provider");
+    expect(NOTIFY_EDGE_FUNCTION_DECISION.deliveryStatus).toBe("delivered");
     expect(OPTIONAL_AI_DECISION.buildBeforeCoreDemoGreen).toBe(false);
     expect(OPTIONAL_AI_DECISION.preferredFirstFunction).toBe("ai-job-match");
   });

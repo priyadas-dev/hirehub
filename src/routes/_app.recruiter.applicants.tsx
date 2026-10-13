@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Briefcase, Users } from "lucide-react";
 import { toast } from "sonner";
 import { z } from "zod";
+import { ResumeOpenLink } from "@/components/applications/ResumeOpenLink";
 import { CardSkeleton, EmptyState, ErrorState, PageHeader } from "@/components/feedback/States";
 import { StatusBadge } from "@/components/status/StatusBadge";
 import { StatusTracker } from "@/components/status/StatusTracker";
@@ -10,7 +11,8 @@ import { STATUS_META, type ApplicationStatus } from "@/components/status/status"
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { nextApplicationStatuses, STATUS_ACTION_LABEL } from "@/lib/hirehub";
-import { requestApplicationStatusNotification } from "@/lib/notify-application-status";
+import { isMissingSchemaError } from "@/lib/hirehub-storage";
+import { updateApplicationStatusWithNotification } from "@/lib/notify-application-status";
 import { useAuth } from "@/lib/auth";
 import { fmtDate, supabase } from "@/components/dashboard/parts";
 
@@ -58,16 +60,36 @@ function ApplicantsPage() {
     queryKey: ["recruiter-applicants", id, search.jobId, search.status],
     enabled: !!id,
     queryFn: async () => {
+      const selectFull =
+        "id,status,created_at,cover_note,resume_url,resume_storage_path,resume_file_name,portfolio_url,seeker_id,jobs!inner(id,title,recruiter_id),profiles(full_name,email)";
+      const selectLegacy =
+        "id,status,created_at,cover_note,resume_url,seeker_id,jobs!inner(id,title,recruiter_id),profiles(full_name,email)";
+
       let q = supabase
         .from("applications")
-        .select(
-          "id,status,created_at,cover_note,resume_url,seeker_id,jobs!inner(id,title,recruiter_id),profiles(full_name,email)",
-        )
+        .select(selectFull)
         .eq("jobs.recruiter_id", id!)
         .order("created_at", { ascending: false });
       if (search.jobId) q = q.eq("job_id", search.jobId);
       if (search.status) q = q.eq("status", search.status);
       const { data, error } = await q;
+      if (error && isMissingSchemaError(error.message)) {
+        let legacy = supabase
+          .from("applications")
+          .select(selectLegacy)
+          .eq("jobs.recruiter_id", id!)
+          .order("created_at", { ascending: false });
+        if (search.jobId) legacy = legacy.eq("job_id", search.jobId);
+        if (search.status) legacy = legacy.eq("status", search.status);
+        const fallback = await legacy;
+        if (fallback.error) throw fallback.error;
+        return (fallback.data ?? []).map((row) => ({
+          ...row,
+          resume_storage_path: null as string | null,
+          resume_file_name: null as string | null,
+          portfolio_url: null as string | null,
+        }));
+      }
       if (error) throw error;
       return data;
     },
@@ -104,37 +126,11 @@ function ApplicantsPage() {
   const selectedJobTitle = jobs.data?.find((j) => j.id === search.jobId)?.title;
 
   const updateStatus = useMutation({
-    mutationFn: async ({
-      applicationId,
-      from,
-      status,
-    }: {
+    mutationFn: (input: {
       applicationId: string;
       from: ApplicationStatus;
       status: ApplicationStatus;
-    }) => {
-      const allowed = nextApplicationStatuses(from);
-      if (!allowed.includes(status)) {
-        throw new Error(`Cannot move from ${from} to ${status}`);
-      }
-      const { data, error } = await supabase
-        .from("applications")
-        .update({ status })
-        .eq("id", applicationId)
-        .eq("status", from)
-        .select("id");
-      if (error) throw error;
-      if (!data?.length) {
-        throw new Error("Status was already changed. Refresh and try again.");
-      }
-
-      // Status is already persisted via RLS. Notify is best-effort and must not fail this mutation.
-      try {
-        await requestApplicationStatusNotification(applicationId, status);
-      } catch (notifyErr) {
-        console.warn("[notify-application-status] skipped after status update", notifyErr);
-      }
-    },
+    }) => updateApplicationStatusWithNotification(input),
     onSuccess: async () => {
       toast.success("Application status updated");
       await qc.invalidateQueries({ queryKey: ["recruiter-applicants"] });
@@ -146,8 +142,16 @@ function ApplicantsPage() {
       await qc.invalidateQueries({ queryKey: ["seeker-application"] });
       await qc.invalidateQueries({ queryKey: ["admin-applications"] });
       await qc.invalidateQueries({ queryKey: ["admin-reports"] });
+      await qc.invalidateQueries({ queryKey: ["notifications"] });
     },
-    onError: (e: Error) => toast.error("Could not update status", { description: e.message }),
+    onError: async (e: Error) => {
+      // Status may already be persisted; refresh lists even when notification failed.
+      await qc.invalidateQueries({ queryKey: ["recruiter-applicants"] });
+      await qc.invalidateQueries({ queryKey: ["recruiter-pipeline-counts"] });
+      await qc.invalidateQueries({ queryKey: ["admin-applications"] });
+      await qc.invalidateQueries({ queryKey: ["notifications"] });
+      toast.error("Could not update status", { description: e.message });
+    },
   });
 
   const clearFilters = () =>
@@ -337,16 +341,26 @@ function ApplicantsPage() {
                   {selected.cover_note || "No cover note provided."}
                 </p>
               </div>
-              {selected.resume_url && (
+              {(selected.resume_storage_path || selected.resume_url) && (
                 <div className="space-y-2 text-sm">
                   <p className="font-medium">Resume</p>
+                  <ResumeOpenLink
+                    storagePath={selected.resume_storage_path}
+                    legacyUrl={selected.resume_url}
+                    fileName={selected.resume_file_name || "Open resume"}
+                  />
+                </div>
+              )}
+              {selected.portfolio_url && (
+                <div className="space-y-2 text-sm">
+                  <p className="font-medium">Portfolio</p>
                   <a
                     className="break-all text-signal underline"
-                    href={selected.resume_url}
+                    href={selected.portfolio_url}
                     target="_blank"
-                    rel="noreferrer"
+                    rel="noopener noreferrer"
                   >
-                    Open resume link
+                    {selected.portfolio_url}
                   </a>
                 </div>
               )}

@@ -3,6 +3,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { Bookmark, Briefcase, MapPin, Search, X } from "lucide-react";
 import { z } from "zod";
+import { CompanyLogo } from "@/components/company/CompanyLogo";
 import { CardSkeleton, EmptyState, ErrorState, PageHeader } from "@/components/feedback/States";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,6 +21,7 @@ import {
   type JobCategory,
 } from "@/lib/job-discovery";
 import { JOB_TYPE_LABEL, type JobType } from "@/lib/hirehub";
+import { isMissingSchemaError } from "@/lib/hirehub-storage";
 import { fmtDeadline, resolveJobDeadline, stripDeadlineMarker } from "@/lib/job-fields";
 import { fmtDate, supabase } from "@/components/dashboard/parts";
 
@@ -64,13 +66,29 @@ function BrowseJobsPage() {
   const jobs = useQuery({
     queryKey: ["seeker-jobs"],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const withLogo = await supabase
         .from("jobs")
-        .select("id,title,description,location,salary_range,job_type,created_at,application_deadline,companies(name)")
+        .select(
+          "id,title,description,location,salary_range,job_type,created_at,application_deadline,companies(name,logo_url)",
+        )
         .eq("status", "approved")
         .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data;
+      if (withLogo.error && isMissingSchemaError(withLogo.error.message)) {
+        const fallback = await supabase
+          .from("jobs")
+          .select(
+            "id,title,description,location,salary_range,job_type,created_at,application_deadline,companies(name)",
+          )
+          .eq("status", "approved")
+          .order("created_at", { ascending: false });
+        if (fallback.error) throw fallback.error;
+        return (fallback.data ?? []).map((j) => ({
+          ...j,
+          companies: j.companies ? { ...j.companies, logo_url: null as string | null } : null,
+        }));
+      }
+      if (withLogo.error) throw withLogo.error;
+      return withLogo.data ?? [];
     },
   });
 
@@ -309,9 +327,11 @@ function BrowseJobsPage() {
             {filteredJobs.map((j) => (
               <li key={j.id} className="surface-card interactive-card group flex flex-col gap-4 p-5 sm:p-6">
                 <div className="flex items-start gap-3">
-                  <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-signal-soft text-signal ring-1 ring-signal/10 transition-transform duration-300 group-hover:scale-105">
-                    <Briefcase className="size-4" />
-                  </div>
+                  <CompanyLogo
+                    logoUrl={j.companies && "logo_url" in j.companies ? j.companies.logo_url : null}
+                    companyName={j.companies?.name}
+                    className="size-11 transition-transform duration-300 group-hover:scale-105"
+                  />
                   <div className="min-w-0">
                     <h3 className="truncate font-semibold tracking-tight">{j.title}</h3>
                     <p className="mt-0.5 truncate text-sm text-muted-foreground">

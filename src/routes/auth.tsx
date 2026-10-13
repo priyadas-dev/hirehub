@@ -8,7 +8,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Logo } from "@/components/brand/Logo";
 import { StatusTracker } from "@/components/status/StatusTracker";
-import { ROLE_HOME, useAuth } from "@/lib/auth";
+import {
+  ProfileSessionError,
+  ROLE_HOME,
+  resolvePostAuthPath,
+  useAuth,
+  workspaceWelcomeDescription,
+  type Role,
+} from "@/lib/auth";
 import {
   AUTH_INTENT_LABEL,
   intentToSignupRole,
@@ -67,20 +74,20 @@ function AuthPage() {
   const [errors, setErrors] = useState<Partial<Record<string, string>>>({});
   const [busy, setBusy] = useState<"form" | "google" | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const { user, refresh } = useAuth();
+  const { user, loading, profileError, refresh, signOut } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
     if (search.intent) setRole(intentToSignupRole(search.intent));
   }, [search.intent]);
 
-  function goHome(r: keyof typeof ROLE_HOME) {
-    const dest = search.redirect;
-    if (dest && dest.startsWith("/") && !dest.startsWith("//") && !dest.startsWith("/auth")) {
-      window.location.assign(dest);
+  function goHome(r: Role) {
+    const dest = resolvePostAuthPath(r, search.redirect);
+    if (dest === ROLE_HOME[r] || dest === "/settings") {
+      navigate({ to: dest, replace: true });
       return;
     }
-    navigate({ to: ROLE_HOME[r], replace: true });
+    window.location.assign(dest);
   }
 
   // Surface OAuth provider failures returned by Supabase on redirect
@@ -107,10 +114,17 @@ function AuthPage() {
   }, [search.error, search.error_description]);
 
   // Already signed in (including after returning from Google) → go to role area.
+  // Wait until auth finished loading so we never redirect with a stale/wrong role.
   useEffect(() => {
+    if (loading) return;
     if (user) goHome(user.role);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user]);
+  }, [user, loading]);
+
+  useEffect(() => {
+    if (loading || !profileError) return;
+    toast.error("Could not open your workspace", { description: profileError });
+  }, [loading, profileError]);
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -153,14 +167,14 @@ function AuthPage() {
         if (error) throw error;
       }
       const s = await refresh();
-      if (!s) throw new Error("Could not load your profile");
+      if (!s) {
+        throw new ProfileSessionError(
+          "profile_missing",
+          "Could not load your profile role from the database. HireHub will not open a workspace without a valid profiles.role.",
+        );
+      }
       toast.success(mode === "signup" ? "Welcome to HireHub" : "Welcome back", {
-        description:
-          s.role === "admin"
-            ? "Opening your admin workspace."
-            : s.role === "recruiter"
-              ? "Opening your recruiter workspace."
-              : "Opening your job seeker workspace. Admin access requires role=admin on your profile (not available at signup).",
+        description: workspaceWelcomeDescription(s.role),
       });
       goHome(s.role);
     } catch (err) {
@@ -247,6 +261,15 @@ function AuthPage() {
             </div>
           )}
 
+          {profileError && !loading && !user && (
+            <div role="alert" className="mt-6 space-y-3 rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm">
+              <p className="text-destructive">{profileError}</p>
+              <Button type="button" variant="outline" size="sm" onClick={() => void signOut()}>
+                Sign out and try again
+              </Button>
+            </div>
+          )}
+
           <Button type="button" variant="outline" size="lg" className="mt-6 w-full bg-card" onClick={onGoogle} disabled={!!busy}>
             {busy === "google" ? <Loader2 className="animate-spin" /> : <GoogleIcon />}
             Continue with Google
@@ -329,6 +352,7 @@ function Field({ id, label, error, ...props }: { id: string; label: string; erro
 }
 
 function friendly(err: unknown): string {
+  if (err instanceof ProfileSessionError) return err.message;
   const msg = err instanceof Error ? err.message : typeof err === "object" && err && "message" in err ? String((err as { message: unknown }).message) : "";
   const status =
     typeof err === "object" && err && "status" in err ? Number((err as { status: unknown }).status) : undefined;

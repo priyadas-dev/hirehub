@@ -7,13 +7,17 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Building2, PlusSquare, Settings } from "lucide-react";
 import { toast } from "sonner";
 import { CompanyImagePicker } from "@/components/company/CompanyImagePicker";
+import { CompanyLogo } from "@/components/company/CompanyLogo";
 import { CardSkeleton, EmptyState, ErrorState, PageHeader } from "@/components/feedback/States";
 import { ContactProfileCard } from "@/components/profile/ContactProfileCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useFileUploadsReady } from "@/hooks/use-file-uploads-ready";
 import { useAuth } from "@/lib/auth";
+import { saveCompanyLogoUrl } from "@/lib/company-image";
 import { createPendingCompany, saveCompanyProfile } from "@/lib/company-profile";
+import { isMissingSchemaError } from "@/lib/hirehub-storage";
 import { fetchOwnProfile } from "@/lib/profile";
 import { fmtDate, supabase } from "@/components/dashboard/parts";
 
@@ -43,7 +47,10 @@ function CompanyPage() {
   const { user, refresh } = useAuth();
   const id = user?.id;
   const qc = useQueryClient();
+  const uploadsReady = useFileUploadsReady();
+  const canPersist = !!uploadsReady.data;
   const [editingCompany, setEditingCompany] = useState(false);
+  const [logoDraft, setLogoDraft] = useState<string | null>(null);
 
   const contact = useQuery({
     queryKey: ["recruiter-contact", id],
@@ -57,22 +64,37 @@ function CompanyPage() {
     queryFn: async () => {
       const primary = await supabase
         .from("companies")
-        .select("id,name,industry,website,status,rejection_reason,created_at")
+        .select("id,name,industry,website,status,rejection_reason,created_at,logo_url")
         .eq("recruiter_id", id!)
         .order("created_at", { ascending: true })
         .limit(1)
         .maybeSingle();
-      if (primary.error) {
+      if (primary.error && isMissingSchemaError(primary.error.message)) {
         const fallback = await supabase
           .from("companies")
-          .select("id,name,industry,website,status,created_at")
+          .select("id,name,industry,website,status,rejection_reason,created_at")
           .eq("recruiter_id", id!)
           .order("created_at", { ascending: true })
           .limit(1)
           .maybeSingle();
-        if (fallback.error) throw fallback.error;
-        return fallback.data ? { ...fallback.data, rejection_reason: null as string | null } : null;
+        if (fallback.error) {
+          const older = await supabase
+            .from("companies")
+            .select("id,name,industry,website,status,created_at")
+            .eq("recruiter_id", id!)
+            .order("created_at", { ascending: true })
+            .limit(1)
+            .maybeSingle();
+          if (older.error) throw older.error;
+          return older.data
+            ? { ...older.data, rejection_reason: null as string | null, logo_url: null as string | null }
+            : null;
+        }
+        return fallback.data
+          ? { ...fallback.data, logo_url: null as string | null }
+          : null;
       }
+      if (primary.error) throw primary.error;
       return primary.data;
     },
   });
@@ -89,8 +111,10 @@ function CompanyPage() {
         industry: company.data.industry ?? "",
         website: company.data.website ?? "",
       });
+      setLogoDraft(company.data.logo_url ?? null);
     } else if (company.isSuccess && !company.data) {
       form.reset({ name: "", industry: "", website: "" });
+      setLogoDraft(null);
     }
   }, [company.data, company.isSuccess, form]);
 
@@ -106,13 +130,26 @@ function CompanyPage() {
         industry: values.industry?.trim() || null,
         website: values.website?.trim() || null,
       };
-      if (company.data?.id) {
-        return saveCompanyProfile(company.data.id, id, payload, {
-          resubmitForReview: company.data.status === "rejected",
+      let companyId = company.data?.id;
+      let status: string | undefined = company.data?.status;
+      if (companyId) {
+        const updated = await saveCompanyProfile(companyId, id, payload, {
+          resubmitForReview: company.data?.status === "rejected",
         });
+        status = updated.status;
+      } else {
+        companyId = await createPendingCompany(id, payload);
+        status = "pending";
       }
-      await createPendingCompany(id, payload);
-      return { status: "pending" as const };
+
+      if (canPersist && companyId) {
+        const previous = company.data?.logo_url ?? null;
+        await saveCompanyLogoUrl(companyId, id, logoDraft);
+        // If logo was cleared and previous was external URL only, nothing else to clean.
+        void previous;
+      }
+
+      return { status, companyId };
     },
     onSuccess: async (result) => {
       const wasCreate = !company.data?.id;
@@ -131,7 +168,7 @@ function CompanyPage() {
     onError: (e: Error) => toast.error("Could not save company", { description: e.message }),
   });
 
-  if (contact.isLoading || company.isLoading) return <CardSkeleton rows={6} />;
+  if (contact.isLoading || company.isLoading || uploadsReady.isLoading) return <CardSkeleton rows={6} />;
   if (contact.isError) return <ErrorState onRetry={() => void contact.refetch()} />;
   if (company.isError) return <ErrorState onRetry={() => void company.refetch()} />;
 
@@ -185,8 +222,8 @@ function CompanyPage() {
           <div>
             <h2 className="text-lg font-semibold tracking-tight">Company information</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Edit name, industry, and website — the fields supported by the current companies schema. Description and
-              logo columns are not in the live schema yet.
+              Edit name, industry, website, and logo. Logo files use private Storage and short-lived signed URLs after
+              PROPOSED_0008 is applied.
             </p>
           </div>
           {exists && !editingCompany && (
@@ -240,9 +277,12 @@ function CompanyPage() {
 
         {exists && !editingCompany && (
           <dl className="surface-card grid gap-4 p-5 sm:grid-cols-2 sm:p-6">
-            <div className="sm:col-span-2">
-              <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Company name</dt>
-              <dd className="mt-1 text-sm font-medium">{profile?.name}</dd>
+            <div className="flex items-center gap-3 sm:col-span-2">
+              <CompanyLogo logoUrl={profile?.logo_url} companyName={profile?.name} className="size-14" />
+              <div>
+                <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Company name</dt>
+                <dd className="mt-1 text-sm font-medium">{profile?.name}</dd>
+              </div>
             </div>
             <div>
               <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Industry</dt>
@@ -303,7 +343,13 @@ function CompanyPage() {
               )}
             </div>
 
-            <CompanyImagePicker canPersist={false} />
+            <CompanyImagePicker
+              canPersist={canPersist}
+              companyId={profile?.id ?? null}
+              recruiterId={id ?? null}
+              initialLogoUrl={logoDraft}
+              onLogoChange={setLogoDraft}
+            />
 
             <div className="flex flex-wrap gap-2">
               <Button type="submit" variant="signal" disabled={save.isPending}>
@@ -326,6 +372,7 @@ function CompanyPage() {
                       industry: profile!.industry ?? "",
                       website: profile!.website ?? "",
                     });
+                    setLogoDraft(profile!.logo_url ?? null);
                     setEditingCompany(false);
                   }}
                 >

@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -6,35 +6,52 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Bookmark, Briefcase, Building2, Calendar, MapPin } from "lucide-react";
 import { toast } from "sonner";
+import {
+  ResumePdfPicker,
+  type ResumePickerValue,
+} from "@/components/applications/ResumePdfPicker";
+import { CompanyLogo } from "@/components/company/CompanyLogo";
 import { CardSkeleton, ErrorState, PageHeader } from "@/components/feedback/States";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { useFileUploadsReady } from "@/hooks/use-file-uploads-ready";
 import { JOB_TYPE_LABEL } from "@/lib/hirehub";
+import { isMissingSchemaError, storageFirstFolder, storagePathIsSafe } from "@/lib/hirehub-storage";
 import {
   fmtDeadline,
   isApplicationDeadlinePassed,
   resolveJobDeadline,
   stripDeadlineMarker,
 } from "@/lib/job-fields";
+import {
+  PORTFOLIO_PERSISTENCE_NOTE,
+  validatePortfolioUrl,
+} from "@/lib/resume-upload";
 import { useAuth } from "@/lib/auth";
 import { fmtDate, supabase } from "@/components/dashboard/parts";
 
 const applySchema = z.object({
-  resume_url: z
+  resume_url: z.string().trim().optional(),
+  cover_note: z.string().trim().optional(),
+  portfolio_url: z
     .string()
     .trim()
-    .min(1, "Resume URL is required")
-    .refine((v) => /^https?:\/\/\S+/i.test(v), "Resume must be a full URL starting with http:// or https://"),
-  cover_note: z.string().trim().optional(),
+    .optional()
+    .superRefine((value, ctx) => {
+      const result = validatePortfolioUrl(value ?? "");
+      if (!result.ok) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: result.error });
+      }
+    }),
 });
 
 type ApplyValues = z.infer<typeof applySchema>;
 
 export const Route = createFileRoute("/_app/seeker/jobs/$jobId")({
   head: () => ({
-    meta: [{ title: "Job details ΓÇö HireHub" }],
+    meta: [{ title: "Job details — HireHub" }],
   }),
   component: JobDetailPage,
 });
@@ -45,20 +62,42 @@ function JobDetailPage() {
   const id = user?.id;
   const qc = useQueryClient();
   const navigate = useNavigate();
+  const uploadsReady = useFileUploadsReady();
+  const canPersist = !!uploadsReady.data;
+  const [resumeValue, setResumeValue] = useState<ResumePickerValue | null>(null);
 
   const job = useQuery({
     queryKey: ["seeker-job", jobId],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const withLogo = await supabase
         .from("jobs")
         .select(
-          "id,title,description,location,salary_range,job_type,status,created_at,application_deadline,companies(name,industry)",
+          "id,title,description,location,salary_range,job_type,status,created_at,application_deadline,companies(name,industry,logo_url)",
         )
         .eq("id", jobId)
         .eq("status", "approved")
         .maybeSingle();
-      if (error) throw error;
-      return data;
+      if (withLogo.error && isMissingSchemaError(withLogo.error.message)) {
+        const fallback = await supabase
+          .from("jobs")
+          .select(
+            "id,title,description,location,salary_range,job_type,status,created_at,application_deadline,companies(name,industry)",
+          )
+          .eq("id", jobId)
+          .eq("status", "approved")
+          .maybeSingle();
+        if (fallback.error) throw fallback.error;
+        return fallback.data
+          ? {
+              ...fallback.data,
+              companies: fallback.data.companies
+                ? { ...fallback.data.companies, logo_url: null as string | null }
+                : null,
+            }
+          : null;
+      }
+      if (withLogo.error) throw withLogo.error;
+      return withLogo.data;
     },
   });
 
@@ -117,6 +156,23 @@ function JobDetailPage() {
     queryKey: ["seeker-latest-resume", id],
     enabled: !!id,
     queryFn: async () => {
+      const profileRes = await supabase
+        .from("profiles")
+        .select("resume_storage_path,resume_file_name")
+        .eq("id", id!)
+        .maybeSingle();
+
+      let profilePath: string | null = null;
+      let profileFileName: string | null = null;
+      if (profileRes.error && isMissingSchemaError(profileRes.error.message)) {
+        /* columns not applied yet */
+      } else if (profileRes.error) {
+        throw profileRes.error;
+      } else {
+        profilePath = profileRes.data?.resume_storage_path ?? null;
+        profileFileName = profileRes.data?.resume_file_name ?? null;
+      }
+
       const [{ data: authData }, appRes] = await Promise.all([
         supabase.auth.getUser(),
         supabase
@@ -132,18 +188,30 @@ function JobDetailPage() {
       const meta = (authData.user?.user_metadata ?? {}) as Record<string, unknown>;
       const metaResumeRaw = meta["resume_url"];
       const metaResume = typeof metaResumeRaw === "string" ? metaResumeRaw.trim() : "";
-      return { resume_url: metaResume || appRes.data?.resume_url || null };
+      return {
+        resume_storage_path: profilePath,
+        resume_file_name: profileFileName,
+        resume_url: metaResume || appRes.data?.resume_url || null,
+      };
     },
   });
 
   const form = useForm<ApplyValues>({
     resolver: zodResolver(applySchema),
-    defaultValues: { resume_url: "", cover_note: "" },
+    defaultValues: { resume_url: "", cover_note: "", portfolio_url: "" },
   });
 
   useEffect(() => {
-    if (latestResume.data?.resume_url && !form.getValues("resume_url")) {
+    if (!latestResume.data) return;
+    if (latestResume.data.resume_url && !form.getValues("resume_url")) {
       form.setValue("resume_url", latestResume.data.resume_url, { shouldValidate: false });
+    }
+    if (latestResume.data.resume_storage_path) {
+      setResumeValue({
+        storagePath: latestResume.data.resume_storage_path,
+        fileName: latestResume.data.resume_file_name,
+        isApplicationOverride: false,
+      });
     }
   }, [latestResume.data, form]);
 
@@ -151,7 +219,6 @@ function JobDetailPage() {
     mutationFn: async (values: ApplyValues) => {
       if (!id) throw new Error("Not signed in");
 
-      // Prefer fresh DB value so a recruiter deadline extension reopens Apply without a new post.
       const { data: liveJob, error: liveErr } = await supabase
         .from("jobs")
         .select("id,status,application_deadline,description")
@@ -179,12 +246,63 @@ function JobDetailPage() {
         throw err;
       }
 
+      const portfolio = validatePortfolioUrl(values.portfolio_url ?? "");
+      if (!portfolio.ok) throw new Error(portfolio.error);
+
+      const legacyResume = values.resume_url?.trim() || "";
+      const storagePath =
+        resumeValue?.storagePath || latestResume.data?.resume_storage_path || null;
+      const fileName =
+        resumeValue?.fileName || latestResume.data?.resume_file_name || null;
+
+      if (canPersist) {
+        if (!storagePath && !legacyResume) {
+          throw new Error("Upload a resume PDF or provide a resume URL.");
+        }
+        if (storagePath) {
+          if (!storagePathIsSafe(storagePath) || storageFirstFolder(storagePath) !== id) {
+            throw new Error("Resume Storage path must be {seeker_id}/{file}.");
+          }
+        }
+        if (legacyResume && !/^https?:\/\/\S+/i.test(legacyResume)) {
+          throw new Error("Resume must be a full URL starting with http:// or https://");
+        }
+
+        const { data, error } = await supabase
+          .from("applications")
+          .insert({
+            job_id: jobId,
+            seeker_id: id,
+            resume_storage_path: storagePath,
+            resume_file_name: storagePath ? fileName : null,
+            resume_url: storagePath ? null : legacyResume,
+            portfolio_url: portfolio.url,
+            cover_note: values.cover_note?.trim() || null,
+          })
+          .select("id")
+          .single();
+        if (error) {
+          if (error.code === "23505" || /duplicate|unique/i.test(error.message)) {
+            throw new Error("Already applied");
+          }
+          throw error;
+        }
+        return data;
+      }
+
+      if (!legacyResume) {
+        throw new Error("Resume URL is required until PDF upload storage is available");
+      }
+      if (!/^https?:\/\/\S+/i.test(legacyResume)) {
+        throw new Error("Resume must be a full URL starting with http:// or https://");
+      }
+
       const { data, error } = await supabase
         .from("applications")
         .insert({
           job_id: jobId,
           seeker_id: id,
-          resume_url: values.resume_url.trim(),
+          resume_url: legacyResume,
           cover_note: values.cover_note?.trim() || null,
         })
         .select("id")
@@ -229,7 +347,7 @@ function JobDetailPage() {
     },
   });
 
-  if (job.isLoading) return <CardSkeleton rows={6} />;
+  if (job.isLoading || uploadsReady.isLoading) return <CardSkeleton rows={6} />;
   if (job.isError) return <ErrorState onRetry={() => void job.refetch()} />;
   if (!job.data) {
     return <ErrorState title="Job not found" description="This role is missing, closed, or not approved yet." />;
@@ -237,6 +355,7 @@ function JobDetailPage() {
 
   const j = job.data;
   const companyName = j.companies?.name ?? "Company";
+  const companyLogo = j.companies && "logo_url" in j.companies ? j.companies.logo_url : null;
   const plainDescription = stripDeadlineMarker(j.description);
   const applicationDeadline = resolveJobDeadline(j.application_deadline, j.description);
   const deadlineLabel = fmtDeadline(applicationDeadline);
@@ -247,8 +366,8 @@ function JobDetailPage() {
       <PageHeader
         eyebrow={companyName}
         title={j.title}
-        description={`${JOB_TYPE_LABEL[j.job_type]} ┬╖ Posted ${fmtDate(j.created_at)}${
-          deadlineLabel ? ` ┬╖ Deadline ${deadlineLabel}` : ""
+        description={`${JOB_TYPE_LABEL[j.job_type]} · Posted ${fmtDate(j.created_at)}${
+          deadlineLabel ? ` · Deadline ${deadlineLabel}` : ""
         }`}
         actions={
           <div className="flex flex-wrap gap-2">
@@ -272,7 +391,13 @@ function JobDetailPage() {
 
       <div className="grid gap-6 lg:grid-cols-5 lg:gap-8">
         <section className="surface-card animate-fade-up space-y-5 p-5 sm:p-7 lg:col-span-3">
-          <h2 className="text-lg font-semibold tracking-tight">About the role</h2>
+          <div className="flex items-start gap-4">
+            <CompanyLogo logoUrl={companyLogo} companyName={companyName} />
+            <div className="min-w-0">
+              <h2 className="text-lg font-semibold tracking-tight">About the role</h2>
+              <p className="mt-1 text-sm text-muted-foreground">{companyName}</p>
+            </div>
+          </div>
           <p className="whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground">
             {plainDescription || "No description provided."}
           </p>
@@ -312,7 +437,7 @@ function JobDetailPage() {
                   <dt className="text-xs text-muted-foreground">Application deadline</dt>
                   <dd className="font-medium tracking-tight">
                     {deadlineLabel}
-                    {deadlinePassed ? " ┬╖ Closed" : ""}
+                    {deadlinePassed ? " · Closed" : ""}
                   </dd>
                 </div>
               </div>
@@ -343,27 +468,59 @@ function JobDetailPage() {
               </Button>
             </div>
           ) : (
-            <form className="space-y-4" onSubmit={form.handleSubmit((v) => apply.mutate(v))}>
+            <form className="space-y-4" onSubmit={form.handleSubmit((v) => apply.mutate(v))} noValidate>
+              {id && (
+                <ResumePdfPicker
+                  seekerId={id}
+                  canPersist={canPersist}
+                  applicationOverride
+                  initial={resumeValue}
+                  onChange={setResumeValue}
+                />
+              )}
+
+              {(!canPersist || !resumeValue?.storagePath) && (
+                <div className="space-y-2">
+                  <Label htmlFor="resume_url">Resume URL{canPersist ? " (optional fallback)" : ""}</Label>
+                  <Input id="resume_url" placeholder="https://…" {...form.register("resume_url")} />
+                  {form.formState.errors.resume_url && (
+                    <p className="text-xs text-destructive">{form.formState.errors.resume_url.message}</p>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    {canPersist
+                      ? "Used only if you have not uploaded a PDF for this application."
+                      : latestResume.data?.resume_url
+                        ? "Prefilled from your profile or last application — edit if needed."
+                        : (
+                          <>
+                            Until PDF upload storage is available, submit a public resume link. You can also save a
+                            preferred URL on your{" "}
+                            <Link to="/seeker/profile" className="text-signal underline">
+                              profile
+                            </Link>
+                            .
+                          </>
+                        )}
+                  </p>
+                </div>
+              )}
+
               <div className="space-y-2">
-                <Label htmlFor="resume_url">Resume URL</Label>
-                <Input id="resume_url" placeholder="https://ΓÇª" {...form.register("resume_url")} />
-                {form.formState.errors.resume_url && (
-                  <p className="text-xs text-destructive">{form.formState.errors.resume_url.message}</p>
+                <Label htmlFor="portfolio_url">Portfolio URL (optional)</Label>
+                <Input
+                  id="portfolio_url"
+                  placeholder="https://…"
+                  inputMode="url"
+                  {...form.register("portfolio_url")}
+                />
+                {form.formState.errors.portfolio_url && (
+                  <p className="text-xs text-destructive">{form.formState.errors.portfolio_url.message}</p>
                 )}
-                {latestResume.data?.resume_url ? (
-                  <p className="text-xs text-muted-foreground">
-                    Prefilled from your profile or last application ΓÇö edit if needed.
-                  </p>
-                ) : (
-                  <p className="text-xs text-muted-foreground">
-                    Add a public resume link. You can also save a preferred URL on your{" "}
-                    <Link to="/seeker/profile" className="text-signal underline">
-                      profile
-                    </Link>
-                    .
-                  </p>
+                {!canPersist && (
+                  <p className="text-xs text-muted-foreground">{PORTFOLIO_PERSISTENCE_NOTE}</p>
                 )}
               </div>
+
               <div className="space-y-2">
                 <Label htmlFor="cover_note">Cover note (optional)</Label>
                 <Textarea id="cover_note" rows={4} placeholder="Optional note for the recruiter" {...form.register("cover_note")} />
@@ -371,8 +528,13 @@ function JobDetailPage() {
               {deadlineLabel && (
                 <p className="text-xs text-muted-foreground">Apply by {deadlineLabel}.</p>
               )}
+              {apply.isError && (
+                <p role="alert" className="text-xs text-destructive">
+                  {(apply.error as Error).message}
+                </p>
+              )}
               <Button type="submit" variant="signal" className="w-full" disabled={apply.isPending}>
-                {apply.isPending ? "SubmittingΓÇª" : "Submit application"}
+                {apply.isPending ? "Submitting…" : "Submit application"}
               </Button>
             </form>
           )}

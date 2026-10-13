@@ -39,9 +39,9 @@ export const NOTIFY_EDGE_FUNCTION_DECISION = {
   assignmentMandatory: false,
   keepLocalImplementation: true,
   expandNotifyFunctionsBeforeDemo: false,
-  deliveryStatus: "pending_provider" as const,
+  deliveryStatus: "delivered" as const,
   rationale:
-    "Assignment does not mandate notifications. Keep auth scaffold; do not add email/table/new notify EFs before demo.",
+    "Deploy notify-application-status only. It authorizes via JWT and writes an idempotent in-app notification; no extra notify EFs or email provider.",
 } as const;
 
 /** Optional AI after core demo is green. */

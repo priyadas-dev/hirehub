@@ -250,3 +250,108 @@
   background-size: 200% 100%;
   animation: shimmer 1.6s ease-in-out infinite;
 }
+
+/* Role welcome (recruiter + seeker) — top-right overlay + SVG limb motion */
+@keyframes hh-welcome-slide-in {
+  from { opacity: 0; transform: translateX(48px) scale(0.96); }
+  to { opacity: 1; transform: translateX(0) scale(1); }
+}
+@keyframes hh-welcome-slide-out {
+  from { opacity: 1; transform: translateX(0) scale(1); }
+  to { opacity: 0; transform: translateX(52px) scale(0.96); }
+}
+@keyframes hh-welcome-bounce {
+  0%, 100% { transform: translateY(0); }
+  35% { transform: translateY(-10px); }
+  65% { transform: translateY(-4px); }
+}
+/* Arm rotates around shoulder pivot (nested SVG + origin at shoulder joint). */
+@keyframes hh-welcome-wave {
+  0%, 100% { transform: rotate(-8deg); }
+  25% { transform: rotate(42deg); }
+  50% { transform: rotate(-18deg); }
+  75% { transform: rotate(34deg); }
+}
+@keyframes hh-welcome-farewell {
+  0% { transform: translateX(0) rotate(0deg); }
+  40% { transform: translateX(4px) rotate(18deg); }
+  100% { transform: translateX(0) rotate(-6deg); }
+}
+@keyframes hh-welcome-shadow-pulse {
+  0%, 100% { transform: scaleX(1); opacity: 0.55; }
+  50% { transform: scaleX(0.86); opacity: 0.32; }
+}
+
+.hh-welcome-shell--enter {
+  animation: hh-welcome-slide-in 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.hh-welcome-shell--exit {
+  animation: hh-welcome-slide-out 0.45s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+.hh-welcome-card--enter {
+  animation: hh-welcome-slide-in 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.hh-welcome-card--exit {
+  animation: hh-welcome-slide-out 0.45s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+.hh-welcome-svg {
+  overflow: visible;
+}
+.hh-welcome-arm-root {
+  overflow: visible;
+  transform-box: fill-box;
+  transform-origin: 8px 12px;
+  will-change: transform;
+}
+.hh-welcome-arm {
+  transform-box: fill-box;
+  transform-origin: 8px 12px;
+  will-change: transform;
+}
+.hh-welcome-mascot--waving .hh-welcome-arm-root {
+  animation: hh-welcome-wave 0.75s ease-in-out infinite;
+}
+.hh-welcome-body {
+  transform-box: view-box;
+  transform-origin: 80px 100px;
+  will-change: transform;
+}
+/* Bounce during enter + idle (not only after the idle phase flip). */
+.hh-welcome-mascot--waving .hh-welcome-body,
+.hh-welcome-mascot--idle .hh-welcome-body,
+.hh-welcome-mascot--farewell .hh-welcome-body {
+  animation: hh-welcome-bounce 1.45s ease-in-out infinite;
+}
+.hh-welcome-mascot--farewell .hh-welcome-arm-root {
+  animation: hh-welcome-farewell 0.55s ease-in-out 2;
+}
+.hh-welcome-mascot--idle .hh-welcome-shadow,
+.hh-welcome-mascot--farewell .hh-welcome-shadow {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: hh-welcome-shadow-pulse 1.45s ease-in-out infinite;
+}
+
+/*
+  Reduced motion: keep a short slide + auto-dismiss timeline; disable limb loops.
+  Class + !important overrides the global `*` 0.01ms animation kill in @layer base.
+*/
+@media (prefers-reduced-motion: reduce) {
+  .hh-welcome-shell--enter,
+  .hh-welcome-card--enter {
+    animation: hh-welcome-slide-in 0.2s ease-out both !important;
+  }
+  .hh-welcome-shell--exit,
+  .hh-welcome-card--exit {
+    animation: hh-welcome-slide-out 0.2s ease-in both !important;
+  }
+  .hh-welcome-mascot--waving .hh-welcome-arm-root,
+  .hh-welcome-mascot--waving .hh-welcome-body,
+  .hh-welcome-mascot--idle .hh-welcome-body,
+  .hh-welcome-mascot--farewell .hh-welcome-body,
+  .hh-welcome-mascot--farewell .hh-welcome-arm-root,
+  .hh-welcome-mascot--idle .hh-welcome-shadow,
+  .hh-welcome-mascot--farewell .hh-welcome-shadow {
+    animation: none !important;
+  }
+}

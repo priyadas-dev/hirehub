@@ -68,9 +68,9 @@ function SettingsPage() {
           <div className="flex gap-3">
             <Building2 className="mt-0.5 size-5 text-signal" aria-hidden />
             <div>
-              <h2 className="text-base font-semibold">Company information</h2>
+              <h2 className="text-base font-semibold">Company profile</h2>
               <p className="text-sm text-muted-foreground">
-                Edit company name, industry, and website on your company profile page.
+                Edit company name, industry, website, and preview a logo on your company profile page.
               </p>
             </div>
           </div>
