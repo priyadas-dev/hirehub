@@ -2,6 +2,17 @@ import { supabase } from "@/integrations/supabase/client";
 import { requireRejectionReason } from "@/lib/reviews";
 import type { JobType } from "@/lib/hirehub";
 
+/**
+ * Proposed review/revision migrations (repo files). Apply in this order on staging
+ * first. Do not run PROPOSED_0006_reviews_and_revisions.sql — it is a pointer only.
+ */
+export const REVIEW_MIGRATION_ORDER = [
+  "PROPOSED_0004_companies_owner_cannot_self_approve.sql",
+  "PROPOSED_0005_notifications.sql",
+  "PROPOSED_0006a_add_rejected_enum_values.sql",
+  "PROPOSED_0006b_reviews_and_revisions.sql",
+] as const;
+
 /** True when PostgREST reports missing RPC / schema (migrations not applied). */
 export function isReviewSchemaUnavailable(error: { code?: string; message?: string } | null): boolean {
   if (!error) return false;
@@ -22,7 +33,7 @@ export function isReviewSchemaUnavailable(error: { code?: string; message?: stri
 
 function unavailableMessage(feature: string): Error {
   return new Error(
-    `${feature} requires proposed database migrations (0004→0005→0006) that are not applied on this project yet.`,
+    `${feature} requires proposed database migrations that are not applied on this project yet: ${REVIEW_MIGRATION_ORDER.join(" → ")}. Commit after 0006a before running 0006b. Do not apply the PROPOSED_0006 pointer file.`,
   );
 }
 

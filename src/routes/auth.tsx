@@ -151,7 +151,14 @@ function AuthPage() {
       }
       const s = await refresh();
       if (!s) throw new Error("Could not load your profile");
-      toast.success(mode === "signup" ? "Welcome to HireHub" : "Welcome back");
+      toast.success(mode === "signup" ? "Welcome to HireHub" : "Welcome back", {
+        description:
+          s.role === "admin"
+            ? "Opening your admin workspace."
+            : s.role === "recruiter"
+              ? "Opening your recruiter workspace."
+              : "Opening your job seeker workspace. Admin access requires role=admin on your profile (not available at signup).",
+      });
       goHome(s.role);
     } catch (err) {
       toast.error(friendly(err));

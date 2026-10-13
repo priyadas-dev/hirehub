@@ -2,12 +2,13 @@ import { useEffect, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { ArrowLeft, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Logo } from "@/components/brand/Logo";
 import { ROLE_HOME, useAuth } from "@/lib/auth";
+import { resetPasswordSchema } from "@/lib/account-password";
+import { establishPasswordRecoverySession } from "@/lib/password-recovery";
 import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/reset-password")({
@@ -22,13 +23,6 @@ export const Route = createFileRoute("/reset-password")({
   component: ResetPasswordPage,
 });
 
-const passwordSchema = z
-  .object({
-    password: z.string().min(8, "At least 8 characters").max(128),
-    confirm: z.string().min(8, "At least 8 characters").max(128),
-  })
-  .refine((v) => v.password === v.confirm, { message: "Passwords don't match", path: ["confirm"] });
-
 function ResetPasswordPage() {
   const [errors, setErrors] = useState<Partial<Record<string, string>>>({});
   const [busy, setBusy] = useState(false);
@@ -42,37 +36,14 @@ function ResetPasswordPage() {
     let cancelled = false;
 
     async function establishRecovery() {
-      // Supabase may deliver tokens in the URL hash or as ?code= for PKCE.
-      const { data: { session } } = await supabase.auth.getSession();
+      const result = await establishPasswordRecoverySession();
       if (cancelled) return;
-      if (session) {
+      if (result.ok) {
         setReady(true);
-        setChecking(false);
-        return;
+        setLinkError(null);
+      } else {
+        setLinkError(result.error);
       }
-
-      const hash = typeof window !== "undefined" ? window.location.hash.replace(/^#/, "") : "";
-      const params = new URLSearchParams(hash);
-      const accessToken = params.get("access_token");
-      const refreshToken = params.get("refresh_token");
-      const type = params.get("type");
-      if (accessToken && refreshToken && (type === "recovery" || !type)) {
-        const { error } = await supabase.auth.setSession({
-          access_token: accessToken,
-          refresh_token: refreshToken,
-        });
-        if (cancelled) return;
-        if (error) {
-          setLinkError("This reset link is invalid or has expired. Request a new one.");
-          setChecking(false);
-          return;
-        }
-        setReady(true);
-        setChecking(false);
-        return;
-      }
-
-      setLinkError("Open the reset link from your email to choose a new password.");
       setChecking(false);
     }
 
@@ -94,9 +65,9 @@ function ResetPasswordPage() {
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
-    const parsed = passwordSchema.safeParse({
-      password: fd.get("password"),
-      confirm: fd.get("confirm"),
+    const parsed = resetPasswordSchema.safeParse({
+      newPassword: fd.get("password"),
+      confirmPassword: fd.get("confirm"),
     });
     if (!parsed.success) {
       setErrors(Object.fromEntries(parsed.error.issues.map((i) => [String(i.path[0]), i.message])));
@@ -105,7 +76,7 @@ function ResetPasswordPage() {
     setErrors({});
     setBusy(true);
     try {
-      const { error } = await supabase.auth.updateUser({ password: parsed.data.password });
+      const { error } = await supabase.auth.updateUser({ password: parsed.data.newPassword });
       if (error) throw error;
       toast.success("Password updated");
       const s = await refresh();
@@ -127,13 +98,15 @@ function ResetPasswordPage() {
         <div className="flex items-center justify-between">
           <Logo />
           <Button variant="ghost" size="sm" asChild>
-            <Link to="/auth"><ArrowLeft /> Sign in</Link>
+            <Link to="/auth">
+              <ArrowLeft /> Sign in
+            </Link>
           </Button>
         </div>
         <div className="mx-auto my-auto w-full max-w-sm animate-fade-up py-12">
           <h1 className="font-display text-4xl">Set a new password</h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            Choose a strong password for your HireHub account.
+            Choose a strong password for your HireHub account. Passwords are stored by Supabase Auth only.
           </p>
 
           {checking ? (
@@ -143,7 +116,10 @@ function ResetPasswordPage() {
             </div>
           ) : linkError && !ready ? (
             <div className="mt-8 space-y-6">
-              <p role="alert" className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
+              <p
+                role="alert"
+                className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive"
+              >
                 {linkError}
               </p>
               <Button variant="signal" size="lg" className="w-full" asChild>
@@ -157,14 +133,15 @@ function ResetPasswordPage() {
                 label="New password"
                 type="password"
                 autoComplete="new-password"
-                error={errors["password"]}
+                error={errors["newPassword"] ?? errors["password"]}
+                hint="At least 8 characters with letters and a number."
               />
               <Field
                 id="confirm"
                 label="Confirm password"
                 type="password"
                 autoComplete="new-password"
-                error={errors["confirm"]}
+                error={errors["confirmPassword"] ?? errors["confirm"]}
               />
               <Button type="submit" variant="signal" size="lg" className="w-full" disabled={busy || !ready}>
                 {busy && <Loader2 className="animate-spin" />}
@@ -192,8 +169,14 @@ function Field({
   id,
   label,
   error,
+  hint,
   ...props
-}: { id: string; label: string; error?: string | undefined } & React.InputHTMLAttributes<HTMLInputElement>) {
+}: {
+  id: string;
+  label: string;
+  error?: string | undefined;
+  hint?: string;
+} & React.InputHTMLAttributes<HTMLInputElement>) {
   return (
     <div className="space-y-1.5">
       <Label htmlFor={id}>{label}</Label>
@@ -201,11 +184,20 @@ function Field({
         id={id}
         name={id}
         aria-invalid={!!error}
-        aria-describedby={error ? `${id}-err` : undefined}
+        aria-describedby={error ? `${id}-err` : hint ? `${id}-hint` : undefined}
         className="h-11 rounded-lg bg-card focus-visible:ring-signal/30"
         {...props}
       />
-      {error && <p id={`${id}-err`} className="text-xs text-destructive">{error}</p>}
+      {hint && !error && (
+        <p id={`${id}-hint`} className="text-xs text-muted-foreground">
+          {hint}
+        </p>
+      )}
+      {error && (
+        <p id={`${id}-err`} className="text-xs text-destructive">
+          {error}
+        </p>
+      )}
     </div>
   );
 }
@@ -218,8 +210,11 @@ function friendly(err: unknown): string {
         ? String((err as { message: unknown }).message)
         : "";
   const m = msg.toLowerCase();
-  if (m.includes("password") && (m.includes("weak") || m.includes("pwned") || m.includes("least") || m.includes("characters") || m.includes("same"))) {
-    return "That password isn't allowed. Use at least 8 characters and avoid reusing your old password.";
+  if (
+    m.includes("password") &&
+    (m.includes("weak") || m.includes("pwned") || m.includes("least") || m.includes("characters") || m.includes("same"))
+  ) {
+    return "That password isn't allowed. Use at least 8 characters with letters and a number, and avoid reusing your old password.";
   }
   if (m.includes("session") || m.includes("not authenticated") || m.includes("jwt")) {
     return "Your reset session expired. Request a new link and try again.";

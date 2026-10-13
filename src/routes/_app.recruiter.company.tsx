@@ -6,6 +6,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Building2, PlusSquare, Settings } from "lucide-react";
 import { toast } from "sonner";
+import { CompanyImagePicker } from "@/components/company/CompanyImagePicker";
 import { CardSkeleton, EmptyState, ErrorState, PageHeader } from "@/components/feedback/States";
 import { ContactProfileCard } from "@/components/profile/ContactProfileCard";
 import { Button } from "@/components/ui/button";
@@ -168,7 +169,7 @@ function CompanyPage() {
         <ContactProfileCard
           userId={user.id}
           role={user.role}
-          email={contact.data.email}
+          email={contact.data.email || user.email}
           fullName={contact.data.full_name ?? ""}
           phone={contact.data.phone}
           queryKey={["recruiter-contact", id]}
@@ -184,7 +185,8 @@ function CompanyPage() {
           <div>
             <h2 className="text-lg font-semibold tracking-tight">Company information</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Shown to admins during review. Logo is not in the current schema.
+              Edit name, industry, and website — the fields supported by the current companies schema. Description and
+              logo columns are not in the live schema yet.
             </p>
           </div>
           {exists && !editingCompany && (
@@ -215,26 +217,26 @@ function CompanyPage() {
           </div>
         )}
 
-      {approved && (
-        <div className="rounded-2xl border bg-card px-4 py-3 text-sm sm:px-5">
-          <span className="font-medium">{profile?.name}</span> is approved. Post a job whenever you are ready — new
-          listings stay pending until an admin approves them for seekers.
-        </div>
-      )}
+        {approved && (
+          <div className="rounded-2xl border bg-card px-4 py-3 text-sm sm:px-5">
+            <span className="font-medium">{profile?.name}</span> is approved. Post a job whenever you are ready — new
+            listings stay pending until an admin approves them for seekers.
+          </div>
+        )}
 
-      {rejected && (
-        <div className="rounded-2xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm sm:px-5">
-          <p className="font-medium text-destructive">
-            <span className="text-foreground">{profile?.name}</span> was rejected
-          </p>
-          {profile?.rejection_reason && (
-            <p className="mt-1 text-muted-foreground">Reason: {profile.rejection_reason}</p>
-          )}
-          <p className="mt-1 text-xs text-muted-foreground">
-            Update your company details below. An admin must approve again before you can post jobs.
-          </p>
-        </div>
-      )}
+        {rejected && (
+          <div className="rounded-2xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm sm:px-5">
+            <p className="font-medium text-destructive">
+              <span className="text-foreground">{profile?.name}</span> was rejected
+            </p>
+            {profile?.rejection_reason && (
+              <p className="mt-1 text-muted-foreground">Reason: {profile.rejection_reason}</p>
+            )}
+            <p className="mt-1 text-xs text-muted-foreground">
+              Update your company details below. An admin must approve again before you can post jobs.
+            </p>
+          </div>
+        )}
 
         {exists && !editingCompany && (
           <dl className="surface-card grid gap-4 p-5 sm:grid-cols-2 sm:p-6">
@@ -250,7 +252,12 @@ function CompanyPage() {
               <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Website</dt>
               <dd className="mt-1 break-all text-sm font-medium">
                 {profile?.website ? (
-                  <a href={profile.website} className="text-signal underline-offset-4 hover:underline" target="_blank" rel="noopener noreferrer">
+                  <a
+                    href={profile.website}
+                    className="text-signal underline-offset-4 hover:underline"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
                     {profile.website}
                   </a>
                 ) : (
@@ -275,6 +282,7 @@ function CompanyPage() {
           <form
             className="surface-card max-w-xl space-y-5 p-5 sm:p-6"
             onSubmit={form.handleSubmit((v) => save.mutate(v))}
+            noValidate
           >
             <div className="space-y-2">
               <Label htmlFor="name">Company name</Label>
@@ -294,15 +302,18 @@ function CompanyPage() {
                 <p className="text-xs text-destructive">{form.formState.errors.website.message}</p>
               )}
             </div>
+
+            <CompanyImagePicker canPersist={false} />
+
             <div className="flex flex-wrap gap-2">
               <Button type="submit" variant="signal" disabled={save.isPending}>
                 {save.isPending
-              ? "Saving…"
-              : !exists
-                ? "Submit for approval"
-                : rejected
-                  ? "Save & resubmit for approval"
-                  : "Save changes"}
+                  ? "Saving…"
+                  : !exists
+                    ? "Submit for approval"
+                    : rejected
+                      ? "Save & resubmit for approval"
+                      : "Save changes"}
               </Button>
               {exists && (
                 <Button
@@ -322,6 +333,11 @@ function CompanyPage() {
                 </Button>
               )}
             </div>
+            {save.isError && (
+              <p role="alert" className="text-xs text-destructive">
+                {(save.error as Error).message}
+              </p>
+            )}
           </form>
         )}
       </section>

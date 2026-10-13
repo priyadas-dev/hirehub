@@ -147,9 +147,11 @@ function SeekerProfilePage() {
         noValidate
       >
         <div className="space-y-2">
-          <Label htmlFor="email">Email</Label>
-          <Input id="email" value={profile.data?.email ?? ""} disabled readOnly />
-          <p className="text-xs text-muted-foreground">Email comes from your account and cannot be changed here.</p>
+          <Label htmlFor="email">Account email</Label>
+          <Input id="email" value={profile.data?.email || user?.email || ""} disabled readOnly autoComplete="username" />
+          <p className="text-xs text-muted-foreground">
+            This is your Supabase Auth sign-in email. It cannot be edited or saved from this profile form.
+          </p>
         </div>
         <div className="space-y-2">
           <Label htmlFor="full_name">Full name</Label>

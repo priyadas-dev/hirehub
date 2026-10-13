@@ -44,7 +44,7 @@ export function ContactSection() {
           <div className="surface-card relative p-6 sm:p-8">
             <h3 className="text-lg font-semibold tracking-tight">Send a message</h3>
             <p className="mt-1 text-sm text-muted-foreground">
-              All fields are required. We use your email only to reply to this enquiry.
+              No sign-in needed. All fields are required. We use your email only to reply to this enquiry.
             </p>
             <ContactForm className="relative mt-6" />
           </div>

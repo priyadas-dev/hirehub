@@ -1,24 +1,29 @@
 import { createServerFn } from "@tanstack/react-start";
 import {
+  buildResendContactPayload,
   CONTACT_SERVER_ENV,
   contactMessageSchema,
   SUPPORT_EMAIL,
   type ContactMessageInput,
   type ContactSubmitResult,
 } from "@/lib/contact";
+import { classifyResendFailure, userMessageForResendFailure } from "@/lib/resend-errors";
 
 /**
- * Contact form delivery via createServerFn (handler runs only on the server).
+ * Public contact form delivery (no sign-in required).
+ * Runs only on the server via createServerFn.
  *
  * Required env (never use VITE_ prefix — must not reach the browser):
  * - RESEND_API_KEY — Resend API key
- * - CONTACT_FROM_EMAIL — verified sender address on your Resend domain
+ * - CONTACT_FROM_EMAIL — HireHub sender, e.g. HireHub <onboarding@resend.dev>
  * Optional:
- * - CONTACT_TO_EMAIL — defaults to SUPPORT_EMAIL (priya.das@sjinnovation.com)
+ * - CONTACT_TO_EMAIL — inbox that receives enquiries (defaults to SUPPORT_EMAIL).
  *
- * Local: set in project `.env`, then restart `npm run dev`.
- * Vercel: Project Settings → Environment Variables as Secret (Production + Preview),
- * then Redeploy. Local `.env` does not configure Vercel or Lovable.
+ * Free Resend + onboarding@resend.dev: Resend only delivers to the Resend account
+ * email. Arbitrary visitor→arbitrary inbox delivery needs a verified domain.
+ *
+ * Local: set in `.env`, restart `npm run dev`.
+ * Hosted: set secrets in Vercel/Lovable and redeploy.
  */
 
 const RATE_WINDOW_MS = 60_000;
@@ -55,7 +60,6 @@ async function sendWithResend(input: {
   const to = process.env[CONTACT_SERVER_ENV.toEmail]?.trim() || SUPPORT_EMAIL;
 
   if (!apiKey || !from) {
-    // Log missing names only — never expose ops setup text to the browser.
     console.error("contact delivery not configured", {
       missing: [
         !apiKey ? CONTACT_SERVER_ENV.resendApiKey : null,
@@ -65,18 +69,27 @@ async function sendWithResend(input: {
     return {
       ok: false,
       code: "provider_not_configured",
-      message: "Automatic email sending is not available yet. Use the Gmail or email-app option to reach support.",
+      message: userMessageForResendFailure("provider_missing"),
     };
   }
 
-  const text = [
-    `HireHub contact form`,
-    ``,
-    `From: ${input.fullName} <${input.email}>`,
-    `Subject: ${input.subject}`,
-    ``,
-    input.message,
-  ].join("\n");
+  let payload;
+  try {
+    payload = buildResendContactPayload({
+      from,
+      to,
+      visitorName: input.fullName,
+      visitorEmail: input.email,
+      subject: input.subject,
+      message: input.message,
+    });
+  } catch {
+    return {
+      ok: false,
+      code: "delivery_failed",
+      message: userMessageForResendFailure("other"),
+    };
+  }
 
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
@@ -84,22 +97,46 @@ async function sendWithResend(input: {
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      from,
-      to: [to],
-      reply_to: input.email,
-      subject: `[HireHub] ${input.subject}`,
-      text,
-    }),
+    body: JSON.stringify(payload),
   });
 
+  let body: unknown = null;
+  try {
+    body = await res.json();
+  } catch {
+    body = null;
+  }
+
   if (!res.ok) {
-    // Do not log message body or API key material.
-    console.error("contact delivery failed", { status: res.status });
+    const kind = classifyResendFailure(res.status, body);
+    console.error("contact delivery failed", { status: res.status, kind });
+
+    if (kind === "testing_recipient_restricted") {
+      return {
+        ok: false,
+        code: "provider_not_configured",
+        message: userMessageForResendFailure(kind),
+      };
+    }
+
     return {
       ok: false,
       code: "delivery_failed",
-      message: "We couldn't send your message right now. Please try again in a few minutes.",
+      message: userMessageForResendFailure(kind),
+    };
+  }
+
+  // Only claim success when Resend confirms with an id.
+  const deliveredId =
+    typeof body === "object" && body && "id" in body && typeof (body as { id: unknown }).id === "string"
+      ? (body as { id: string }).id
+      : null;
+  if (!deliveredId) {
+    console.error("contact delivery failed", { status: res.status, kind: "missing_id" });
+    return {
+      ok: false,
+      code: "delivery_failed",
+      message: userMessageForResendFailure("other"),
     };
   }
 
@@ -148,7 +185,7 @@ export const submitContactMessage = createServerFn({ method: "POST" })
       return {
         ok: false,
         code: "delivery_failed",
-        message: "We couldn't send your message right now. Please try again in a few minutes.",
+        message: userMessageForResendFailure("other"),
       };
     }
   });

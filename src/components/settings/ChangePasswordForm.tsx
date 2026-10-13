@@ -16,6 +16,7 @@ import {
   setPasswordSchema,
   type PasswordAuthMode,
 } from "@/lib/account-password";
+import { passwordResetRedirectUrl } from "@/lib/password-recovery";
 import { supabase } from "@/integrations/supabase/client";
 
 type ChangeValues = z.infer<typeof changePasswordSchema>;
@@ -24,6 +25,8 @@ type SetValues = z.infer<typeof setPasswordSchema>;
 export function ChangePasswordForm({ email }: { email: string }) {
   const [mode, setMode] = useState<PasswordAuthMode | null>(null);
   const [modeError, setModeError] = useState<string | null>(null);
+  const [formOpen, setFormOpen] = useState(false);
+  const [inlineSuccess, setInlineSuccess] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -59,34 +62,50 @@ export function ChangePasswordForm({ email }: { email: string }) {
         newPassword: values.newPassword,
       }),
     onSuccess: () => {
+      setInlineSuccess("Password updated successfully.");
       toast.success("Password updated");
       changeForm.reset();
+      setFormOpen(false);
     },
-    onError: (e: Error) => toast.error("Could not change password", { description: e.message }),
+    onError: (e: Error) => {
+      setInlineSuccess(null);
+      toast.error("Could not change password", { description: e.message });
+    },
   });
 
   const setPassword = useMutation({
     mutationFn: (values: SetValues) => setPasswordForSignedInUser(values.newPassword),
     onSuccess: () => {
+      setInlineSuccess("Password set. You can sign in with email and password as well as Google.");
       toast.success("Password set", {
         description: "You can now sign in with email and password as well as Google.",
       });
       setForm.reset();
       setMode("change");
+      setFormOpen(false);
     },
-    onError: (e: Error) => toast.error("Could not set password", { description: e.message }),
+    onError: (e: Error) => {
+      setInlineSuccess(null);
+      toast.error("Could not set password", { description: e.message });
+    },
   });
 
   const recover = useMutation({
     mutationFn: async () => {
-      const redirectTo = `${window.location.origin}/reset-password`;
-      await sendPasswordRecoveryEmail(email, redirectTo);
+      await sendPasswordRecoveryEmail(email, passwordResetRedirectUrl());
     },
-    onSuccess: () =>
+    onSuccess: () => {
+      setInlineSuccess(
+        "If that email belongs to your account, a reset link is on the way. Open it on this HireHub site to continue.",
+      );
       toast.success("Check your email", {
-        description: "We sent a link to set or reset your password.",
-      }),
-    onError: (e: Error) => toast.error("Could not send reset email", { description: e.message }),
+        description: "If an account exists for that address, a reset link is on the way.",
+      });
+    },
+    onError: (e: Error) => {
+      setInlineSuccess(null);
+      toast.error("Could not send reset email", { description: e.message });
+    },
   });
 
   if (modeError) {
@@ -97,12 +116,50 @@ export function ChangePasswordForm({ email }: { email: string }) {
     return <p className="text-sm text-muted-foreground">Checking how you sign in…</p>;
   }
 
+  const openLabel = mode === "set" ? "Set password" : "Change password";
+
+  if (!formOpen) {
+    return (
+      <div className="space-y-4">
+        <p className="text-sm text-muted-foreground">
+          {mode === "set"
+            ? "You signed in with Google and do not have an email password yet."
+            : "Keep your account secure. The password form stays hidden until you choose to update it."}
+        </p>
+        {inlineSuccess && (
+          <p role="status" className="rounded-lg border border-signal/30 bg-signal-soft/50 px-3 py-2 text-sm">
+            {inlineSuccess}
+          </p>
+        )}
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            variant="signal"
+            onClick={() => {
+              setInlineSuccess(null);
+              setFormOpen(true);
+            }}
+          >
+            {openLabel}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={recover.isPending || !email}
+            onClick={() => recover.mutate()}
+          >
+            {recover.isPending ? "Sending…" : "Forgot current password?"}
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   if (mode === "set") {
     return (
       <div className="space-y-5">
         <p className="text-sm text-muted-foreground">
-          You signed in with Google and do not have an email password yet. Set one here, or receive a reset link by
-          email.
+          Set an email password here, or receive a reset link by email. Passwords are handled by Supabase Auth only.
         </p>
         <form className="space-y-4" onSubmit={setForm.handleSubmit((v) => setPassword.mutate(v))} noValidate>
           <div className="space-y-2">
@@ -134,7 +191,18 @@ export function ChangePasswordForm({ email }: { email: string }) {
               disabled={recover.isPending || !email}
               onClick={() => recover.mutate()}
             >
-              {recover.isPending ? "Sending…" : "Email me a reset link"}
+              {recover.isPending ? "Sending…" : "Forgot current password?"}
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              disabled={setPassword.isPending}
+              onClick={() => {
+                setForm.reset();
+                setFormOpen(false);
+              }}
+            >
+              Cancel
             </Button>
           </div>
         </form>
@@ -167,6 +235,7 @@ export function ChangePasswordForm({ email }: { email: string }) {
         {changeForm.formState.errors.newPassword && (
           <p className="text-xs text-destructive">{changeForm.formState.errors.newPassword.message}</p>
         )}
+        <p className="text-xs text-muted-foreground">At least 8 characters with letters and a number.</p>
       </div>
       <div className="space-y-2">
         <Label htmlFor="confirm-password">Confirm new password</Label>
@@ -186,6 +255,17 @@ export function ChangePasswordForm({ email }: { email: string }) {
         </Button>
         <Button type="button" variant="outline" disabled={recover.isPending || !email} onClick={() => recover.mutate()}>
           {recover.isPending ? "Sending…" : "Forgot current password?"}
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          disabled={change.isPending}
+          onClick={() => {
+            changeForm.reset();
+            setFormOpen(false);
+          }}
+        >
+          Cancel
         </Button>
       </div>
     </form>

@@ -15,7 +15,7 @@ type ContactProfileCardProps = {
   email: string;
   fullName: string;
   phone: string | null;
-  /** When false, role is shown read-only (admins cannot change role here). */
+  /** When true, show current role as read-only text (never editable). */
   showRole?: boolean;
   queryKey: unknown[];
   onSaved?: () => void | Promise<void>;
@@ -98,30 +98,33 @@ export function ContactProfileCard({
           noValidate
         >
           <div className="space-y-2">
-            <Label htmlFor="contact-email">Email</Label>
-            <Input id="contact-email" value={email} disabled readOnly />
-            <p className="text-xs text-muted-foreground">Email comes from your account and cannot be changed here.</p>
+            <Label htmlFor="contact-email">Account email</Label>
+            <Input id="contact-email" value={email} disabled readOnly autoComplete="username" />
+            <p className="text-xs text-muted-foreground">
+              This is your Supabase Auth sign-in email. It cannot be edited from this form — changing it requires the
+              Auth email-change confirmation flow in Supabase, not a HireHub profile field.
+            </p>
           </div>
           <div className="space-y-2">
             <Label htmlFor="contact-full_name">Full name</Label>
-            <Input id="contact-full_name" {...form.register("full_name")} />
+            <Input id="contact-full_name" {...form.register("full_name")} autoComplete="name" />
             {form.formState.errors.full_name && (
               <p className="text-xs text-destructive">{form.formState.errors.full_name.message}</p>
             )}
           </div>
           <div className="space-y-2">
             <Label htmlFor="contact-phone">Phone</Label>
-            <Input id="contact-phone" {...form.register("phone")} inputMode="tel" placeholder="+880…" />
+            <Input id="contact-phone" {...form.register("phone")} inputMode="tel" placeholder="+880…" autoComplete="tel" />
             {form.formState.errors.phone && (
               <p className="text-xs text-destructive">{form.formState.errors.phone.message}</p>
             )}
           </div>
           {showRole && (
-            <div className="space-y-2">
-              <Label>Role</Label>
-              <Input value={ROLE_LABEL[role]} disabled readOnly />
-              <p className="text-xs text-muted-foreground">Role cannot be changed from your profile.</p>
-            </div>
+            <p className="text-xs text-muted-foreground">
+              Your role is <span className="font-medium text-foreground">{ROLE_LABEL[role]}</span> and cannot be
+              changed here.
+              {role === "admin" ? " Admins manage other users’ roles from Manage Users." : ""}
+            </p>
           )}
           <div className="flex flex-wrap gap-2">
             <Button type="submit" variant="signal" disabled={save.isPending}>

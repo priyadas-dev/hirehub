@@ -16,6 +16,7 @@ import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/s
 import { Logo } from "@/components/brand/Logo";
 import { ROLE_HOME, ROLE_LABEL, useAuth, type SessionUser } from "@/lib/auth";
 import { headerSearchPlaceholder, headerSearchTarget } from "@/lib/header-search";
+import { APP_CONTENT_SHELL } from "@/lib/shell-layout";
 import { NotificationsButton } from "./NotificationsPanel";
 import { SidebarNav } from "./AppSidebar";
 
@@ -161,25 +162,28 @@ function HeaderSearch({ user }: { user: SessionUser }) {
 export function AppHeader({ user }: { user: SessionUser }) {
   const [open, setOpen] = useState(false);
   return (
-    <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b bg-background/80 px-4 backdrop-blur-md sm:px-6">
-      <Sheet open={open} onOpenChange={setOpen}>
-        <SheetTrigger asChild>
-          <Button variant="ghost" size="icon" className="lg:hidden" aria-label="Open navigation">
-            <Menu />
-          </Button>
-        </SheetTrigger>
-        <SheetContent side="left" className="w-72 bg-sidebar p-5">
-          <SheetTitle className="sr-only">Navigation</SheetTitle>
-          <Logo to={ROLE_HOME[user.role]} className="mb-8 px-2" />
-          <SidebarNav role={user.role} onNavigate={() => setOpen(false)} />
-        </SheetContent>
-      </Sheet>
+    <header className="sticky top-0 z-30 border-b bg-background/80 backdrop-blur-md">
+      {/* Same max-width + horizontal padding as main so search/profile align with welcome cards. */}
+      <div className={`${APP_CONTENT_SHELL} flex h-16 items-center gap-3`}>
+        <Sheet open={open} onOpenChange={setOpen}>
+          <SheetTrigger asChild>
+            <Button variant="ghost" size="icon" className="lg:hidden" aria-label="Open navigation">
+              <Menu />
+            </Button>
+          </SheetTrigger>
+          <SheetContent side="left" className="w-72 bg-sidebar p-5">
+            <SheetTitle className="sr-only">Navigation</SheetTitle>
+            <Logo to={ROLE_HOME[user.role]} className="mb-8 px-2" />
+            <SidebarNav role={user.role} onNavigate={() => setOpen(false)} />
+          </SheetContent>
+        </Sheet>
 
-      <HeaderSearch user={user} />
+        <HeaderSearch user={user} />
 
-      <div className="flex shrink-0 items-center gap-1.5">
-        <NotificationsButton userId={user.id} />
-        <UserMenu user={user} />
+        <div className="ml-auto flex shrink-0 items-center gap-1.5">
+          <NotificationsButton userId={user.id} />
+          <UserMenu user={user} />
+        </div>
       </div>
     </header>
   );

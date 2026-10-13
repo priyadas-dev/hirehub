@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  ADMIN_BOOTSTRAP_SQL,
   CONFIGURED_SUPABASE_PROJECT_REF,
   DEADLINE_MIGRATION_VERIFY_SQL,
   GOOGLE_OAUTH_REDIRECT_URLS,
@@ -41,13 +42,22 @@ describe("assignment verification constants", () => {
 
   it("documents Google OAuth redirect URLs for localhost and Vercel", () => {
     expect(GOOGLE_OAUTH_REDIRECT_URLS.some((u) => u.includes("localhost:8080/auth"))).toBe(true);
+    expect(GOOGLE_OAUTH_REDIRECT_URLS.some((u) => u.includes("localhost:8083/auth"))).toBe(true);
     expect(GOOGLE_OAUTH_REDIRECT_URLS.some((u) => u.includes("vercel.app/auth"))).toBe(true);
   });
 
   it("documents password reset redirect URLs for localhost and Vercel", () => {
     expect(PASSWORD_RESET_REDIRECT_URLS.some((u) => u.includes("localhost:8082/reset-password"))).toBe(true);
+    expect(PASSWORD_RESET_REDIRECT_URLS.some((u) => u.includes("localhost:8083/reset-password"))).toBe(true);
     expect(PASSWORD_RESET_REDIRECT_URLS.some((u) => u.includes("vercel.app/reset-password"))).toBe(true);
     expect(LIVE_DEMO_CHECKLIST.some((c) => c.includes("Forgot password"))).toBe(true);
   });
+
+  it("documents first-admin bootstrap SQL (signup never creates admins)", () => {
+    expect(ADMIN_BOOTSTRAP_SQL).toMatch(/SET role = 'admin'/);
+    expect(ADMIN_BOOTSTRAP_SQL).toMatch(/profiles_protect_role/);
+  });
 });
+
+
 
