@@ -268,7 +268,7 @@ function Field({
 }: {
   id: string;
   label: string;
-  error?: string;
+  error?: string | undefined;
   value: string;
   onChange: (value: string) => void;
   disabled?: boolean;

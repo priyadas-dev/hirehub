@@ -18,7 +18,8 @@ describe("schema availability guards", () => {
       "PROPOSED_0006a_add_rejected_enum_values.sql",
       "PROPOSED_0006b_reviews_and_revisions.sql",
     ]);
-    expect(REVIEW_MIGRATION_ORDER.some((f) => f === "PROPOSED_0006_reviews_and_revisions.sql")).toBe(false);
+    const files: readonly string[] = REVIEW_MIGRATION_ORDER;
+    expect(files.includes("PROPOSED_0006_reviews_and_revisions.sql")).toBe(false);
   });
 
   it("keeps notification ownership errors distinct from missing-table", () => {

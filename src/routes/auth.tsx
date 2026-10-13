@@ -26,13 +26,16 @@ export const Route = createFileRoute("/auth")({
     intent?: AuthIntent;
     error?: string;
     error_description?: string;
-  } => ({
-    ...(typeof s["redirect"] === "string" ? { redirect: s["redirect"] } : {}),
-    ...(s["mode"] === "signup" ? { mode: "signup" as const } : {}),
-    ...(parseAuthIntent(s["intent"]) ? { intent: parseAuthIntent(s["intent"]) } : {}),
-    ...(typeof s["error"] === "string" ? { error: s["error"] } : {}),
-    ...(typeof s["error_description"] === "string" ? { error_description: s["error_description"] } : {}),
-  }),
+  } => {
+    const intent = parseAuthIntent(s["intent"]);
+    return {
+      ...(typeof s["redirect"] === "string" ? { redirect: s["redirect"] } : {}),
+      ...(s["mode"] === "signup" ? { mode: "signup" as const } : {}),
+      ...(intent ? { intent } : {}),
+      ...(typeof s["error"] === "string" ? { error: s["error"] } : {}),
+      ...(typeof s["error_description"] === "string" ? { error_description: s["error_description"] } : {}),
+    };
+  },
   head: () => ({
     meta: [
       { title: "Sign in — HireHub" },
