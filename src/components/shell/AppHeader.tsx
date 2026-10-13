@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
-import { Bell, LogOut, Menu, Search, Settings, User } from "lucide-react";
+import { LogOut, Menu, Search, Settings, User } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -16,6 +16,7 @@ import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/s
 import { Logo } from "@/components/brand/Logo";
 import { ROLE_HOME, ROLE_LABEL, useAuth, type SessionUser } from "@/lib/auth";
 import { headerSearchPlaceholder, headerSearchTarget } from "@/lib/header-search";
+import { NotificationsButton } from "./NotificationsPanel";
 import { SidebarNav } from "./AppSidebar";
 
 function initials(name: string) {
@@ -30,7 +31,7 @@ function initials(name: string) {
 function profilePath(role: SessionUser["role"]) {
   if (role === "seeker") return "/seeker/profile" as const;
   if (role === "recruiter") return "/recruiter/company" as const;
-  return "/admin" as const;
+  return "/admin/profile" as const;
 }
 
 function UserMenu({ user }: { user: SessionUser }) {
@@ -63,7 +64,7 @@ function UserMenu({ user }: { user: SessionUser }) {
         <DropdownMenuItem onSelect={() => void navigate({ to: profilePath(user.role) })}>
           <User /> Profile
         </DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => toast("Settings are coming soon")}>
+        <DropdownMenuItem onSelect={() => void navigate({ to: "/settings" })}>
           <Settings /> Settings
         </DropdownMenuItem>
         <DropdownMenuSeparator />
@@ -177,20 +178,7 @@ export function AppHeader({ user }: { user: SessionUser }) {
       <HeaderSearch user={user} />
 
       <div className="flex shrink-0 items-center gap-1.5">
-        <Button
-          variant="ghost"
-          size="icon"
-          aria-label="Notifications"
-          className="relative"
-          onClick={() =>
-            toast("You're all caught up", {
-              description: "New notifications will show up here.",
-            })
-          }
-        >
-          <Bell />
-          <span className="absolute right-2 top-2 size-2 rounded-full bg-signal ring-2 ring-background" />
-        </Button>
+        <NotificationsButton userId={user.id} />
         <UserMenu user={user} />
       </div>
     </header>

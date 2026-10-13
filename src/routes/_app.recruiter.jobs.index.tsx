@@ -4,6 +4,7 @@ import { Briefcase, Pencil, PlusSquare, Users } from "lucide-react";
 import { toast } from "sonner";
 import { z } from "zod";
 import { CardSkeleton, EmptyState, ErrorState, PageHeader } from "@/components/feedback/States";
+import { RecruiterJobMeta } from "@/components/jobs/RecruiterJobMeta";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -29,10 +30,10 @@ import {
 } from "@/lib/job-fields";
 import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
-import { fmtDate, supabase } from "@/components/dashboard/parts";
+import { supabase } from "@/components/dashboard/parts";
 
 const searchSchema = z.object({
-  status: z.enum(["pending", "approved", "closed"]).optional(),
+  status: z.enum(["pending", "approved", "closed", "rejected"]).optional(),
   q: z.string().optional(),
 });
 
@@ -40,7 +41,7 @@ export const Route = createFileRoute("/_app/recruiter/jobs/")({
   validateSearch: searchSchema,
   head: () => ({
     meta: [
-      { title: "My job posts ΓÇö HireHub" },
+      { title: "My job posts — HireHub" },
       { name: "description", content: "Manage your job listings." },
     ],
   }),
@@ -108,7 +109,7 @@ function MyJobsPage() {
       <PageHeader
         eyebrow="Recruiter"
         title="My job posts"
-        description="Edit listings, close roles that are filled, and jump to applicants."
+        description="Open a listing for full details, edit, or close roles that are filled."
         actions={
           <Button variant="signal" asChild>
             <Link to="/recruiter/jobs/new">
@@ -130,7 +131,7 @@ function MyJobsPage() {
                 }),
               })
             }
-            placeholder="Search by job titleΓÇª"
+            placeholder="Search by job title…"
             className="w-full sm:max-w-xs"
             aria-label="Search by job title"
           />
@@ -170,8 +171,8 @@ function MyJobsPage() {
         {!jobs.isLoading && !jobs.isError && (
           <p className="text-sm text-muted-foreground">
             {filteredCount} listing{filteredCount === 1 ? "" : "s"}
-            {search.status ? ` ┬╖ ${JOB_STATUS_LABEL[search.status]}` : ""}
-            {titleQuery ? ` ┬╖ ΓÇ£${titleQuery}ΓÇ¥` : ""}
+            {search.status ? ` · ${JOB_STATUS_LABEL[search.status]}` : ""}
+            {titleQuery ? ` · “${titleQuery}”` : ""}
           </p>
         )}
       </div>
@@ -184,83 +185,103 @@ function MyJobsPage() {
         <ul className="surface-card divide-y">
           {jobs.data.map((j) => {
             const appCount = Array.isArray(j.applications) ? (j.applications[0]?.count ?? 0) : 0;
-            const canEdit = j.status !== "closed";
+            const canEdit = j.status !== "closed" && j.status !== "rejected";
             const canClose = j.status === "approved" || j.status === "pending";
             const deadline = resolveJobDeadline(j.application_deadline, j.description);
             const deadlineLabel = fmtDeadline(deadline);
             const deadlineExpired = isApplicationDeadlinePassed(deadline);
             const status = j.status as JobStatus;
             return (
-              <li
-                key={j.id}
-                className="flex flex-col gap-4 px-4 py-4 sm:px-5 sm:py-5 lg:flex-row lg:items-center lg:justify-between"
-              >
-                <div className="min-w-0 space-y-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p className="truncate font-medium">{j.title}</p>
+              <li key={j.id}>
+                <div className="flex flex-col gap-4 px-4 py-4 sm:px-5 sm:py-5 lg:flex-row lg:items-start lg:justify-between">
+                  <Link
+                    to="/recruiter/jobs/$jobId"
+                    params={{ jobId: j.id }}
+                    className="min-w-0 flex-1 space-y-2 rounded-lg outline-none transition-colors hover:bg-muted/30 focus-visible:ring-2 focus-visible:ring-ring lg:-m-2 lg:p-2"
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <p className="min-w-0 flex-1 font-medium leading-snug text-foreground">{j.title}</p>
+                      <span
+                        className={cn(
+                          "shrink-0 rounded-full border px-2.5 py-0.5 text-xs font-medium lg:hidden",
+                          JOB_STATUS_BADGE_CLASS[status],
+                        )}
+                      >
+                        {JOB_STATUS_LABEL[status]}
+                      </span>
+                    </div>
+                    <RecruiterJobMeta
+                      companyName={j.companies?.name}
+                      location={j.location}
+                      createdAt={j.created_at}
+                      applicantCount={appCount}
+                      deadlineLabel={deadlineLabel}
+                      deadlineExpired={deadlineExpired}
+                      jobTypeLabel={JOB_TYPE_LABEL[j.job_type]}
+                    />
+                  </Link>
+
+                  <div className="flex shrink-0 flex-col items-stretch gap-2 sm:flex-row sm:flex-wrap sm:items-center lg:items-end">
                     <span
                       className={cn(
-                        "rounded-full border px-2.5 py-0.5 text-xs font-medium",
+                        "hidden rounded-full border px-2.5 py-1 text-center text-xs font-medium lg:inline-flex lg:self-start",
                         JOB_STATUS_BADGE_CLASS[status],
                       )}
                     >
                       {JOB_STATUS_LABEL[status]}
                     </span>
-                    {deadlineExpired && (
-                      <span className="rounded-full border border-status-interview/40 bg-status-interview-soft/60 px-2.5 py-0.5 text-xs font-medium text-status-interview">
-                        Deadline expired
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    {j.companies?.name ?? "Company"} ┬╖ {j.location ?? "Remote"} ┬╖ {JOB_TYPE_LABEL[j.job_type]} ┬╖{" "}
-                    {fmtDate(j.created_at)}
-                    {deadlineLabel ? ` ┬╖ Deadline ${deadlineLabel}` : ""}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {appCount} applicant{appCount === 1 ? "" : "s"}
-                  </p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <Button variant="outline" size="sm" asChild>
-                    <Link to="/recruiter/applicants" search={{ jobId: j.id }}>
-                      <Users /> Applicants
-                    </Link>
-                  </Button>
-                  {canEdit && (
-                    <Button variant="outline" size="sm" asChild>
-                      <Link to="/recruiter/jobs/$jobId/edit" params={{ jobId: j.id }}>
-                        <Pencil /> Edit
-                      </Link>
-                    </Button>
-                  )}
-                  {canClose && (
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button variant="outline" size="sm" disabled={closeJob.isPending}>
-                          Close
-                        </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>Close this job?</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            ΓÇ£{j.title}ΓÇ¥ will no longer appear to seekers. Existing applications stay available for
-                            review.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>Cancel</AlertDialogCancel>
-                          <AlertDialogAction
-                            onClick={() => closeJob.mutate(j.id)}
-                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    <div className="flex flex-wrap gap-2">
+                      <Button variant="outline" size="sm" asChild>
+                        <Link to="/recruiter/applicants" search={{ jobId: j.id }} onClick={(e) => e.stopPropagation()}>
+                          <Users /> Applicants
+                        </Link>
+                      </Button>
+                      {canEdit && (
+                        <Button variant="outline" size="sm" asChild>
+                          <Link
+                            to="/recruiter/jobs/$jobId/edit"
+                            params={{ jobId: j.id }}
+                            onClick={(e) => e.stopPropagation()}
                           >
-                            Close job
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
-                  )}
+                            <Pencil /> Edit
+                          </Link>
+                        </Button>
+                      )}
+                      {canClose && (
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              disabled={closeJob.isPending}
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              Close
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Close this job?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                “{j.title}” will no longer appear to seekers. Existing applications stay available for
+                                review.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction
+                                onClick={() => closeJob.mutate(j.id)}
+                                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                              >
+                                Close job
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </li>
             );

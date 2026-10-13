@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { Bookmark, Briefcase, ExternalLink, MapPin, Search, X } from "lucide-react";
+import { Bookmark, Briefcase, MapPin, Search, X } from "lucide-react";
 import { z } from "zod";
 import { CardSkeleton, EmptyState, ErrorState, PageHeader } from "@/components/feedback/States";
 import { Button } from "@/components/ui/button";
@@ -10,17 +10,14 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   BROWSE_JOB_TYPE_LABEL,
-  fetchLiveJobs,
   filterLocationSuggestions,
   JOB_CATEGORIES,
   matchesBrowseJobType,
   matchesCategory,
   matchesLocation,
   mergeLocationSuggestions,
-  normalizeBrowseJobTypeKey,
   type BrowseJobType,
   type JobCategory,
-  type LiveJob,
 } from "@/lib/job-discovery";
 import { JOB_TYPE_LABEL, type JobType } from "@/lib/hirehub";
 import { fmtDeadline, resolveJobDeadline, stripDeadlineMarker } from "@/lib/job-fields";
@@ -35,7 +32,7 @@ export const Route = createFileRoute("/_app/seeker/jobs/")({
   head: () => ({
     meta: [
       { title: "Browse Jobs — HireHub" },
-      { name: "description", content: "Discover HireHub and live external remote roles." },
+      { name: "description", content: "Browse admin-approved jobs posted by HireHub recruiters." },
     ],
   }),
   component: BrowseJobsPage,
@@ -77,21 +74,9 @@ function BrowseJobsPage() {
     },
   });
 
-  const liveJobs = useQuery({
-    queryKey: ["live-jobs-remotive"],
-    queryFn: fetchLiveJobs,
-    staleTime: 1000 * 60 * 30,
-    gcTime: 1000 * 60 * 60,
-    retry: 1,
-  });
-
   const locationOptions = useMemo(
-    () =>
-      mergeLocationSuggestions(
-        (jobs.data ?? []).map((j) => j.location),
-        (liveJobs.data ?? []).map((j) => j.location),
-      ),
-    [jobs.data, liveJobs.data],
+    () => mergeLocationSuggestions((jobs.data ?? []).map((j) => j.location)),
+    [jobs.data],
   );
 
   const locationSuggestions = useMemo(
@@ -99,7 +84,7 @@ function BrowseJobsPage() {
     [locationOptions, location],
   );
 
-  const filteredHireHub = useMemo(() => {
+  const filteredJobs = useMemo(() => {
     const list = jobs.data ?? [];
     const qq = q.trim().toLowerCase();
     return list.filter((j) => {
@@ -116,32 +101,9 @@ function BrowseJobsPage() {
     });
   }, [jobs.data, q, location, category, jobType]);
 
-  const filteredLive = useMemo(() => {
-    const list = liveJobs.data ?? [];
-    const qq = q.trim().toLowerCase();
-    return list.filter((j) => {
-      if (
-        !matchesBrowseJobType(normalizeBrowseJobTypeKey(j.jobType), j.location, jobType, {
-          treatAsRemoteBoard: true,
-        })
-      ) {
-        return false;
-      }
-      if (!matchesLocation(j.location, location)) return false;
-      const text = `${j.title} ${j.company} ${j.category}`;
-      if (!matchesCategory(text, j.category, category)) return false;
-      if (qq) {
-        const hay = `${j.title} ${j.company} ${j.category} ${j.location}`.toLowerCase();
-        if (!hay.includes(qq)) return false;
-      }
-      return true;
-    });
-  }, [liveJobs.data, q, location, category, jobType]);
-
   const hasActiveFilters =
     q.trim() !== "" || location.trim() !== "" || category !== "all" || jobType !== "all";
-  const hireHubTotal = jobs.data?.length ?? 0;
-  const liveTotal = liveJobs.data?.length ?? 0;
+  const totalApproved = jobs.data?.length ?? 0;
 
   const clearFilters = () => {
     setSearchQuery("");
@@ -161,7 +123,7 @@ function BrowseJobsPage() {
       <PageHeader
         eyebrow="Job Seeker"
         title="Browse jobs"
-        description="Search HireHub roles and live external openings. Filters apply to both sections."
+        description="Only roles posted by HireHub recruiters and approved by an admin appear here."
         actions={
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" size="sm" asChild>
@@ -204,7 +166,7 @@ function BrowseJobsPage() {
               <Input
                 id="job-location"
                 className="pl-9"
-                placeholder="City, country, or RemoteΓÇª"
+                placeholder="City, country, or Remote…"
                 value={location}
                 onChange={(e) => {
                   setLocation(e.target.value);
@@ -212,7 +174,6 @@ function BrowseJobsPage() {
                 }}
                 onFocus={() => setLocationOpen(true)}
                 onBlur={() => {
-                  // Allow click on suggestion before closing
                   window.setTimeout(() => {
                     if (!locationWrapRef.current?.contains(document.activeElement)) {
                       setLocationOpen(false);
@@ -297,19 +258,13 @@ function BrowseJobsPage() {
 
         <div className="flex flex-col gap-3 border-t pt-3 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm text-muted-foreground" aria-live="polite">
-            {jobs.isLoading && liveJobs.isLoading ? (
-              "Loading jobsΓÇª"
+            {jobs.isLoading ? (
+              "Loading jobs…"
             ) : (
               <>
-                <span className="font-medium text-foreground tabular-nums">{filteredHireHub.length}</span> HireHub
-                {" ┬╖ "}
-                <span className="font-medium text-foreground tabular-nums">{filteredLive.length}</span> live external
-                {hasActiveFilters ? (
-                  <>
-                    {" "}
-                    (of {hireHubTotal} + {liveTotal})
-                  </>
-                ) : null}
+                <span className="font-medium text-foreground tabular-nums">{filteredJobs.length}</span> approved
+                job{filteredJobs.length === 1 ? "" : "s"}
+                {hasActiveFilters ? <> (of {totalApproved})</> : null}
               </>
             )}
           </p>
@@ -331,14 +286,14 @@ function BrowseJobsPage() {
         <div className="flex flex-wrap items-end justify-between gap-2">
           <div>
             <h2 id="hirehub-jobs-heading" className="text-lg font-semibold tracking-tight">
-              HireHub Jobs
+              Approved jobs
             </h2>
             <p className="text-sm text-muted-foreground">
-              Admin-approved roles. Save and apply through HireHub.
+              Posted by recruiters and approved by admins. Save and apply through HireHub.
             </p>
           </div>
           <p className="text-xs text-muted-foreground tabular-nums">
-            {jobs.isLoading ? "ΓÇª" : `${filteredHireHub.length} result${filteredHireHub.length === 1 ? "" : "s"}`}
+            {jobs.isLoading ? "…" : `${filteredJobs.length} result${filteredJobs.length === 1 ? "" : "s"}`}
           </p>
         </div>
 
@@ -349,16 +304,15 @@ function BrowseJobsPage() {
           </div>
         ) : jobs.isError ? (
           <ErrorState onRetry={() => void jobs.refetch()} />
-        ) : filteredHireHub.length ? (
+        ) : filteredJobs.length ? (
           <ul className="grid stagger-children gap-4 sm:grid-cols-2">
-            {filteredHireHub.map((j) => (
+            {filteredJobs.map((j) => (
               <li key={j.id} className="surface-card interactive-card group flex flex-col gap-4 p-5 sm:p-6">
                 <div className="flex items-start gap-3">
                   <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-signal-soft text-signal ring-1 ring-signal/10 transition-transform duration-300 group-hover:scale-105">
                     <Briefcase className="size-4" />
                   </div>
                   <div className="min-w-0">
-                    <p className="mb-1 text-[10px] font-medium uppercase tracking-wide text-signal">HireHub</p>
                     <h3 className="truncate font-semibold tracking-tight">{j.title}</h3>
                     <p className="mt-0.5 truncate text-sm text-muted-foreground">
                       {j.companies?.name ?? "Company"}
@@ -399,9 +353,9 @@ function BrowseJobsPage() {
         ) : (
           <EmptyState
             icon={Briefcase}
-            title={hireHubTotal ? "No HireHub matches" : "No approved HireHub jobs yet"}
+            title={totalApproved ? "No matching jobs" : "No approved jobs yet"}
             description={
-              hireHubTotal
+              totalApproved
                 ? "Try different filters or clear them to see all approved roles."
                 : "Check back after recruiters post roles and admins approve them."
             }
@@ -417,106 +371,6 @@ function BrowseJobsPage() {
           />
         )}
       </section>
-
-      <section className="space-y-4" aria-labelledby="live-jobs-heading">
-        <div className="flex flex-wrap items-end justify-between gap-2">
-          <div>
-            <h2 id="live-jobs-heading" className="text-lg font-semibold tracking-tight">
-              Live Jobs / External
-            </h2>
-            <p className="text-sm text-muted-foreground">
-              Real-time remote openings from{" "}
-              <a
-                href="https://remotive.com"
-                target="_blank"
-                rel="noreferrer"
-                className="text-signal underline-offset-2 hover:underline"
-              >
-                Remotive
-              </a>
-              . External only ΓÇö not saved to HireHub and not applied through HireHub.
-            </p>
-          </div>
-          <p className="text-xs text-muted-foreground tabular-nums">
-            {liveJobs.isLoading ? "ΓÇª" : `${filteredLive.length} result${filteredLive.length === 1 ? "" : "s"}`}
-          </p>
-        </div>
-
-        {liveJobs.isLoading ? (
-          <div className="grid gap-4 sm:grid-cols-2">
-            <CardSkeleton rows={3} />
-            <CardSkeleton rows={3} />
-          </div>
-        ) : liveJobs.isError ? (
-          <ErrorState
-            title="Could not load live external jobs"
-            description="Remotive is temporarily unavailable. HireHub jobs above still work."
-            onRetry={() => void liveJobs.refetch()}
-          />
-        ) : filteredLive.length ? (
-          <ul className="grid stagger-children gap-4 sm:grid-cols-2">
-            {filteredLive.map((j) => (
-              <LiveJobCard key={j.id} job={j} />
-            ))}
-          </ul>
-        ) : (
-          <EmptyState
-            icon={ExternalLink}
-            title={liveTotal ? "No live external matches" : "No live external jobs right now"}
-            description={
-              liveTotal
-                ? "Adjust search, location, category, or job type to see more Remotive roles."
-                : "Try again later for fresh remote listings from Remotive."
-            }
-            action={
-              hasActiveFilters ? (
-                <Button variant="outline" onClick={clearFilters}>
-                  <X className="size-3.5" />
-                  Clear filters
-                </Button>
-              ) : undefined
-            }
-            className="py-10"
-          />
-        )}
-      </section>
     </div>
-  );
-}
-
-function LiveJobCard({ job }: { job: LiveJob }) {
-  return (
-    <li className="surface-card interactive-card group flex flex-col gap-4 p-5 sm:p-6">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="mb-1 text-[10px] font-medium uppercase tracking-wide text-status-interview">
-            Live / External
-          </p>
-          <h3 className="font-semibold leading-snug tracking-tight">{job.title}</h3>
-          <p className="mt-0.5 truncate text-sm text-muted-foreground">{job.company}</p>
-        </div>
-        <span className="shrink-0 rounded-full border border-status-interview/30 bg-status-interview-soft/50 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-status-interview">
-          {job.source}
-        </span>
-      </div>
-      <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-        <span className="inline-flex items-center gap-1 rounded-full border bg-surface/80 px-2 py-0.5">
-          <MapPin className="size-3" /> {job.location}
-        </span>
-        <span className="rounded-full border bg-surface/80 px-2 py-0.5">{job.jobType}</span>
-        <span className="rounded-full border bg-surface/80 px-2 py-0.5">{job.category}</span>
-        <span className="rounded-full border bg-surface/80 px-2 py-0.5">Posted {fmtDate(job.postedAt)}</span>
-      </div>
-      <Button
-        asChild
-        size="sm"
-        variant="outline"
-        className="mt-auto w-fit transition-colors group-hover:border-signal/40 group-hover:text-signal"
-      >
-        <a href={job.url} target="_blank" rel="noreferrer">
-          View Job <ExternalLink className="size-3.5" />
-        </a>
-      </Button>
-    </li>
   );
 }

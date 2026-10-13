@@ -37,4 +37,11 @@ describe("company profile payloads (admin approval required)", () => {
     expect(create.status).toBe("pending");
     expect("status" in save).toBe(false);
   });
+
+  it("resubmit-after-reject sets pending and clears rejection_reason", () => {
+    const payload = buildSaveCompanyPayload(fields, { resubmitForReview: true });
+    expect(payload.status).toBe("pending");
+    expect(payload.rejection_reason).toBeNull();
+    expect(payload).not.toMatchObject({ status: "approved" });
+  });
 });

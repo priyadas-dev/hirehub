@@ -4,27 +4,18 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Briefcase } from "lucide-react";
+import { Briefcase, Settings } from "lucide-react";
 import { toast } from "sonner";
 import { CardSkeleton, ErrorState, PageHeader } from "@/components/feedback/States";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/lib/auth";
+import { ownProfileSchema, resumeUrlSchema, updateOwnProfile } from "@/lib/profile";
 import { supabase } from "@/integrations/supabase/client";
 
-const schema = z.object({
-  full_name: z.string().trim().min(2, "Full name must be at least 2 characters"),
-  phone: z
-    .string()
-    .trim()
-    .optional()
-    .refine((v) => !v || v.length >= 7, "Enter a valid phone number"),
-  resume_url: z
-    .string()
-    .trim()
-    .optional()
-    .refine((v) => !v || /^https?:\/\/\S+/i.test(v), "Resume must be a full URL starting with http:// or https://"),
+const schema = ownProfileSchema.extend({
+  resume_url: resumeUrlSchema,
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -102,14 +93,10 @@ function SeekerProfilePage() {
     mutationFn: async (values: FormValues) => {
       if (!id) throw new Error("Not signed in");
 
-      const { error: profileErr } = await supabase
-        .from("profiles")
-        .update({
-          full_name: values.full_name.trim(),
-          phone: values.phone?.trim() || null,
-        })
-        .eq("id", id);
-      if (profileErr) throw profileErr;
+      await updateOwnProfile(id, {
+        full_name: values.full_name,
+        phone: values.phone,
+      });
 
       const resume = values.resume_url?.trim() || "";
       const { error: metaErr } = await supabase.auth.updateUser({
@@ -123,6 +110,7 @@ function SeekerProfilePage() {
       });
       await qc.invalidateQueries({ queryKey: ["seeker-profile", id] });
       await qc.invalidateQueries({ queryKey: ["seeker-latest-resume", id] });
+      await qc.invalidateQueries({ queryKey: ["own-profile", id] });
       await refresh();
     },
     onError: (e: Error) => toast.error("Could not update profile", { description: e.message }),
@@ -138,9 +126,18 @@ function SeekerProfilePage() {
         title="My profile / resume"
         description="Update your contact details and preferred resume link used when you apply."
         actions={
-          <Button variant="outline" size="sm" asChild>
-            <Link to="/seeker/jobs"><Briefcase /> Browse jobs</Link>
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" size="sm" asChild>
+              <Link to="/settings">
+                <Settings /> Settings
+              </Link>
+            </Button>
+            <Button variant="outline" size="sm" asChild>
+              <Link to="/seeker/jobs">
+                <Briefcase /> Browse jobs
+              </Link>
+            </Button>
+          </div>
         }
       />
 

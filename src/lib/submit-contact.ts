@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import {
+  CONTACT_SERVER_ENV,
   contactMessageSchema,
   SUPPORT_EMAIL,
   type ContactMessageInput,
@@ -14,6 +15,10 @@ import {
  * - CONTACT_FROM_EMAIL — verified sender address on your Resend domain
  * Optional:
  * - CONTACT_TO_EMAIL — defaults to SUPPORT_EMAIL (priya.das@sjinnovation.com)
+ *
+ * Local: set in project `.env`, then restart `npm run dev`.
+ * Vercel: Project Settings → Environment Variables as Secret (Production + Preview),
+ * then Redeploy. Local `.env` does not configure Vercel or Lovable.
  */
 
 const RATE_WINDOW_MS = 60_000;
@@ -45,16 +50,22 @@ async function sendWithResend(input: {
   subject: string;
   message: string;
 }): Promise<ContactSubmitResult> {
-  const apiKey = process.env["RESEND_API_KEY"]?.trim();
-  const from = process.env["CONTACT_FROM_EMAIL"]?.trim();
-  const to = process.env["CONTACT_TO_EMAIL"]?.trim() || SUPPORT_EMAIL;
+  const apiKey = process.env[CONTACT_SERVER_ENV.resendApiKey]?.trim();
+  const from = process.env[CONTACT_SERVER_ENV.fromEmail]?.trim();
+  const to = process.env[CONTACT_SERVER_ENV.toEmail]?.trim() || SUPPORT_EMAIL;
 
   if (!apiKey || !from) {
+    // Log missing names only — never expose ops setup text to the browser.
+    console.error("contact delivery not configured", {
+      missing: [
+        !apiKey ? CONTACT_SERVER_ENV.resendApiKey : null,
+        !from ? CONTACT_SERVER_ENV.fromEmail : null,
+      ].filter(Boolean),
+    });
     return {
       ok: false,
       code: "provider_not_configured",
-      message:
-        "Contact delivery is not configured yet. Add RESEND_API_KEY and CONTACT_FROM_EMAIL on the server, then try again.",
+      message: "Automatic email sending is not available yet. Use the Gmail or email-app option to reach support.",
     };
   }
 

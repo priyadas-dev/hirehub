@@ -1,35 +1,42 @@
 -- PROPOSED — DO NOT APPLY until explicitly approved.
--- Purpose: close the PostgREST hole where a recruiter can UPDATE companies.status to 'approved'
--- after the app stopped self-approving. Does not change schema columns.
+-- Purpose: only admins may change companies.status. Recruiters may still edit
+-- name/industry/website without changing approval status.
 --
--- Assignment product rule: company stays pending until an admin approves.
--- App code already follows that; this policy hardens the API.
+-- Does not change schema columns or weaken existing RLS.
+-- Depends on: 0000 (companies, current_role_is).
+-- Apply before PROPOSED_0005 and PROPOSED_0006a/0006b.
 --
--- Review carefully on a staging project before production.
+-- Note: rejected → pending resubmit is added in PROPOSED_0006b after the
+-- 'rejected' enum value exists (do not reference that label here).
+--
+-- Review on staging before production.
 
-DROP POLICY IF EXISTS "owner or admin edits company" ON public.companies;
+CREATE OR REPLACE FUNCTION public.protect_company_status()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  IF NEW.status IS DISTINCT FROM OLD.status
+     AND NOT public.current_role_is('admin') THEN
+    RAISE EXCEPTION 'Only admins can change company status'
+      USING ERRCODE = 'check_violation';
+  END IF;
+  RETURN NEW;
+END;
+$$;
 
-CREATE POLICY "owner or admin edits company" ON public.companies
-  FOR UPDATE
-  TO authenticated
-  USING (
-    recruiter_id = auth.uid()
-    OR public.current_role_is('admin')
-  )
-  WITH CHECK (
-    public.current_role_is('admin')
-    OR (
-      recruiter_id = auth.uid()
-      AND status = (
-        SELECT c.status
-        FROM public.companies c
-        WHERE c.id = companies.id
-      )
-    )
-  );
+DROP TRIGGER IF EXISTS companies_protect_status ON public.companies;
+CREATE TRIGGER companies_protect_status
+  BEFORE UPDATE ON public.companies
+  FOR EACH ROW
+  EXECUTE FUNCTION public.protect_company_status();
 
--- Rollback sketch (restores 0000 policy — no WITH CHECK):
--- DROP POLICY IF EXISTS "owner or admin edits company" ON public.companies;
--- CREATE POLICY "owner or admin edits company" ON public.companies
---   FOR UPDATE TO authenticated
---   USING (recruiter_id = auth.uid() OR public.current_role_is('admin'));
+REVOKE ALL ON FUNCTION public.protect_company_status() FROM PUBLIC;
+
+-- 0000 policy "owner or admin edits company" is left unchanged (not weakened).
+
+-- Rollback:
+-- DROP TRIGGER IF EXISTS companies_protect_status ON public.companies;
+-- DROP FUNCTION IF EXISTS public.protect_company_status();
