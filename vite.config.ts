@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 import { loadEnv, type Plugin } from "vite";
 import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 
+/** Project root (where vite.config.ts and .env live). */
 const envDir = path.dirname(fileURLToPath(import.meta.url));
 
 /** Vite exposes only VITE_* to the browser. Server handlers read process.env, which does not load .env by itself. */
@@ -26,6 +27,7 @@ function loadProjectEnv(dir: string): Plugin {
 
 export default defineConfig({
   vite: {
+    envDir,
     plugins: [loadProjectEnv(envDir)],
     optimizeDeps: { include: ["sonner", "@radix-ui/react-dropdown-menu", "@radix-ui/react-dialog", "@radix-ui/react-avatar", "@radix-ui/react-label", "zod"] },
   },
