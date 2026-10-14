@@ -10,7 +10,7 @@ export function LandingFooter() {
         <section className="space-y-3">
           <div className="flex items-center gap-2.5">
             <LogoMark className="size-9 rounded-lg shadow-xs" />
-            <span className="font-display text-xl tracking-tight">HireHub</span>
+            <span className="font-display text-xl tracking-tight text-foreground">HireHub</span>
           </div>
           <p className="max-w-sm text-sm leading-relaxed text-muted-foreground">
             Connecting job seekers and recruiters through a simpler, smarter hiring experience.

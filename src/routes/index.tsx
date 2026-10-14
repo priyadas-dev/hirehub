@@ -71,20 +71,20 @@ function Landing() {
         />
 
         <div className="relative mx-auto max-w-6xl px-4 pb-16 pt-12 text-center sm:px-6 sm:pb-24 sm:pt-20">
-          <div className="mb-8 flex animate-fade-up justify-center">
-            <LogoMark className="size-12 rounded-xl shadow-signal sm:size-14" />
+          <div className="mb-5 flex animate-fade-up justify-center sm:mb-6">
+            <LogoMark className="size-12 rounded-xl shadow-lift sm:size-14" />
           </div>
-          <p className="animate-fade-up text-sm font-semibold tracking-tight text-signal [animation-delay:40ms]">
+          <p className="animate-fade-up font-display text-2xl tracking-tight text-foreground sm:text-3xl [animation-delay:40ms]">
             HireHub
           </p>
-          <span className="mt-5 inline-flex animate-fade-up items-center gap-2 rounded-full border bg-card/90 px-3.5 py-1.5 text-xs font-medium shadow-xs backdrop-blur-sm [animation-delay:80ms]">
+          <span className="mt-4 inline-flex animate-fade-up items-center gap-2 rounded-full border border-signal/20 bg-card/90 px-3.5 py-1.5 text-xs font-medium text-foreground shadow-xs backdrop-blur-sm sm:mt-5 [animation-delay:80ms]">
             <span className="relative flex size-1.5">
               <span className="absolute inline-flex size-full animate-ping rounded-full bg-signal opacity-60" />
               <span className="relative size-1.5 rounded-full bg-signal" />
             </span>
             Hiring, without the noise
           </span>
-          <h1 className="mx-auto mt-4 max-w-[18ch] animate-fade-up font-display text-5xl sm:mt-5 sm:text-6xl [animation-delay:120ms]">
+          <h1 className="mx-auto mt-5 max-w-[18ch] animate-fade-up font-display text-5xl text-foreground sm:mt-6 sm:text-6xl [animation-delay:120ms]">
             Where great people meet <em className="text-signal not-italic">great work</em>
           </h1>
           <p className="mx-auto mt-4 max-w-[62ch] animate-fade-up text-base leading-relaxed text-muted-foreground sm:mt-5 sm:text-lg sm:leading-relaxed [animation-delay:180ms]">
