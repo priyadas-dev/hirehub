@@ -17,13 +17,7 @@ import {
 } from "@/lib/job-fields";
 import { cn } from "@/lib/utils";
 import { RoleWelcome } from "@/components/dashboard/RoleWelcome";
-import { countRows, fmtDate, Section, StatCard, supabase, useCounts } from "./parts";
-
-const STAT_LINK =
-  "block rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
-
-const LIST_LINK =
-  "group outline-none transition-colors duration-200 ease-out hover:bg-signal-soft/45 focus-visible:bg-signal-soft/45 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring";
+import { countRows, fmtDate, LIST_LINK, Section, STAT_LINK, StatCard, supabase, useCounts } from "./parts";
 
 export function RecruiterDashboard() {
   const { user } = useAuth();
@@ -303,7 +297,6 @@ export function RecruiterDashboard() {
 
       <div className="grid gap-10 lg:grid-cols-2 lg:items-start">
         <Section
-          className="gap-5"
           title="Recent job posts"
           description="Your latest listings and where they sit in approval"
           action={
@@ -383,7 +376,6 @@ export function RecruiterDashboard() {
         </Section>
 
         <Section
-          className="gap-5"
           title="Recent applicants"
           description="Newest candidates across your open roles"
           action={

@@ -1,4 +1,4 @@
-import { Bookmark, Briefcase, CalendarClock, FileText, MapPin, Sparkles, Star, UserCircle } from "lucide-react";
+import { Bookmark, Briefcase, CalendarClock, ChevronRight, FileText, MapPin, Sparkles, Star, UserCircle } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -9,11 +9,8 @@ import type { ApplicationStatus } from "@/components/status/status";
 import { RoleWelcome } from "@/components/dashboard/RoleWelcome";
 import { useAuth } from "@/lib/auth";
 import { JOB_TYPE_LABEL, type JobType } from "@/lib/hirehub";
-import { countRows, fmtDate, Section, StatCard, supabase, useCounts } from "./parts";
+import { countRows, fmtDate, LIST_LINK, Section, STAT_LINK, StatCard, supabase, useCounts } from "./parts";
 import { cn } from "@/lib/utils";
-
-const STAT_LINK =
-  "block rounded-xl outline-none transition-transform focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 active:scale-[0.99]";
 
 export function SeekerDashboard() {
   const { user } = useAuth();
@@ -87,9 +84,13 @@ export function SeekerDashboard() {
       />
 
       <section
-        className="relative overflow-hidden rounded-xl border border-signal/30 bg-signal-soft p-5 sm:p-8"
+        className="relative overflow-hidden rounded-xl border border-signal/25 bg-signal-soft p-5 sm:p-8"
         aria-labelledby="journey"
       >
+        <div
+          className="pointer-events-none absolute -right-12 -top-16 size-44 rounded-full bg-signal/15 blur-3xl"
+          aria-hidden
+        />
         <div className="relative mb-6 flex flex-wrap items-start justify-between gap-3 sm:mb-8">
           <div className="min-w-0">
             <h2 id="journey" className="text-lg font-semibold tracking-tight text-foreground">
@@ -104,7 +105,7 @@ export function SeekerDashboard() {
           {hasJourney ? (
             <StatusBadge status={latest!} className="shrink-0" />
           ) : (
-            <Button size="sm" variant="outline" className="shrink-0 bg-card" asChild>
+            <Button size="sm" variant="outline" className="shrink-0 border-signal/30 bg-card/90" asChild>
               <Link to="/seeker/jobs">Find a role</Link>
             </Button>
           )}
@@ -183,22 +184,28 @@ export function SeekerDashboard() {
           ) : recent.isError ? (
             <ErrorState onRetry={() => void recent.refetch()} />
           ) : recent.data && recent.data.length > 0 ? (
-            <ul className="surface-card divide-y overflow-hidden">
+            <ul className="surface-card divide-y divide-signal/10 overflow-hidden">
               {recent.data.map((a) => (
                 <li key={a.id}>
                   <Link
                     to="/seeker/applications/$applicationId"
                     params={{ applicationId: a.id }}
-                    className="flex min-h-14 items-center justify-between gap-4 px-5 py-4 outline-none transition-colors hover:bg-signal-soft/50 focus-visible:bg-signal-soft/50 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                    className={cn(LIST_LINK, "flex min-h-14 items-center justify-between gap-4 px-5 py-4")}
                   >
                     <div className="min-w-0">
-                      <p className="truncate font-medium tracking-tight">{a.jobs?.title ?? "Job"}</p>
+                      <p className="truncate font-medium tracking-tight text-foreground">{a.jobs?.title ?? "Job"}</p>
                       <p className="mt-1 truncate text-sm text-muted-foreground">
                         {a.jobs?.companies?.name ?? "Company"}
                         {a.jobs?.location ? ` · ${a.jobs.location}` : ""} · Applied {fmtDate(a.created_at)}
                       </p>
                     </div>
-                    <StatusBadge status={a.status as ApplicationStatus} className="shrink-0" />
+                    <span className="flex shrink-0 items-center gap-2">
+                      <StatusBadge status={a.status as ApplicationStatus} />
+                      <ChevronRight
+                        className="size-4 text-muted-foreground transition-transform duration-200 ease-out group-hover:translate-x-0.5 group-hover:text-signal"
+                        aria-hidden
+                      />
+                    </span>
                   </Link>
                 </li>
               ))}

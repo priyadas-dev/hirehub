@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
+import { useServerFn } from "@tanstack/react-start";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -16,7 +17,7 @@ import {
   setPasswordSchema,
   type PasswordAuthMode,
 } from "@/lib/account-password";
-import { passwordResetRedirectUrl } from "@/lib/password-recovery";
+import { sendAccountMail } from "@/lib/send-account-mail";
 import { supabase } from "@/integrations/supabase/client";
 
 type ChangeValues = z.infer<typeof changePasswordSchema>;
@@ -27,6 +28,7 @@ export function ChangePasswordForm({ email }: { email: string }) {
   const [modeError, setModeError] = useState<string | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [inlineSuccess, setInlineSuccess] = useState<string | null>(null);
+  const mailAccount = useServerFn(sendAccountMail);
 
   useEffect(() => {
     let cancelled = false;
@@ -92,7 +94,9 @@ export function ChangePasswordForm({ email }: { email: string }) {
 
   const recover = useMutation({
     mutationFn: async () => {
-      await sendPasswordRecoveryEmail(email, passwordResetRedirectUrl());
+      const origin = window.location.origin;
+      await sendPasswordRecoveryEmail(email, origin);
+      await mailAccount({ data: { to: email, kind: "reset", origin } });
     },
     onSuccess: () => {
       setInlineSuccess(

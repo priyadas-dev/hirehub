@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useServerFn } from "@tanstack/react-start";
 import { ArrowLeft, Loader2, MailCheck } from "lucide-react";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -7,8 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Logo } from "@/components/brand/Logo";
-import { passwordResetRedirectUrl } from "@/lib/password-recovery";
-import { supabase } from "@/integrations/supabase/client";
+import { sendPasswordRecoveryEmail } from "@/lib/account-password";
+import { sendAccountMail } from "@/lib/send-account-mail";
 
 export const Route = createFileRoute("/forgot-password")({
   head: () => ({
@@ -30,6 +31,7 @@ function ForgotPasswordPage() {
   const [error, setError] = useState<string | undefined>();
   const [busy, setBusy] = useState(false);
   const [sentTo, setSentTo] = useState<string | null>(null);
+  const mailAccount = useServerFn(sendAccountMail);
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -42,11 +44,10 @@ function ForgotPasswordPage() {
     setError(undefined);
     setBusy(true);
     try {
-      // Origin matches the host serving HireHub (localhost or deployed URL).
-      const { error: resetError } = await supabase.auth.resetPasswordForEmail(parsed.data.email, {
-        redirectTo: passwordResetRedirectUrl(),
+      await sendPasswordRecoveryEmail(parsed.data.email, window.location.origin);
+      await mailAccount({
+        data: { to: parsed.data.email, kind: "reset", origin: window.location.origin },
       });
-      if (resetError) throw resetError;
       // Same success copy whether or not the email exists (avoid account enumeration).
       setSentTo(parsed.data.email);
       toast.success("Check your email", {

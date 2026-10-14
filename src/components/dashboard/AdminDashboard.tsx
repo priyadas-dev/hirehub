@@ -1,10 +1,11 @@
 import { Activity, BarChart3, Briefcase, Building2, ClipboardList, FileText, ShieldCheck, Users } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { CardSkeleton, EmptyState } from "@/components/feedback/States";
+import { CardSkeleton, EmptyState, ErrorState, PageHeader } from "@/components/feedback/States";
 import { Button } from "@/components/ui/button";
-import { countRows, fmtDate, Section, StatCard, supabase, useCounts } from "./parts";
+import { countRows, fmtDate, LIST_LINK, Section, STAT_LINK, StatCard, supabase, useCounts } from "./parts";
 import { useAuth } from "@/lib/auth";
+import { cn } from "@/lib/utils";
 import type { LucideIcon } from "lucide-react";
 import type { AppNavPath } from "@/components/shell/nav";
 
@@ -29,7 +30,8 @@ export function AdminDashboard() {
     return { pendingJobs, pendingCompanies, users, applications };
   });
   const attention = useQuery({
-    queryKey: ["admin-attention", id], enabled: !!id,
+    queryKey: ["admin-attention", id],
+    enabled: !!id,
     queryFn: async () => {
       const [j, co] = await Promise.all([
         supabase.from("jobs").select("id,title,created_at").eq("status", "pending").order("created_at", { ascending: false }).limit(5),
@@ -44,9 +46,14 @@ export function AdminDashboard() {
     },
   });
   const signups = useQuery({
-    queryKey: ["admin-signups", id], enabled: !!id,
+    queryKey: ["admin-signups", id],
+    enabled: !!id,
     queryFn: async () => {
-      const { data, error } = await supabase.from("profiles").select("id,full_name,email,role,created_at").order("created_at", { ascending: false }).limit(6);
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id,full_name,email,role,created_at")
+        .order("created_at", { ascending: false })
+        .limit(6);
       if (error) throw error;
       return data;
     },
@@ -55,67 +62,101 @@ export function AdminDashboard() {
   const roleLabel = { job_seeker: "Job Seeker", recruiter: "Recruiter", admin: "Admin" } as const;
 
   return (
-    <div className="space-y-10">
-      <header className="relative overflow-hidden rounded-2xl bg-primary p-5 text-primary-foreground sm:p-8">
-        <div className="pointer-events-none absolute -right-8 top-0 size-48 rounded-full bg-signal/30 blur-3xl" aria-hidden />
-        <div className="relative flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <div className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.16em] opacity-70 sm:text-xs">
-              <ShieldCheck className="size-4" /> Admin control center
-            </div>
-            <h1 className="mt-3 font-display text-3xl text-primary-foreground sm:text-4xl">Platform overview</h1>
-            <p className="mt-3 max-w-[68ch] text-base leading-relaxed text-primary-foreground/85">Review what needs approval and keep an eye on activity across HireHub.</p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Button variant="secondary" size="lg" asChild>
-              <Link to="/admin/jobs"><ShieldCheck /> Approve jobs</Link>
+    <div className="flex flex-col gap-10 sm:gap-14">
+      <PageHeader
+        title="Platform overview"
+        description="Review what needs approval and keep an eye on activity across HireHub."
+        actions={
+          <>
+            <Button variant="outline" size="sm" asChild>
+              <Link to="/admin/users">
+                <Users /> Users
+              </Link>
             </Button>
-            <Button variant="secondary" size="lg" asChild>
-              <Link to="/admin/users"><Users /> Users</Link>
+            <Button variant="outline" size="sm" asChild>
+              <Link to="/admin/reports">
+                <BarChart3 /> Reports
+              </Link>
             </Button>
-            <Button variant="secondary" size="lg" asChild>
-              <Link to="/admin/reports"><BarChart3 /> Reports</Link>
+            <Button variant="signal" size="sm" asChild>
+              <Link to="/admin/jobs">
+                <ShieldCheck /> Approve jobs
+              </Link>
             </Button>
-          </div>
-        </div>
-      </header>
+          </>
+        }
+      />
 
-      <div className="grid stagger-children gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Link to="/admin/jobs" className="block rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-          <StatCard label="Pending jobs" value={c?.pendingJobs} icon={Briefcase} tone="interview" loading={counts.isLoading} />
-        </Link>
-        <Link to="/admin/companies" className="block rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-          <StatCard label="Pending companies" value={c?.pendingCompanies} icon={Building2} tone="shortlisted" loading={counts.isLoading} />
-        </Link>
-        <Link to="/admin/users" className="block rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-          <StatCard label="Total users" value={c?.users} icon={Users} loading={counts.isLoading} />
-        </Link>
-        <Link to="/admin/applications" className="block rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-          <StatCard label="Applications" value={c?.applications} icon={FileText} tone="applied" loading={counts.isLoading} />
-        </Link>
-      </div>
+      {counts.isError ? (
+        <ErrorState
+          title="Counts could not load"
+          description="We could not load platform totals. Try again."
+          onRetry={() => void counts.refetch()}
+        />
+      ) : (
+        <div className="grid stagger-children gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <Link to="/admin/jobs" className={STAT_LINK} aria-label={`Pending jobs: ${c?.pendingJobs ?? "loading"}`}>
+            <StatCard
+              label="Pending jobs"
+              value={c?.pendingJobs}
+              icon={Briefcase}
+              tone="shortlisted"
+              loading={counts.isLoading}
+            />
+          </Link>
+          <Link
+            to="/admin/companies"
+            className={STAT_LINK}
+            aria-label={`Pending companies: ${c?.pendingCompanies ?? "loading"}`}
+          >
+            <StatCard
+              label="Pending companies"
+              value={c?.pendingCompanies}
+              icon={Building2}
+              tone="shortlisted"
+              loading={counts.isLoading}
+            />
+          </Link>
+          <Link to="/admin/users" className={STAT_LINK} aria-label={`Total users: ${c?.users ?? "loading"}`}>
+            <StatCard label="Total users" value={c?.users} icon={Users} tone="signal" loading={counts.isLoading} />
+          </Link>
+          <Link
+            to="/admin/applications"
+            className={STAT_LINK}
+            aria-label={`Applications: ${c?.applications ?? "loading"}`}
+          >
+            <StatCard
+              label="Applications"
+              value={c?.applications}
+              icon={FileText}
+              tone="applied"
+              loading={counts.isLoading}
+            />
+          </Link>
+        </div>
+      )}
 
       <Section title="Admin tools" description="Jump into approvals, users, applications, and reports">
-        <div className="grid stagger-children gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+        <div className="grid stagger-children gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
           {QUICK_LINKS.map((item) => (
             <Link
               key={item.to}
               to={item.to}
-              className="surface-card interactive-card group flex flex-col gap-3 p-5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="surface-card interactive-card group flex flex-col gap-3 p-5 outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
             >
-              <span className="flex size-10 items-center justify-center rounded-xl bg-signal-soft text-signal ring-1 ring-signal/10 transition-transform duration-300 group-hover:scale-105">
-                <item.icon className="size-4" />
+              <span className="flex size-10 items-center justify-center rounded-xl bg-signal-soft text-signal ring-1 ring-signal/15 transition-transform duration-300 group-hover:scale-105">
+                <item.icon className="size-4" aria-hidden />
               </span>
               <div>
-                <p className="font-medium">{item.label}</p>
-                <p className="mt-1 text-sm text-muted-foreground">{item.description}</p>
+                <p className="font-medium text-foreground">{item.label}</p>
+                <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{item.description}</p>
               </div>
             </Link>
           ))}
         </div>
       </Section>
 
-      <div className="grid gap-8 lg:grid-cols-2">
+      <div className="grid gap-10 lg:grid-cols-2 lg:items-start">
         <Section
           title="Needs attention"
           description="Jobs and companies waiting for approval"
@@ -128,25 +169,40 @@ export function AdminDashboard() {
           {attention.isLoading ? (
             <CardSkeleton />
           ) : attention.isError ? (
-            <EmptyState icon={ShieldCheck} title="Could not load" description="Refresh to try again." />
+            <ErrorState onRetry={() => void attention.refetch()} />
           ) : attention.data?.length ? (
             <div className="surface-card overflow-x-auto">
               <table className="w-full text-sm">
-                <thead><tr className="border-b border-signal/15 bg-signal-soft/30 text-left text-xs uppercase tracking-wider text-signal">
-                  <th className="px-5 py-3 font-medium">Item</th><th className="px-5 py-3 font-medium">Type</th><th className="px-5 py-3 font-medium">Submitted</th>
-                </tr></thead>
-                <tbody className="divide-y">
+                <thead>
+                  <tr className="border-b border-signal/15 bg-signal-soft/30 text-left text-xs uppercase tracking-wider text-signal">
+                    <th className="px-5 py-3 font-medium">Item</th>
+                    <th className="px-5 py-3 font-medium">Type</th>
+                    <th className="px-5 py-3 font-medium">Submitted</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-signal/10">
                   {attention.data.map((r) => (
-                    <tr key={r.kind + r.id}>
+                    <tr key={r.kind + r.id} className="transition-colors hover:bg-signal-soft/35">
                       <td className="px-5 py-3">
                         <Link
                           to={r.kind === "Job" ? "/admin/jobs" : "/admin/companies"}
-                          className="font-medium hover:underline"
+                          className="font-medium text-foreground hover:text-signal hover:underline"
                         >
                           {r.name}
                         </Link>
                       </td>
-                      <td className="px-5 py-3"><span className="rounded-full bg-status-interview-soft px-2 py-0.5 text-xs text-status-interview">{r.kind}</span></td>
+                      <td className="px-5 py-3">
+                        <span
+                          className={cn(
+                            "rounded-full px-2 py-0.5 text-xs font-medium ring-1",
+                            r.kind === "Job"
+                              ? "bg-status-shortlisted-soft text-status-shortlisted ring-status-shortlisted/20"
+                              : "bg-status-applied-soft text-status-applied ring-status-applied/20",
+                          )}
+                        >
+                          {r.kind}
+                        </span>
+                      </td>
                       <td className="px-5 py-3 text-muted-foreground">{fmtDate(r.at)}</td>
                     </tr>
                   ))}
@@ -157,6 +213,7 @@ export function AdminDashboard() {
             <EmptyState icon={ShieldCheck} title="All clear" description="Nothing is waiting for approval right now." />
           )}
         </Section>
+
         <Section
           title="Recent platform activity"
           description="Latest signups"
@@ -166,30 +223,43 @@ export function AdminDashboard() {
             </Button>
           }
         >
-          {signups.isLoading ? <CardSkeleton /> : signups.data?.length ? (
-            <ul className="surface-card divide-y">
+          {signups.isLoading ? (
+            <CardSkeleton />
+          ) : signups.isError ? (
+            <ErrorState onRetry={() => void signups.refetch()} />
+          ) : signups.data?.length ? (
+            <ul className="surface-card divide-y divide-signal/10 overflow-hidden">
               {signups.data.map((p) => (
-                <li key={p.id} className="flex items-center justify-between gap-4 px-5 py-3.5">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium">{p.full_name || p.email}</p>
-                    <p className="text-xs text-muted-foreground">Joined {fmtDate(p.created_at)}</p>
-                  </div>
-                  <span
-                    className={
-                      p.role === "admin"
-                        ? "rounded-full bg-signal-soft px-2.5 py-1 text-xs font-medium text-signal ring-1 ring-signal/20"
-                        : p.role === "recruiter"
-                          ? "rounded-full bg-status-interview-soft px-2.5 py-1 text-xs font-medium text-status-interview ring-1 ring-status-interview/20"
-                          : "rounded-full bg-status-applied-soft px-2.5 py-1 text-xs font-medium text-status-applied ring-1 ring-status-applied/20"
-                    }
+                <li key={p.id}>
+                  <Link
+                    to="/admin/users"
+                    className={cn(LIST_LINK, "flex min-h-14 items-center justify-between gap-4 px-5 py-3.5")}
                   >
-                    {roleLabel[p.role]}
-                  </span>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-foreground">{p.full_name || p.email}</p>
+                      <p className="mt-0.5 text-xs text-muted-foreground">Joined {fmtDate(p.created_at)}</p>
+                    </div>
+                    <span
+                      className={
+                        p.role === "admin"
+                          ? "rounded-full bg-signal-soft px-2.5 py-1 text-xs font-medium text-signal ring-1 ring-signal/20"
+                          : p.role === "recruiter"
+                            ? "rounded-full bg-status-interview-soft px-2.5 py-1 text-xs font-medium text-status-interview ring-1 ring-status-interview/20"
+                            : "rounded-full bg-status-applied-soft px-2.5 py-1 text-xs font-medium text-status-applied ring-1 ring-status-applied/20"
+                      }
+                    >
+                      {roleLabel[p.role]}
+                    </span>
+                  </Link>
                 </li>
               ))}
             </ul>
           ) : (
-            <EmptyState icon={Activity} title="No activity yet" description="New signups and platform events will appear here." />
+            <EmptyState
+              icon={Activity}
+              title="No activity yet"
+              description="New signups and platform events will appear here."
+            />
           )}
         </Section>
       </div>

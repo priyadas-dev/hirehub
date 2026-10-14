@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { useServerFn } from "@tanstack/react-start";
 import { ArrowLeft, Briefcase, Loader2, MailCheck, Search } from "lucide-react";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -23,6 +24,8 @@ import {
   type AuthIntent,
   type SignupRole,
 } from "@/lib/auth-intent";
+import { signUpWithAccountEmail } from "@/lib/account-password";
+import { sendAccountMail } from "@/lib/send-account-mail";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 
@@ -74,6 +77,7 @@ function AuthPage() {
   const [errors, setErrors] = useState<Partial<Record<string, string>>>({});
   const [busy, setBusy] = useState<"form" | "google" | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const mailAccount = useServerFn(sendAccountMail);
   const { user, loading, profileError, refresh, signOut } = useAuth();
   const navigate = useNavigate();
 
@@ -144,21 +148,27 @@ function AuthPage() {
     setBusy("form");
     try {
       if (mode === "signup") {
-        const { data, error } = await supabase.auth.signUp({
+        const { data, error } = await signUpWithAccountEmail({
           email: parsed.data.email,
           password: parsed.data.password,
-          options: {
-            emailRedirectTo: `${window.location.origin}/auth`,
-            data: { full_name: parsed.data.name, requested_role: role },
-          },
+          fullName: parsed.data.name,
+          requestedRole: role,
+          origin: window.location.origin,
         });
         if (error) throw error;
         if (data.user && data.user.identities?.length === 0) {
           throw new Error("User already registered");
         }
         if (!data.session) {
-          setNotice(`We sent a confirmation link to ${parsed.data.email}. Open it to activate your account, then sign in.`);
-          toast.success("Check your email to confirm your account");
+          const mailed = await mailAccount({
+            data: { to: parsed.data.email, kind: "signup", origin: window.location.origin },
+          });
+          setNotice(
+            mailed.ok
+              ? `We sent a confirmation email to ${parsed.data.email}. Open it to activate your account, then sign in.`
+              : `Your account was created. ${mailed.message} You can also use Continue with Google.`,
+          );
+          toast.success(mailed.ok ? "Check your email to confirm your account" : "Account created");
           setMode("signin");
           return;
         }

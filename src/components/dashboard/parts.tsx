@@ -18,6 +18,14 @@ export function useCounts<T extends Record<string, number>>(key: string, userId:
 
 export { supabase };
 
+/** Focusable wrapper for dashboard metric cards. */
+export const STAT_LINK =
+  "block rounded-xl outline-none transition-transform duration-200 ease-out focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 active:scale-[0.99]";
+
+/** Row link inside surface-card lists. */
+export const LIST_LINK =
+  "group outline-none transition-colors duration-200 ease-out hover:bg-signal-soft/45 focus-visible:bg-signal-soft/45 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring";
+
 export function StatCard({ label, value, icon: Icon, hint, loading, tone = "signal" }: {
   label: string; value: number | undefined; icon: LucideIcon; hint?: string; loading?: boolean;
   tone?: "signal" | "shortlisted" | "interview" | "hired" | "applied" | "quiet";
@@ -31,20 +39,20 @@ export function StatCard({ label, value, icon: Icon, hint, loading, tone = "sign
     quiet: "bg-muted text-muted-foreground ring-border/60",
   }[tone];
   const wash = {
-    signal: "from-signal-soft/55",
-    shortlisted: "from-status-shortlisted-soft/50",
-    interview: "from-status-interview-soft/45",
-    hired: "from-status-hired-soft/50",
-    applied: "from-status-applied-soft/50",
-    quiet: "from-muted/70",
+    signal: "from-signal-soft/45",
+    shortlisted: "from-status-shortlisted-soft/40",
+    interview: "from-status-interview-soft/35",
+    hired: "from-status-hired-soft/40",
+    applied: "from-status-applied-soft/40",
+    quiet: "from-muted/55",
   }[tone];
   return (
-    <div className="surface-card interactive-card group relative overflow-hidden p-5 sm:p-6">
-      <div className={cn("pointer-events-none absolute inset-0 bg-gradient-to-br via-transparent to-transparent opacity-90", wash)} aria-hidden />
+    <div className="surface-card interactive-card group relative h-full overflow-hidden p-5 sm:p-6">
+      <div className={cn("pointer-events-none absolute inset-0 bg-gradient-to-br via-transparent to-transparent", wash)} aria-hidden />
       <div className="relative flex items-center justify-between gap-3">
         <span className="text-sm font-medium text-muted-foreground">{label}</span>
-        <span className={cn("flex size-9 items-center justify-center rounded-xl ring-1 transition-transform duration-300 group-hover:scale-105", toneCls)}>
-          <Icon className="size-4" />
+        <span className={cn("flex size-9 shrink-0 items-center justify-center rounded-xl ring-1 transition-transform duration-300 group-hover:scale-105", toneCls)}>
+          <Icon className="size-4" aria-hidden />
         </span>
       </div>
       {loading ? (
@@ -61,10 +69,10 @@ export function Section({ title, description, action, children, className }: {
   title: string; description?: string; action?: ReactNode; children: ReactNode; className?: string;
 }) {
   return (
-    <section className={cn("flex flex-col gap-3", className)}>
+    <section className={cn("flex flex-col gap-4 sm:gap-5", className)}>
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="min-w-0">
-          <h2 className="text-lg font-semibold tracking-tight">{title}</h2>
+          <h2 className="text-lg font-semibold tracking-tight text-foreground">{title}</h2>
           {description && <p className="mt-1 max-w-[68ch] text-sm leading-relaxed text-muted-foreground">{description}</p>}
         </div>
         {action}
