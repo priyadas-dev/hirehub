@@ -1,25 +1,71 @@
-import { Link } from "@tanstack/react-router";
+import { Link, useRouterState } from "@tanstack/react-router";
 import { Logo } from "@/components/brand/Logo";
 import { ROLE_LABEL, type Role } from "@/lib/auth";
 import { cn } from "@/lib/utils";
-import { NAV } from "./nav";
+import { NAV, type AppNavPath } from "./nav";
+
+/** One active nav item — avoid TanStack Link prefix matching lighting parents. */
+export function isNavItemActive(to: AppNavPath, pathname: string): boolean {
+  const path = pathname.replace(/\/+$/, "") || "/";
+
+  if (to === "/seeker" || to === "/recruiter" || to === "/admin") {
+    return path === to;
+  }
+
+  if (to === "/recruiter/jobs/new") {
+    return path === "/recruiter/jobs/new";
+  }
+
+  if (to === "/recruiter/jobs") {
+    if (path === "/recruiter/jobs") return true;
+    if (path.startsWith("/recruiter/jobs/new")) return false;
+    return /^\/recruiter\/jobs\/[^/]+/.test(path);
+  }
+
+  if (to === "/seeker/jobs") {
+    if (path === "/seeker/jobs") return true;
+    return /^\/seeker\/jobs\/[^/]+/.test(path);
+  }
+
+  if (to === "/seeker/applications") {
+    if (path === "/seeker/applications") return true;
+    return path.startsWith("/seeker/applications/");
+  }
+
+  if (to === "/admin/jobs") {
+    return path === "/admin/jobs";
+  }
+
+  return path === to || path.startsWith(`${to}/`);
+}
+
+const ACTIVE =
+  "bg-signal text-signal-foreground shadow-signal hover:bg-signal hover:text-signal-foreground";
 
 export function SidebarNav({ role, onNavigate }: { role: Role; onNavigate?: () => void }) {
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+
   return (
     <nav aria-label="Main" className="flex flex-col gap-0.5">
       {NAV[role].map((item) => {
         const Icon = item.icon;
         const base = "group flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors";
         if (item.to) {
+          const active = isNavItemActive(item.to, pathname);
           return (
             <Link
               key={item.label}
               to={item.to}
               onClick={onNavigate}
-              className={cn(base, "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground")}
-              activeProps={{ className: "bg-signal text-signal-foreground shadow-signal hover:bg-signal hover:text-signal-foreground" }}
+              className={cn(
+                base,
+                active
+                  ? ACTIVE
+                  : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+              )}
+              aria-current={active ? "page" : undefined}
             >
-              <Icon className="size-4 text-signal group-hover:text-inherit [[aria-current=page]_&]:text-signal-foreground" />
+              <Icon className={cn("size-4", active ? "text-signal-foreground" : "text-signal group-hover:text-inherit")} />
               {item.label}
             </Link>
           );
@@ -46,16 +92,8 @@ export function AppSidebar({ role }: { role: Role }) {
       <p className="relative mb-2 mt-8 px-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-signal">
         {ROLE_LABEL[role]} workspace
       </p>
-      <div className="relative">
+      <div className="relative min-h-0 flex-1 overflow-y-auto">
         <SidebarNav role={role} />
-      </div>
-      <div className="relative mt-auto rounded-xl border border-signal/20 bg-signal-soft/70 px-3 py-4">
-        <p className="text-sm font-semibold text-foreground">Your journey starts here</p>
-        <p className="mt-1 text-sm leading-relaxed text-foreground/70">
-          {role === "recruiter"
-            ? "Create your company, then post jobs. Listings go live for seekers after admin approval."
-            : "Use the links above to move through hiring on HireHub."}
-        </p>
       </div>
     </aside>
   );
