@@ -2,6 +2,7 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 import { brokeredPreviewStorage } from './previewAuthStorage';
+import { recoveryRedirectTarget } from '@/lib/account-mail';
 
 function isNewSupabaseApiKey(value: string): boolean {
   return value.startsWith('sb_publishable_') || value.startsWith('sb_secret_');
@@ -47,6 +48,20 @@ function createSupabaseFetch(supabaseUrl: string, supabaseKey: string): typeof f
 
 
 function createSupabaseClient() {
+  let detectSessionInUrl = true;
+  if (typeof window !== "undefined") {
+    const next = recoveryRedirectTarget({
+      pathname: window.location.pathname,
+      hash: window.location.hash,
+      search: window.location.search,
+      origin: window.location.origin,
+    });
+    if (next) {
+      detectSessionInUrl = false;
+      window.location.replace(next);
+    }
+  }
+
   // Use import.meta.env for client-side (Vite build-time replacement)
   // Fall back to process.env for SSR (server-side rendering)
   const SUPABASE_URL = import.meta.env['VITE_SUPABASE_URL'] || process.env['SUPABASE_URL'];
@@ -70,6 +85,7 @@ function createSupabaseClient() {
       storage: brokeredPreviewStorage(),
       persistSession: true,
       autoRefreshToken: true,
+      detectSessionInUrl,
     },
   });
 }

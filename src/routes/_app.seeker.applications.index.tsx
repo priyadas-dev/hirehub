@@ -63,7 +63,7 @@ function MyApplicationsPage() {
             {apps.data.map((a) => (
               <li
                 key={a.id}
-                className="flex flex-col gap-3 px-5 py-4 transition-colors hover:bg-muted/35 sm:flex-row sm:items-center sm:justify-between"
+                className="flex flex-col gap-3 px-5 py-4 transition-colors hover:bg-signal-soft/45 sm:flex-row sm:items-center sm:justify-between"
               >
                 <div className="min-w-0">
                   <p className="truncate font-medium tracking-tight">{a.jobs?.title ?? "Job"}</p>

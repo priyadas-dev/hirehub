@@ -4,7 +4,7 @@ import { ContactEmailLinks, ContactPhoneLink } from "@/components/marketing/Cont
 
 export function ContactSection() {
   return (
-    <section id="contact" aria-labelledby="contact-heading" className="border-t border-border/60">
+    <section id="contact" aria-labelledby="contact-heading" className="border-t border-signal/15 bg-background">
       <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-20">
         <div className="mx-auto max-w-2xl text-center">
           <h2 id="contact-heading" className="font-display text-3xl tracking-tight sm:text-4xl">
@@ -25,7 +25,7 @@ export function ContactSection() {
                   <Mail className="size-4" aria-hidden />
                 </span>
                 <div className="min-w-0">
-                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Email</p>
+                  <p className="text-xs font-medium uppercase tracking-wide text-signal">Email</p>
                   <ContactEmailLinks />
                 </div>
               </li>
@@ -34,7 +34,7 @@ export function ContactSection() {
                   <Phone className="size-4" aria-hidden />
                 </span>
                 <div>
-                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Phone</p>
+                  <p className="text-xs font-medium uppercase tracking-wide text-signal">Phone</p>
                   <ContactPhoneLink />
                 </div>
               </li>

@@ -9,9 +9,10 @@ import { fileURLToPath } from "node:url";
 import { loadEnv, type Plugin } from "vite";
 import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 
-/** This copy lives in a subfolder. Secrets stay in the repo-root .env (gitignored, not on GitHub). */
-const envDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+/** Project root (where vite.config.ts and .env live). */
+const envDir = path.dirname(fileURLToPath(import.meta.url));
 
+/** Vite exposes only VITE_* to the browser. Server handlers read process.env, which does not load .env by itself. */
 function loadProjectEnv(dir: string): Plugin {
   return {
     name: "hirehub-load-project-env",

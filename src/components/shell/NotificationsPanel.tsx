@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Bell } from "lucide-react";
@@ -30,6 +31,7 @@ function fmtRelative(iso: string) {
 export function NotificationsButton({ userId }: { userId: string }) {
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const [open, setOpen] = useState(false);
 
   const list = useQuery({
     queryKey: ["notifications", userId],
@@ -73,20 +75,36 @@ export function NotificationsButton({ userId }: { userId: string }) {
   }
 
   return (
-    <Popover>
+    <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button variant="ghost" size="icon" aria-label="Notifications" className="relative">
-          <Bell />
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label="Notifications"
+          aria-expanded={open}
+          className={cn(
+            "relative transition-colors",
+            open
+              ? "bg-status-applied text-white hover:bg-status-applied hover:text-white"
+              : "bg-signal-soft text-signal ring-1 ring-signal/25 hover:bg-signal hover:text-signal-foreground",
+          )}
+        >
+          <Bell className={cn("size-4", open ? "fill-current" : unread > 0 && "fill-signal/25")} aria-hidden />
           {unread > 0 && (
-            <span className="absolute right-1.5 top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-signal px-1 text-[10px] font-semibold text-signal-foreground ring-2 ring-background">
+            <span
+              className={cn(
+                "absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-semibold ring-2 ring-background",
+                open ? "bg-card text-status-applied" : "bg-status-shortlisted text-foreground",
+              )}
+            >
               {unread > 9 ? "9+" : unread}
             </span>
           )}
         </Button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-[min(100vw-2rem,22rem)] rounded-xl p-0">
-        <div className="flex items-center justify-between gap-2 border-b px-4 py-3">
-          <p className="text-sm font-semibold">Notifications</p>
+        <div className="flex items-center justify-between gap-2 border-b border-signal/15 bg-signal-soft/40 px-4 py-3">
+          <p className="text-sm font-semibold text-foreground">Notifications</p>
           {unread > 0 && !unavailable && (
             <Button
               type="button"
