@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 /** Fields a signed-in user may update on their own `profiles` row (never `role`). */
 export const ownProfileSchema = z.object({
   full_name: z.string().trim().min(2, "Full name must be at least 2 characters"),
+  email: z.string().trim().email("Enter a valid email address"),
   phone: z
     .string()
     .trim()
@@ -19,11 +20,12 @@ export const resumeUrlSchema = z
   .optional()
   .refine((v) => !v || /^https?:\/\/\S+/i.test(v), "Resume must be a full URL starting with http:// or https://");
 
-/** Contact fields users may edit on their own profile — never includes `role` or Auth email. */
+/** Contact fields users may edit on their own profile — never includes `role`. */
 export function buildOwnProfileUpdate(fields: OwnProfileFields) {
   const parsed = ownProfileSchema.parse(fields);
   return {
     full_name: parsed.full_name.trim(),
+    email: parsed.email.trim().toLowerCase(),
     phone: parsed.phone?.trim() || null,
   };
 }
@@ -32,7 +34,8 @@ export function buildOwnProfileUpdate(fields: OwnProfileFields) {
  * Update the authenticated user's profile contact fields.
  * Always scopes by `auth.uid()` via the caller's id — never accepts a target user id from the UI.
  * Does not touch `role` (DB trigger `protect_profile_role` also blocks non-admin role changes).
- * Does not write Auth email into profiles — email changes must go through Supabase Auth.
+ * Updates `profiles.email` (contact email recruiters see). Sign-in Auth email is unchanged here —
+ * password / sign-in email changes belong on Settings.
  */
 export async function updateOwnProfile(userId: string, fields: OwnProfileFields) {
   const { data, error } = await supabase

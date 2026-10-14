@@ -38,12 +38,12 @@ export function ContactProfileCard({
 
   const form = useForm<OwnProfileFields>({
     resolver: zodResolver(ownProfileSchema),
-    defaultValues: { full_name: fullName, phone: phone ?? "" },
+    defaultValues: { full_name: fullName, email, phone: phone ?? "" },
   });
 
   useEffect(() => {
-    form.reset({ full_name: fullName, phone: phone ?? "" });
-  }, [fullName, phone, form]);
+    form.reset({ full_name: fullName, email, phone: phone ?? "" });
+  }, [fullName, email, phone, form]);
 
   const save = useMutation({
     mutationFn: (values: OwnProfileFields) => updateOwnProfile(userId, values),
@@ -98,11 +98,20 @@ export function ContactProfileCard({
           noValidate
         >
           <div className="space-y-2">
-            <Label htmlFor="contact-email">Account email</Label>
-            <Input id="contact-email" value={email} disabled readOnly autoComplete="username" />
+            <Label htmlFor="contact-email">Email</Label>
+            <Input
+              id="contact-email"
+              type="email"
+              inputMode="email"
+              autoComplete="email"
+              placeholder="you@example.com"
+              {...form.register("email")}
+            />
+            {form.formState.errors.email && (
+              <p className="text-xs text-destructive">{form.formState.errors.email.message}</p>
+            )}
             <p className="text-xs text-muted-foreground">
-              This is your Supabase Auth sign-in email. It cannot be edited from this form — changing it requires the
-              Auth email-change confirmation flow in Supabase, not a HireHub profile field.
+              Contact email used across HireHub. Change password from Settings.
             </p>
           </div>
           <div className="space-y-2">
@@ -135,7 +144,7 @@ export function ContactProfileCard({
               variant="outline"
               disabled={save.isPending}
               onClick={() => {
-                form.reset({ full_name: fullName, phone: phone ?? "" });
+                form.reset({ full_name: fullName, email, phone: phone ?? "" });
                 setEditing(false);
               }}
             >
