@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useServerFn } from "@tanstack/react-start";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -14,7 +15,9 @@ import { Label } from "@/components/ui/label";
 import { useFileUploadsReady } from "@/hooks/use-file-uploads-ready";
 import { useAuth } from "@/lib/auth";
 import { isMissingSchemaError } from "@/lib/hirehub-storage";
+import { sendPasswordRecoveryEmail } from "@/lib/account-password";
 import { ownProfileSchema, resumeUrlSchema, updateOwnProfile } from "@/lib/profile";
+import { sendAccountMail } from "@/lib/send-account-mail";
 import { removeResumeObject, saveProfileResume } from "@/lib/resume-upload";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -41,6 +44,8 @@ function SeekerProfilePage() {
   const uploadsReady = useFileUploadsReady();
   const canPersist = !!uploadsReady.data;
   const [resumeValue, setResumeValue] = useState<ResumePickerValue | null>(null);
+  const [mailing, setMailing] = useState(false);
+  const mailAccount = useServerFn(sendAccountMail);
 
   const profile = useQuery({
     queryKey: ["seeker-profile", id],
@@ -212,8 +217,38 @@ function SeekerProfilePage() {
           <Label htmlFor="email">Account email</Label>
           <Input id="email" value={profile.data?.email || user?.email || ""} disabled readOnly autoComplete="username" />
           <p className="text-xs text-muted-foreground">
-            This is your Supabase Auth sign-in email. It cannot be edited or saved from this profile form.
+            Sign-in email. Confirmation and password reset messages are sent here.
           </p>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={mailing || !(profile.data?.email || user?.email)}
+            onClick={() => {
+              const email = profile.data?.email || user?.email;
+              if (!email) return;
+              setMailing(true);
+              void (async () => {
+                try {
+                  await sendPasswordRecoveryEmail(email, window.location.origin);
+                  const mailed = await mailAccount({
+                    data: { to: email, kind: "reset", origin: window.location.origin },
+                  });
+                  toast.success("Check your email", {
+                    description: mailed.ok
+                      ? `A password reset email is on the way to ${email}.`
+                      : mailed.message,
+                  });
+                } catch (err) {
+                  toast.error(err instanceof Error ? err.message : "Could not send the account email.");
+                } finally {
+                  setMailing(false);
+                }
+              })();
+            }}
+          >
+            {mailing ? "Sending…" : "Email me a reset link"}
+          </Button>
         </div>
         <div className="space-y-2">
           <Label htmlFor="full_name">Full name</Label>

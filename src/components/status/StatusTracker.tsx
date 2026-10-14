@@ -25,9 +25,9 @@ export function StatusTracker({ status, className }: { status: ApplicationStatus
   return (
     <div className={cn("w-full", className)} role="group" aria-label={`Application status: ${STATUS_META[status].label}`}>
       <div className="relative px-0.5 sm:px-0">
-        <div className="absolute left-5 right-5 top-5 h-1 rounded-full bg-border/80" aria-hidden />
+        <div className="absolute left-5 right-5 top-5 h-1 rounded-full bg-signal-soft" aria-hidden />
         <div
-          className="absolute left-5 top-5 h-1 origin-left overflow-hidden rounded-full bg-signal shadow-[0_0_12px_color-mix(in_oklab,var(--signal)_45%,transparent)] transition-[width] duration-1000 ease-[cubic-bezier(0.22,1,0.36,1)]"
+          className="absolute left-5 top-5 h-1 origin-left overflow-hidden rounded-full bg-gradient-to-r from-status-applied via-signal to-status-hired shadow-[0_0_12px_color-mix(in_oklab,var(--signal)_45%,transparent)] transition-[width] duration-1000 ease-[cubic-bezier(0.22,1,0.36,1)]"
           style={{ width: `calc((100% - 2.5rem) * ${pct / 100})` }}
           aria-hidden
         >

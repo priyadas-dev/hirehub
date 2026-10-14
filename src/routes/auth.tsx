@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { useServerFn } from "@tanstack/react-start";
 import { ArrowLeft, Briefcase, Loader2, MailCheck, Search } from "lucide-react";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -23,6 +24,8 @@ import {
   type AuthIntent,
   type SignupRole,
 } from "@/lib/auth-intent";
+import { signUpWithAccountEmail } from "@/lib/account-password";
+import { sendAccountMail } from "@/lib/send-account-mail";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 
@@ -74,6 +77,7 @@ function AuthPage() {
   const [errors, setErrors] = useState<Partial<Record<string, string>>>({});
   const [busy, setBusy] = useState<"form" | "google" | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const mailAccount = useServerFn(sendAccountMail);
   const { user, loading, profileError, refresh, signOut } = useAuth();
   const navigate = useNavigate();
 
@@ -144,21 +148,27 @@ function AuthPage() {
     setBusy("form");
     try {
       if (mode === "signup") {
-        const { data, error } = await supabase.auth.signUp({
+        const { data, error } = await signUpWithAccountEmail({
           email: parsed.data.email,
           password: parsed.data.password,
-          options: {
-            emailRedirectTo: `${window.location.origin}/auth`,
-            data: { full_name: parsed.data.name, requested_role: role },
-          },
+          fullName: parsed.data.name,
+          requestedRole: role,
+          origin: window.location.origin,
         });
         if (error) throw error;
         if (data.user && data.user.identities?.length === 0) {
           throw new Error("User already registered");
         }
         if (!data.session) {
-          setNotice(`We sent a confirmation link to ${parsed.data.email}. Open it to activate your account, then sign in.`);
-          toast.success("Check your email to confirm your account");
+          const mailed = await mailAccount({
+            data: { to: parsed.data.email, kind: "signup", origin: window.location.origin },
+          });
+          setNotice(
+            mailed.ok
+              ? `We sent a confirmation email to ${parsed.data.email}. Open it to activate your account, then sign in.`
+              : `Your account was created. ${mailed.message} You can also use Continue with Google.`,
+          );
+          toast.success(mailed.ok ? "Check your email to confirm your account" : "Account created");
           setMode("signin");
           return;
         }
@@ -240,14 +250,19 @@ function AuthPage() {
             </p>
           )}
 
-          <div className="mt-8 grid grid-cols-2 rounded-lg bg-muted p-1 text-sm" role="tablist">
+          <div className="mt-8 grid grid-cols-2 rounded-lg bg-signal-soft/70 p-1 text-sm ring-1 ring-signal/15" role="tablist">
             {(["signin", "signup"] as const).map((m) => (
               <button
                 key={m}
                 role="tab"
                 aria-selected={mode === m}
                 onClick={() => { setMode(m); setErrors({}); }}
-                className={cn("rounded-md py-2 font-medium transition-all", mode === m ? "bg-card shadow-xs" : "text-muted-foreground hover:text-foreground")}
+                className={cn(
+                  "rounded-md py-2 font-medium transition-all",
+                  mode === m
+                    ? "bg-signal text-signal-foreground shadow-signal"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
               >
                 {m === "signin" ? "Sign in" : "Sign up"}
               </button>
@@ -305,7 +320,7 @@ function AuthPage() {
               <div className="-mt-2 flex justify-end">
                 <Link
                   to="/forgot-password"
-                  className="text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+                  className="text-sm text-signal underline-offset-4 hover:underline"
                 >
                   Forgot password?
                 </Link>
@@ -320,13 +335,21 @@ function AuthPage() {
         </div>
       </div>
 
-      <aside className="relative hidden overflow-hidden border-l bg-surface lg:flex lg:items-center lg:justify-center">
+      <aside className="relative hidden overflow-hidden border-l border-signal/15 bg-surface lg:flex lg:items-center lg:justify-center">
         <div className="absolute inset-0 bg-grid" aria-hidden />
         <div className="absolute inset-0 bg-hero" aria-hidden />
+        <div
+          className="pointer-events-none absolute -right-20 top-16 size-72 rounded-full bg-signal/20 blur-3xl"
+          aria-hidden
+        />
+        <div
+          className="pointer-events-none absolute -left-16 bottom-10 size-56 rounded-full bg-status-interview/20 blur-3xl"
+          aria-hidden
+        />
         <div className="relative w-full max-w-md px-8">
           <div className="surface-card p-6 shadow-lift">
             <div className="mb-6 flex items-center gap-3">
-              <div className="flex size-10 items-center justify-center rounded-lg bg-primary font-semibold text-primary-foreground">N</div>
+              <div className="flex size-10 items-center justify-center rounded-lg bg-signal font-semibold text-signal-foreground shadow-signal">N</div>
               <div>
                 <p className="text-sm font-semibold">Product Designer</p>
                 <p className="text-xs text-muted-foreground">Northwind · Remote</p>
@@ -334,7 +357,7 @@ function AuthPage() {
             </div>
             <StatusTracker status="interview" />
           </div>
-          <p className="mt-8 font-display text-3xl leading-snug">“Every application, beautifully tracked — from first click to offer.”</p>
+          <p className="mt-8 font-display text-3xl leading-snug text-foreground">“Every application, beautifully tracked — from first click to offer.”</p>
         </div>
       </aside>
     </div>

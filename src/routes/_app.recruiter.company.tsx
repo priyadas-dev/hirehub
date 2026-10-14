@@ -222,8 +222,7 @@ function CompanyPage() {
           <div>
             <h2 className="text-lg font-semibold tracking-tight">Company information</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Edit name, industry, website, and logo. Logo files use private Storage and short-lived signed URLs after
-              PROPOSED_0008 is applied.
+              Edit name, industry, and website.
             </p>
           </div>
           {exists && !editingCompany && (

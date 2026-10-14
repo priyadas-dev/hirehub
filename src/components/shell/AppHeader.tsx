@@ -138,23 +138,35 @@ function HeaderSearch({ user }: { user: SessionUser }) {
   };
 
   return (
-    <form onSubmit={runSearch} className="relative min-w-0 max-w-md flex-1">
-      <label className="block">
-        <span className="sr-only">Search</span>
-        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-        <input
-          ref={inputRef}
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder={headerSearchPlaceholder(user.role)}
-          className="h-10 w-full rounded-lg border bg-card pl-9 pr-14 text-sm shadow-xs outline-none transition placeholder:text-muted-foreground focus:border-signal focus:ring-4 focus:ring-signal/10"
-          autoComplete="off"
-          enterKeyHint="search"
-        />
-        <kbd className="pointer-events-none absolute right-3 top-1/2 hidden -translate-y-1/2 rounded border bg-muted px-1.5 font-mono text-[10px] text-muted-foreground sm:inline">
-          ⌘K
-        </kbd>
+    <form onSubmit={runSearch} className="relative min-w-0 max-w-md flex-1" role="search">
+      <label htmlFor="header-job-search" className="sr-only">
+        Search
       </label>
+      <button
+        type="submit"
+        aria-label="Search"
+        className="absolute left-0 top-0 flex h-10 w-10 items-center justify-center rounded-l-lg text-muted-foreground transition-colors hover:text-signal focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal/40"
+      >
+        <Search className="size-4" aria-hidden />
+      </button>
+      <input
+        id="header-job-search"
+        ref={inputRef}
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder={headerSearchPlaceholder(user.role)}
+        className="h-10 w-full rounded-lg border border-signal/15 bg-card pl-10 pr-16 text-sm shadow-xs outline-none transition placeholder:text-muted-foreground focus:border-signal focus:ring-4 focus:ring-signal/15"
+        autoComplete="off"
+        enterKeyHint="search"
+      />
+      <button
+        type="submit"
+        aria-label="Search"
+        title="Search"
+        className="absolute right-1.5 top-1/2 hidden h-7 -translate-y-1/2 items-center rounded border border-signal/20 bg-signal-soft px-1.5 font-mono text-[10px] text-signal transition-colors hover:border-signal/40 hover:bg-signal/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal/40 sm:inline-flex"
+      >
+        ⌘K
+      </button>
     </form>
   );
 }
@@ -162,7 +174,7 @@ function HeaderSearch({ user }: { user: SessionUser }) {
 export function AppHeader({ user }: { user: SessionUser }) {
   const [open, setOpen] = useState(false);
   return (
-    <header className="sticky top-0 z-30 border-b bg-background/80 backdrop-blur-md">
+    <header className="sticky top-0 z-30 border-b border-signal/15 bg-background/85 backdrop-blur-md">
       {/* Same max-width + horizontal padding as main so search/profile align with welcome cards. */}
       <div className={`${APP_CONTENT_SHELL} flex h-16 items-center gap-3`}>
         <Sheet open={open} onOpenChange={setOpen}>
@@ -171,10 +183,13 @@ export function AppHeader({ user }: { user: SessionUser }) {
               <Menu />
             </Button>
           </SheetTrigger>
-          <SheetContent side="left" className="w-72 bg-sidebar p-5">
+          <SheetContent side="left" className="w-72 border-signal/15 bg-sidebar p-5">
             <SheetTitle className="sr-only">Navigation</SheetTitle>
-            <Logo to={ROLE_HOME[user.role]} className="mb-8 px-2" />
-            <SidebarNav role={user.role} onNavigate={() => setOpen(false)} />
+            <div className="absolute inset-y-0 left-0 w-1 bg-signal" aria-hidden />
+            <Logo to={ROLE_HOME[user.role]} className="relative mb-8 px-2" />
+            <div className="relative">
+              <SidebarNav role={user.role} onNavigate={() => setOpen(false)} />
+            </div>
           </SheetContent>
         </Sheet>
 

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { supabase } from "@/integrations/supabase/client";
+import { authRedirectCandidates, isAuthRedirectError } from "@/lib/account-mail";
 
 /** Shared strength rules for new passwords (never log or persist these values). */
 export function passwordStrengthIssue(password: string): string | null {
@@ -90,8 +91,44 @@ export async function setPasswordForSignedInUser(newPassword: string) {
   if (error) throw error;
 }
 
-/** Sends a recovery email so the user can set/reset a password via /reset-password. */
-export async function sendPasswordRecoveryEmail(email: string, redirectTo: string) {
-  const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo });
-  if (error) throw error;
+/**
+ * Sends a recovery email. Tries the reset page, then the site origin, then the
+ * Supabase Site URL, so a missing redirect allowlist entry does not block the mail.
+ */
+export async function sendPasswordRecoveryEmail(email: string, origin: string) {
+  const trimmed = email.trim();
+  let lastMessage = "Could not send the reset email.";
+  for (const redirectTo of authRedirectCandidates(origin, "/reset-password")) {
+    const { error } = await supabase.auth.resetPasswordForEmail(
+      trimmed,
+      redirectTo ? { redirectTo } : undefined,
+    );
+    if (!error) return;
+    lastMessage = error.message;
+    if (!isAuthRedirectError(error.message)) throw error;
+  }
+  throw new Error(lastMessage);
+}
+
+/** Creates the account, retrying without a custom redirect when that URL is not allowlisted. */
+export async function signUpWithAccountEmail(input: {
+  email: string;
+  password: string;
+  fullName: string;
+  requestedRole: string;
+  origin: string;
+}) {
+  const metadata = { full_name: input.fullName, requested_role: input.requestedRole };
+  let last: Awaited<ReturnType<typeof supabase.auth.signUp>> | null = null;
+  for (const emailRedirectTo of authRedirectCandidates(input.origin, "/auth")) {
+    const result = await supabase.auth.signUp({
+      email: input.email,
+      password: input.password,
+      options: emailRedirectTo ? { emailRedirectTo, data: metadata } : { data: metadata },
+    });
+    last = result;
+    if (!result.error) return result;
+    if (!isAuthRedirectError(result.error.message)) return result;
+  }
+  return last!;
 }

@@ -196,7 +196,7 @@ function ApplicantsPage() {
                   })
                 }
                 className={`rounded-xl border px-3 py-3 text-left transition-colors ${
-                  active ? "border-signal/40 bg-signal-soft/50" : "bg-card hover:bg-muted/40"
+                  active ? "border-signal/40 bg-signal-soft/50" : "bg-card hover:bg-signal-soft/40"
                 }`}
               >
                 <p className="text-xs text-muted-foreground">{STATUS_META[s].label}</p>
@@ -303,7 +303,7 @@ function ApplicantsPage() {
                   <button
                     type="button"
                     className={`flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors ${
-                      active ? "bg-muted/60" : "hover:bg-muted/40"
+                      active ? "bg-signal-soft/70" : "hover:bg-signal-soft/40"
                     }`}
                     onClick={() => void navigate({ search: (prev) => ({ ...prev, applicationId: a.id }) })}
                   >

@@ -44,14 +44,14 @@ const ROLE_CARDS: {
 function Landing() {
   return (
     <div className="min-h-screen overflow-x-hidden">
-      <header className="sticky top-0 z-40 border-b border-border/60 bg-background/80 backdrop-blur-md">
+      <header className="sticky top-0 z-40 border-b border-signal/15 bg-background/85 backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
           <Logo />
           <nav className="flex items-center gap-1.5 sm:gap-2">
             <Button variant="ghost" asChild>
               <Link to="/auth">Sign in</Link>
             </Button>
-            <Button asChild>
+            <Button variant="signal" asChild>
               <Link to="/auth" search={{ mode: "signup" }}>Get started</Link>
             </Button>
           </nav>
@@ -71,23 +71,23 @@ function Landing() {
         />
 
         <div className="relative mx-auto max-w-6xl px-4 pb-16 pt-12 text-center sm:px-6 sm:pb-24 sm:pt-20">
-          <div className="mb-8 flex animate-fade-up justify-center">
-            <LogoMark className="size-12 rounded-xl shadow-signal sm:size-14" />
+          <div className="mb-5 flex animate-fade-up justify-center sm:mb-6">
+            <LogoMark className="size-12 rounded-xl shadow-lift sm:size-14" />
           </div>
-          <p className="animate-fade-up font-display text-3xl tracking-tight text-foreground sm:text-4xl [animation-delay:40ms]">
+          <p className="animate-fade-up font-display text-2xl tracking-tight text-foreground sm:text-3xl [animation-delay:40ms]">
             HireHub
           </p>
-          <span className="mt-5 inline-flex animate-fade-up items-center gap-2 rounded-full border bg-card/90 px-3.5 py-1.5 text-xs font-medium shadow-xs backdrop-blur-sm [animation-delay:80ms]">
+          <span className="mt-4 inline-flex animate-fade-up items-center gap-2 rounded-full border border-signal/20 bg-card/90 px-3.5 py-1.5 text-xs font-medium text-foreground shadow-xs backdrop-blur-sm sm:mt-5 [animation-delay:80ms]">
             <span className="relative flex size-1.5">
               <span className="absolute inline-flex size-full animate-ping rounded-full bg-signal opacity-60" />
               <span className="relative size-1.5 rounded-full bg-signal" />
             </span>
             Hiring, without the noise
           </span>
-          <h1 className="mx-auto mt-6 max-w-3xl animate-fade-up font-display text-[2.65rem] leading-[1.05] tracking-tight sm:mt-8 sm:text-7xl [animation-delay:120ms]">
+          <h1 className="mx-auto mt-5 max-w-[18ch] animate-fade-up font-display text-5xl text-foreground sm:mt-6 sm:text-6xl [animation-delay:120ms]">
             Where great people meet <em className="text-signal not-italic">great work</em>
           </h1>
-          <p className="mx-auto mt-5 max-w-xl animate-fade-up text-base text-muted-foreground sm:mt-6 sm:text-lg [animation-delay:180ms]">
+          <p className="mx-auto mt-4 max-w-[62ch] animate-fade-up text-base leading-relaxed text-muted-foreground sm:mt-5 sm:text-lg sm:leading-relaxed [animation-delay:180ms]">
             HireHub brings job seekers and recruiters together in one calm, transparent space — so everyone always knows what happens next.
           </p>
           <div className="mt-8 flex animate-fade-up flex-col items-stretch justify-center gap-3 sm:mt-10 sm:flex-row sm:flex-wrap sm:items-center [animation-delay:240ms]">
@@ -129,7 +129,7 @@ function Landing() {
             aria-label={`${title} — sign in or create an account`}
             className="surface-card interactive-card group block rounded-xl p-6 outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:p-7"
           >
-            <div className="flex size-11 items-center justify-center rounded-xl bg-surface text-signal ring-1 ring-border transition-colors group-hover:bg-signal-soft group-hover:ring-signal/20">
+            <div className="flex size-11 items-center justify-center rounded-xl bg-signal-soft text-signal ring-1 ring-signal/20 transition-colors group-hover:bg-signal group-hover:text-signal-foreground group-hover:shadow-signal">
               <Icon className="size-5" aria-hidden />
             </div>
             <h2 className="mt-5 text-lg font-semibold tracking-tight">{title}</h2>

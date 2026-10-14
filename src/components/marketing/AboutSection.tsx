@@ -8,10 +8,10 @@ const ABOUT_IMAGE =
 
 export function AboutSection() {
   return (
-    <section id="about" aria-labelledby="about-heading" className="border-t border-border/60 bg-surface/30">
+    <section id="about" aria-labelledby="about-heading" className="border-t border-signal/15 bg-signal-soft/20">
       <div className="mx-auto grid max-w-6xl items-center gap-10 px-4 py-16 sm:px-6 sm:py-20 lg:grid-cols-2 lg:gap-14">
         <div className="order-2 lg:order-1">
-          <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-card">
+          <div className="overflow-hidden rounded-2xl border border-signal/15 bg-card shadow-card">
             <img
               src={ABOUT_IMAGE}
               alt="Professionals collaborating around a laptop during a hiring discussion"

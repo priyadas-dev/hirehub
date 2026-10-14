@@ -1,4 +1,4 @@
-import { Bookmark, Briefcase, CalendarClock, FileText, MapPin, Sparkles, Star, UserCircle } from "lucide-react";
+import { Bookmark, Briefcase, CalendarClock, ChevronRight, FileText, MapPin, Sparkles, Star, UserCircle } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -8,7 +8,9 @@ import { StatusBadge } from "@/components/status/StatusBadge";
 import type { ApplicationStatus } from "@/components/status/status";
 import { RoleWelcome } from "@/components/dashboard/RoleWelcome";
 import { useAuth } from "@/lib/auth";
-import { countRows, fmtDate, Section, StatCard, supabase, useCounts } from "./parts";
+import { JOB_TYPE_LABEL, type JobType } from "@/lib/hirehub";
+import { countRows, fmtDate, LIST_LINK, Section, STAT_LINK, StatCard, supabase, useCounts } from "./parts";
+import { cn } from "@/lib/utils";
 
 export function SeekerDashboard() {
   const { user } = useAuth();
@@ -52,70 +54,122 @@ export function SeekerDashboard() {
   });
   const latest = recent.data?.[0]?.status as ApplicationStatus | undefined;
   const c = counts.data;
+  const hasJourney = Boolean(latest);
 
   return (
-    <div className="space-y-8 sm:space-y-10">
+    <div className="flex flex-col gap-10 sm:gap-14">
       {user ? <RoleWelcome userId={user.id} fullName={user.name} role="seeker" /> : null}
       <PageHeader
-        eyebrow="Job Seeker workspace"
         title={`Good to see you, ${user?.name.split(" ")[0] ?? "there"}.`}
         description="Track applications, save roles, and keep your profile ready to apply."
         actions={
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" size="sm" asChild>
-              <Link to="/seeker/saved"><Bookmark /> Saved</Link>
+              <Link to="/seeker/saved">
+                <Bookmark /> Saved
+              </Link>
             </Button>
             <Button variant="outline" size="sm" asChild>
-              <Link to="/seeker/profile"><UserCircle /> Profile</Link>
+              <Link to="/seeker/profile">
+                <UserCircle /> Profile
+              </Link>
             </Button>
             <Button variant="signal" size="sm" asChild>
-              <Link to="/seeker/jobs"><Briefcase /> Browse jobs</Link>
+              <Link to="/seeker/jobs">
+                <Briefcase /> Browse jobs
+              </Link>
             </Button>
           </div>
         }
       />
 
-      <div className="grid stagger-children gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Link to="/seeker/applications" className="block rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-          <StatCard label="Applications" value={c?.applications} icon={FileText} tone="applied" loading={counts.isLoading} />
-        </Link>
-        <Link to="/seeker/applications" className="block rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-          <StatCard label="Shortlisted" value={c?.shortlisted} icon={Star} tone="shortlisted" loading={counts.isLoading} />
-        </Link>
-        <Link to="/seeker/applications" className="block rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-          <StatCard label="Interviews" value={c?.interviews} icon={CalendarClock} tone="interview" loading={counts.isLoading} />
-        </Link>
-        <Link to="/seeker/saved" className="block rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-          <StatCard label="Saved jobs" value={c?.saved} icon={Bookmark} loading={counts.isLoading} />
-        </Link>
-      </div>
-
-      <section className="surface-card relative overflow-hidden p-5 sm:p-8" aria-labelledby="journey">
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-signal-soft/40 to-transparent" aria-hidden />
-        <div className="relative mb-6 flex flex-wrap items-center justify-between gap-3 sm:mb-8">
-          <div>
-            <h2 id="journey" className="text-lg font-semibold tracking-tight">Application journey</h2>
-            <p className="mt-0.5 text-sm text-muted-foreground">
-              {latest
+      <section
+        className="relative overflow-hidden rounded-xl border border-signal/25 bg-signal-soft p-5 sm:p-8"
+        aria-labelledby="journey"
+      >
+        <div
+          className="pointer-events-none absolute -right-12 -top-16 size-44 rounded-full bg-signal/15 blur-3xl"
+          aria-hidden
+        />
+        <div className="relative mb-6 flex flex-wrap items-start justify-between gap-3 sm:mb-8">
+          <div className="min-w-0">
+            <h2 id="journey" className="text-lg font-semibold tracking-tight text-foreground">
+              Application journey
+            </h2>
+            <p className="mt-1 max-w-[68ch] text-base leading-relaxed text-foreground/70">
+              {hasJourney
                 ? "Where your most recent application stands."
                 : "Applied → Shortlisted → Interview → Hired. Your tracker appears after you apply."}
             </p>
           </div>
-          {latest ? (
-            <StatusBadge status={latest} />
+          {hasJourney ? (
+            <StatusBadge status={latest!} className="shrink-0" />
           ) : (
-            <Button size="sm" variant="outline" asChild>
+            <Button size="sm" variant="outline" className="shrink-0 border-signal/30 bg-card/90" asChild>
               <Link to="/seeker/jobs">Find a role</Link>
             </Button>
           )}
         </div>
         <StatusTracker
           status={latest ?? "applied"}
-          className={latest ? "relative mx-auto max-w-2xl" : "relative mx-auto max-w-2xl opacity-55"}
+          className={cn("relative mx-auto max-w-2xl", !hasJourney && "opacity-50")}
         />
       </section>
 
-      <div className="grid gap-8 lg:grid-cols-5">
+      {counts.isError ? (
+        <ErrorState
+          title="Counts could not load"
+          description="We could not load your application totals. Try again."
+          onRetry={() => void counts.refetch()}
+        />
+      ) : (
+        <div className="grid stagger-children gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <Link
+            to="/seeker/applications"
+            className={STAT_LINK}
+            aria-label={`Applications: ${c?.applications ?? "loading"}`}
+          >
+            <StatCard
+              label="Applications"
+              value={c?.applications}
+              icon={FileText}
+              tone="applied"
+              loading={counts.isLoading}
+            />
+          </Link>
+          <Link
+            to="/seeker/applications"
+            className={STAT_LINK}
+            aria-label={`Shortlisted: ${c?.shortlisted ?? "loading"}`}
+          >
+            <StatCard
+              label="Shortlisted"
+              value={c?.shortlisted}
+              icon={Star}
+              tone="shortlisted"
+              loading={counts.isLoading}
+            />
+          </Link>
+          <Link
+            to="/seeker/applications"
+            className={STAT_LINK}
+            aria-label={`Interviews: ${c?.interviews ?? "loading"}`}
+          >
+            <StatCard
+              label="Interviews"
+              value={c?.interviews}
+              icon={CalendarClock}
+              tone="interview"
+              loading={counts.isLoading}
+            />
+          </Link>
+          <Link to="/seeker/saved" className={STAT_LINK} aria-label={`Saved jobs: ${c?.saved ?? "loading"}`}>
+            <StatCard label="Saved jobs" value={c?.saved} icon={Bookmark} loading={counts.isLoading} />
+          </Link>
+        </div>
+      )}
+
+      <div className="grid gap-10 lg:grid-cols-5 lg:items-start">
         <Section
           title="Recent applications"
           className="lg:col-span-3"
@@ -130,22 +184,28 @@ export function SeekerDashboard() {
           ) : recent.isError ? (
             <ErrorState onRetry={() => void recent.refetch()} />
           ) : recent.data && recent.data.length > 0 ? (
-            <ul className="surface-card divide-y overflow-hidden">
+            <ul className="surface-card divide-y divide-signal/10 overflow-hidden">
               {recent.data.map((a) => (
                 <li key={a.id}>
                   <Link
                     to="/seeker/applications/$applicationId"
                     params={{ applicationId: a.id }}
-                    className="flex items-center justify-between gap-4 px-5 py-4 transition-colors hover:bg-muted/40"
+                    className={cn(LIST_LINK, "flex min-h-14 items-center justify-between gap-4 px-5 py-4")}
                   >
                     <div className="min-w-0">
-                      <p className="truncate font-medium tracking-tight">{a.jobs?.title ?? "Job"}</p>
-                      <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                      <p className="truncate font-medium tracking-tight text-foreground">{a.jobs?.title ?? "Job"}</p>
+                      <p className="mt-1 truncate text-sm text-muted-foreground">
                         {a.jobs?.companies?.name ?? "Company"}
                         {a.jobs?.location ? ` · ${a.jobs.location}` : ""} · Applied {fmtDate(a.created_at)}
                       </p>
                     </div>
-                    <StatusBadge status={a.status as ApplicationStatus} />
+                    <span className="flex shrink-0 items-center gap-2">
+                      <StatusBadge status={a.status as ApplicationStatus} />
+                      <ChevronRight
+                        className="size-4 text-muted-foreground transition-transform duration-200 ease-out group-hover:translate-x-0.5 group-hover:text-signal"
+                        aria-hidden
+                      />
+                    </span>
                   </Link>
                 </li>
               ))}
@@ -185,32 +245,36 @@ export function SeekerDashboard() {
                   key={j.id}
                   to="/seeker/jobs/$jobId"
                   params={{ jobId: j.id }}
-                  className="surface-card interactive-card flex items-start gap-4 p-4"
+                  className="surface-card interactive-card flex items-start gap-4 p-4 outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 >
-                  <div className="flex size-10 items-center justify-center rounded-xl bg-signal-soft text-signal ring-1 ring-signal/10">
-                    <Briefcase className="size-4" />
+                  <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-signal-soft text-signal ring-1 ring-signal/15">
+                    <Briefcase className="size-4" aria-hidden />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium tracking-tight">{j.title}</p>
-                    <p className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-muted-foreground">
+                    <p className="truncate text-base font-medium tracking-tight">{j.title}</p>
+                    <p className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-sm text-muted-foreground">
                       <span className="inline-flex items-center gap-1">
-                        <MapPin className="size-3" /> {j.location ?? "Remote"}
+                        <MapPin className="size-3.5 shrink-0" aria-hidden />
+                        {j.location ?? "Remote"}
                       </span>
                       {j.companies?.name ? <span>· {j.companies.name}</span> : null}
+                      {j.job_type ? <span>· {JOB_TYPE_LABEL[j.job_type as JobType]}</span> : null}
                     </p>
                   </div>
                 </Link>
               ))
             ) : (
-              <div className="rounded-xl border border-dashed bg-surface/60 p-5 text-center text-sm text-muted-foreground">
-                <Sparkles className="mx-auto mb-2 size-4 text-signal" />
-                Approved roles will show up here as they are posted.
-                <div className="mt-3">
+              <EmptyState
+                icon={Sparkles}
+                title="No approved jobs yet"
+                description="Approved roles will show up here as they are posted."
+                className="px-4 py-10 sm:py-12"
+                action={
                   <Button size="sm" variant="outline" asChild>
                     <Link to="/seeker/jobs">Browse jobs</Link>
                   </Button>
-                </div>
-              </div>
+                }
+              />
             )}
           </div>
         </Section>
