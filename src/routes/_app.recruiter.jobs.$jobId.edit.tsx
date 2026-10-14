@@ -338,7 +338,13 @@ function EditJobPage() {
         </div>
         <div className="space-y-2">
           <Label htmlFor="description">Description</Label>
-          <Textarea id="description" rows={5} disabled={locked} {...form.register("description")} />
+          <Textarea
+            id="description"
+            rows={5}
+            disabled={locked}
+            {...form.register("description")}
+            placeholder="Describe the responsibilities, required skills, qualifications, and experience for this role…"
+          />
           {form.formState.errors.description && (
             <p className="text-xs text-destructive">{form.formState.errors.description.message}</p>
           )}
@@ -353,7 +359,12 @@ function EditJobPage() {
           </div>
           <div className="space-y-2">
             <Label htmlFor="salary_range">Salary range</Label>
-            <Input id="salary_range" disabled={locked} {...form.register("salary_range")} />
+            <Input
+              id="salary_range"
+              disabled={locked}
+              {...form.register("salary_range")}
+              placeholder="e.g. ৳40,000–৳60,000/month"
+            />
           </div>
         </div>
         <div className="grid gap-4 sm:grid-cols-2">

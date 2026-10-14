@@ -60,6 +60,6 @@ describe("portfolio URL validation", () => {
 
   it("documents that portfolio cannot persist without a column", () => {
     expect(portfolioPersistenceAvailable(false)).toBe(false);
-    expect(PORTFOLIO_PERSISTENCE_NOTE).toMatch(/portfolio_url/i);
+    expect(PORTFOLIO_PERSISTENCE_NOTE).toBe("Coming soon");
   });
 });

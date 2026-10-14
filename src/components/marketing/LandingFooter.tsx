@@ -5,7 +5,7 @@ import { HomeNavLink } from "@/components/marketing/HomeNavLink";
 
 export function LandingFooter() {
   return (
-    <footer className="border-t border-border/80 bg-surface/40">
+    <footer className="border-t border-signal/15 bg-surface/60">
       <div className="mx-auto grid max-w-6xl gap-10 px-4 py-12 sm:px-6 md:grid-cols-3 md:gap-8 lg:py-14">
         <section className="space-y-3">
           <div className="flex items-center gap-2.5">

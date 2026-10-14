@@ -8,8 +8,10 @@ export const COMPANY_LOGOS_BUCKET = "company-logos";
 export const RESUME_SIGNED_URL_TTL_SEC = 120;
 export const LOGO_SIGNED_URL_TTL_SEC = 300;
 
-export const FILE_UPLOADS_PENDING_NOTE =
-  "File uploads are implemented in the app, but Supabase Storage columns/buckets from PROPOSED_0008 are not applied on this project yet. Ask an admin to run that migration, then reload — uploads will enable automatically.";
+/** Shown when a file upload cannot be saved yet. */
+export const COMING_SOON_MESSAGE = "Coming soon";
+
+export const FILE_UPLOADS_PENDING_NOTE = COMING_SOON_MESSAGE;
 
 let readyCache: boolean | null = null;
 

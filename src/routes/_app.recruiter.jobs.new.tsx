@@ -181,7 +181,12 @@ function PostJobPage() {
         </div>
         <div className="space-y-2">
           <Label htmlFor="description">Description</Label>
-          <Textarea id="description" rows={5} {...form.register("description")} placeholder="Role detailsΓÇª" />
+          <Textarea
+            id="description"
+            rows={5}
+            {...form.register("description")}
+            placeholder="Describe the responsibilities, required skills, qualifications, and experience for this role…"
+          />
           {form.formState.errors.description && (
             <p className="text-xs text-destructive">{form.formState.errors.description.message}</p>
           )}
@@ -196,7 +201,11 @@ function PostJobPage() {
           </div>
           <div className="space-y-2">
             <Label htmlFor="salary_range">Salary range</Label>
-            <Input id="salary_range" {...form.register("salary_range")} placeholder="e.g. $80kΓÇô$100k" />
+            <Input
+              id="salary_range"
+              {...form.register("salary_range")}
+              placeholder="e.g. ৳40,000–৳60,000/month"
+            />
           </div>
         </div>
         <div className="grid gap-4 sm:grid-cols-2">

@@ -4,12 +4,11 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
   RESUME_PDF_ACCEPT,
-  RESUME_PDF_PERSISTENCE_NOTE,
   removeResumeObject,
   uploadResumePdf,
   validateResumePdfFile,
 } from "@/lib/resume-upload";
-import { resolveDisplayUrl } from "@/lib/hirehub-storage";
+import { COMING_SOON_MESSAGE, isMissingSchemaError, resolveDisplayUrl } from "@/lib/hirehub-storage";
 
 export type ResumePickerValue = {
   storagePath: string | null;
@@ -119,6 +118,7 @@ export function ResumePdfPicker({
 
     if (!canPersist) {
       setPhase("blocked");
+      setError(COMING_SOON_MESSAGE);
       onChange?.({ storagePath: null, fileName: picked.name, isApplicationOverride: applicationOverride });
       return;
     }
@@ -137,7 +137,8 @@ export function ResumePdfPicker({
     } catch (e) {
       setPhase("error");
       setProgress(0);
-      setError(e instanceof Error ? e.message : "Upload failed.");
+      const message = e instanceof Error ? e.message : "Upload failed.";
+      setError(isMissingSchemaError(message) ? COMING_SOON_MESSAGE : message);
     }
   };
 
@@ -215,14 +216,13 @@ export function ResumePdfPicker({
       </div>
 
       {error && (
-        <p role="alert" className="text-xs text-destructive">
+        <p
+          role={error === COMING_SOON_MESSAGE ? "status" : "alert"}
+          className={
+            error === COMING_SOON_MESSAGE ? "text-xs text-muted-foreground" : "text-xs text-destructive"
+          }
+        >
           {error}
-        </p>
-      )}
-
-      {!canPersist && (
-        <p className="rounded-lg border border-status-interview/30 bg-status-interview-soft/40 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
-          {RESUME_PDF_PERSISTENCE_NOTE}
         </p>
       )}
     </div>

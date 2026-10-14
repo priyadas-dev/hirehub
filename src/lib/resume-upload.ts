@@ -58,8 +58,7 @@ export function validatePortfolioUrl(raw: string): PortfolioUrlValidation {
 
 export const RESUME_PDF_PERSISTENCE_NOTE = FILE_UPLOADS_PENDING_NOTE;
 
-export const PORTFOLIO_PERSISTENCE_NOTE =
-  "Portfolio URL is validated now and will persist to applications.portfolio_url once PROPOSED_0008 is applied on this Supabase project.";
+export const PORTFOLIO_PERSISTENCE_NOTE = "Coming soon";
 
 export function resumePdfPersistenceAvailable(schemaReady: boolean, hasUploadBucket: boolean) {
   return schemaReady && hasUploadBucket;

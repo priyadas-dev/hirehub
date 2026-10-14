@@ -5,13 +5,17 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   COMPANY_IMAGE_ACCEPT,
-  COMPANY_IMAGE_PERSISTENCE_NOTE,
   removeCompanyLogoObject,
   uploadCompanyLogo,
   validateCompanyImageFile,
   validateCompanyImageUrl,
 } from "@/lib/company-image";
-import { isStorageObjectPath, resolveDisplayUrl } from "@/lib/hirehub-storage";
+import {
+  COMING_SOON_MESSAGE,
+  isMissingSchemaError,
+  isStorageObjectPath,
+  resolveDisplayUrl,
+} from "@/lib/hirehub-storage";
 
 type CompanyImagePickerProps = {
   canPersist?: boolean;
@@ -102,6 +106,10 @@ export function CompanyImagePicker({
   };
 
   const applyUrl = () => {
+    if (!canPersist) {
+      setError(COMING_SOON_MESSAGE);
+      return;
+    }
     const result = validateCompanyImageUrl(urlDraft);
     if (!result.ok) {
       setError(result.error);
@@ -135,6 +143,7 @@ export function CompanyImagePicker({
     setError(null);
 
     if (!canPersist || !companyId || !recruiterId) {
+      setError(COMING_SOON_MESSAGE);
       return;
     }
 
@@ -151,7 +160,8 @@ export function CompanyImagePicker({
         }
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Upload failed.");
+      const message = e instanceof Error ? e.message : "Upload failed.";
+      setError(isMissingSchemaError(message) ? COMING_SOON_MESSAGE : message);
     } finally {
       setBusy(false);
     }
@@ -243,18 +253,17 @@ export function CompanyImagePicker({
       </div>
 
       {error && (
-        <p role="alert" className="text-xs text-destructive">
+        <p
+          role={error === COMING_SOON_MESSAGE ? "status" : "alert"}
+          className={
+            error === COMING_SOON_MESSAGE ? "text-xs text-muted-foreground" : "text-xs text-destructive"
+          }
+        >
           {error}
         </p>
       )}
 
       {busy && <p className="text-xs text-muted-foreground">Uploading logo…</p>}
-
-      {!canPersist && (
-        <p className="rounded-lg border border-status-interview/30 bg-status-interview-soft/40 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
-          {COMPANY_IMAGE_PERSISTENCE_NOTE}
-        </p>
-      )}
     </div>
   );
 }

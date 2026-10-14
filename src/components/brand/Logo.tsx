@@ -6,7 +6,7 @@ export function LogoMark({ className }: { className?: string }) {
     <span
       aria-hidden
       className={cn(
-        "relative inline-flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground",
+        "relative inline-flex size-8 items-center justify-center rounded-lg bg-signal text-signal-foreground shadow-signal",
         className,
       )}
     >

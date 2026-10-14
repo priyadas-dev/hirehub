@@ -63,8 +63,8 @@ export function AdminDashboard() {
             <div className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.16em] opacity-70 sm:text-xs">
               <ShieldCheck className="size-4" /> Admin control center
             </div>
-            <h1 className="mt-2 font-display text-[1.85rem] leading-tight tracking-tight sm:text-4xl">Platform overview</h1>
-            <p className="mt-2 max-w-lg text-sm leading-relaxed opacity-70">Review what needs approval and keep an eye on activity across HireHub.</p>
+            <h1 className="mt-3 font-display text-3xl text-primary-foreground sm:text-4xl">Platform overview</h1>
+            <p className="mt-3 max-w-[68ch] text-base leading-relaxed text-primary-foreground/85">Review what needs approval and keep an eye on activity across HireHub.</p>
           </div>
           <div className="flex flex-wrap gap-2">
             <Button variant="secondary" size="lg" asChild>
@@ -132,7 +132,7 @@ export function AdminDashboard() {
           ) : attention.data?.length ? (
             <div className="surface-card overflow-x-auto">
               <table className="w-full text-sm">
-                <thead><tr className="border-b text-left text-xs uppercase tracking-wider text-muted-foreground">
+                <thead><tr className="border-b border-signal/15 bg-signal-soft/30 text-left text-xs uppercase tracking-wider text-signal">
                   <th className="px-5 py-3 font-medium">Item</th><th className="px-5 py-3 font-medium">Type</th><th className="px-5 py-3 font-medium">Submitted</th>
                 </tr></thead>
                 <tbody className="divide-y">
@@ -174,7 +174,17 @@ export function AdminDashboard() {
                     <p className="truncate text-sm font-medium">{p.full_name || p.email}</p>
                     <p className="text-xs text-muted-foreground">Joined {fmtDate(p.created_at)}</p>
                   </div>
-                  <span className="rounded-full border px-2.5 py-1 text-xs">{roleLabel[p.role]}</span>
+                  <span
+                    className={
+                      p.role === "admin"
+                        ? "rounded-full bg-signal-soft px-2.5 py-1 text-xs font-medium text-signal ring-1 ring-signal/20"
+                        : p.role === "recruiter"
+                          ? "rounded-full bg-status-interview-soft px-2.5 py-1 text-xs font-medium text-status-interview ring-1 ring-status-interview/20"
+                          : "rounded-full bg-status-applied-soft px-2.5 py-1 text-xs font-medium text-status-applied ring-1 ring-status-applied/20"
+                    }
+                  >
+                    {roleLabel[p.role]}
+                  </span>
                 </li>
               ))}
             </ul>

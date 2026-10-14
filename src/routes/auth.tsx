@@ -240,14 +240,19 @@ function AuthPage() {
             </p>
           )}
 
-          <div className="mt-8 grid grid-cols-2 rounded-lg bg-muted p-1 text-sm" role="tablist">
+          <div className="mt-8 grid grid-cols-2 rounded-lg bg-signal-soft/70 p-1 text-sm ring-1 ring-signal/15" role="tablist">
             {(["signin", "signup"] as const).map((m) => (
               <button
                 key={m}
                 role="tab"
                 aria-selected={mode === m}
                 onClick={() => { setMode(m); setErrors({}); }}
-                className={cn("rounded-md py-2 font-medium transition-all", mode === m ? "bg-card shadow-xs" : "text-muted-foreground hover:text-foreground")}
+                className={cn(
+                  "rounded-md py-2 font-medium transition-all",
+                  mode === m
+                    ? "bg-signal text-signal-foreground shadow-signal"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
               >
                 {m === "signin" ? "Sign in" : "Sign up"}
               </button>
@@ -305,7 +310,7 @@ function AuthPage() {
               <div className="-mt-2 flex justify-end">
                 <Link
                   to="/forgot-password"
-                  className="text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+                  className="text-sm text-signal underline-offset-4 hover:underline"
                 >
                   Forgot password?
                 </Link>
@@ -320,13 +325,21 @@ function AuthPage() {
         </div>
       </div>
 
-      <aside className="relative hidden overflow-hidden border-l bg-surface lg:flex lg:items-center lg:justify-center">
+      <aside className="relative hidden overflow-hidden border-l border-signal/15 bg-surface lg:flex lg:items-center lg:justify-center">
         <div className="absolute inset-0 bg-grid" aria-hidden />
         <div className="absolute inset-0 bg-hero" aria-hidden />
+        <div
+          className="pointer-events-none absolute -right-20 top-16 size-72 rounded-full bg-signal/20 blur-3xl"
+          aria-hidden
+        />
+        <div
+          className="pointer-events-none absolute -left-16 bottom-10 size-56 rounded-full bg-status-interview/20 blur-3xl"
+          aria-hidden
+        />
         <div className="relative w-full max-w-md px-8">
           <div className="surface-card p-6 shadow-lift">
             <div className="mb-6 flex items-center gap-3">
-              <div className="flex size-10 items-center justify-center rounded-lg bg-primary font-semibold text-primary-foreground">N</div>
+              <div className="flex size-10 items-center justify-center rounded-lg bg-signal font-semibold text-signal-foreground shadow-signal">N</div>
               <div>
                 <p className="text-sm font-semibold">Product Designer</p>
                 <p className="text-xs text-muted-foreground">Northwind · Remote</p>
@@ -334,7 +347,7 @@ function AuthPage() {
             </div>
             <StatusTracker status="interview" />
           </div>
-          <p className="mt-8 font-display text-3xl leading-snug">“Every application, beautifully tracked — from first click to offer.”</p>
+          <p className="mt-8 font-display text-3xl leading-snug text-foreground">“Every application, beautifully tracked — from first click to offer.”</p>
         </div>
       </aside>
     </div>

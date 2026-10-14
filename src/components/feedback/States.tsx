@@ -21,7 +21,7 @@ export function EmptyState({
   return (
     <div
       className={cn(
-        "flex animate-fade-up flex-col items-center justify-center rounded-2xl border border-dashed border-border/80 bg-surface/70 px-6 py-14 text-center sm:py-16",
+        "flex animate-fade-up flex-col items-center justify-center rounded-2xl border border-dashed border-signal/30 bg-signal-soft/30 px-6 py-14 text-center sm:py-16",
         className,
       )}
     >
@@ -88,23 +88,25 @@ export function PageHeader({
   title,
   description,
   actions,
+  className,
 }: {
   eyebrow?: string | undefined;
   title: string;
   description?: string | undefined;
   actions?: ReactNode;
+  className?: string;
 }) {
   return (
-    <div className="flex animate-fade-up flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+    <div className={cn("flex animate-fade-up flex-col gap-4 sm:flex-row sm:items-end sm:justify-between", className)}>
       <div className="min-w-0">
         {eyebrow && (
           <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.16em] text-signal sm:text-xs">
             {eyebrow}
           </p>
         )}
-        <h1 className="font-display text-[2rem] leading-[1.1] tracking-tight sm:text-5xl">{title}</h1>
+        <h1 className="font-display text-3xl sm:text-4xl">{title}</h1>
         {description && (
-          <p className="mt-2.5 max-w-xl text-sm leading-relaxed text-muted-foreground sm:text-base">
+          <p className="mt-3 max-w-[68ch] text-base leading-relaxed text-muted-foreground">
             {description}
           </p>
         )}

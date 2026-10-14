@@ -20,25 +20,27 @@ export { supabase };
 
 export function StatCard({ label, value, icon: Icon, hint, loading, tone = "signal" }: {
   label: string; value: number | undefined; icon: LucideIcon; hint?: string; loading?: boolean;
-  tone?: "signal" | "shortlisted" | "interview" | "hired" | "applied";
+  tone?: "signal" | "shortlisted" | "interview" | "hired" | "applied" | "quiet";
 }) {
   const toneCls = {
-    signal: "bg-signal-soft text-signal ring-signal/10",
-    shortlisted: "bg-status-shortlisted-soft text-status-shortlisted ring-status-shortlisted/10",
-    interview: "bg-status-interview-soft text-status-interview ring-status-interview/10",
-    hired: "bg-status-hired-soft text-status-hired ring-status-hired/10",
-    applied: "bg-status-applied-soft text-status-applied ring-status-applied/10",
+    signal: "bg-signal-soft text-signal ring-signal/20",
+    shortlisted: "bg-status-shortlisted-soft text-status-shortlisted ring-status-shortlisted/20",
+    interview: "bg-status-interview-soft text-status-interview ring-status-interview/20",
+    hired: "bg-status-hired-soft text-status-hired ring-status-hired/20",
+    applied: "bg-status-applied-soft text-status-applied ring-status-applied/20",
+    quiet: "bg-muted text-muted-foreground ring-border/60",
   }[tone];
-  const glowCls = {
-    signal: "bg-signal/20",
-    shortlisted: "bg-status-shortlisted/25",
-    interview: "bg-status-interview/20",
-    hired: "bg-status-hired/25",
-    applied: "bg-status-applied/20",
+  const wash = {
+    signal: "from-signal-soft/55",
+    shortlisted: "from-status-shortlisted-soft/50",
+    interview: "from-status-interview-soft/45",
+    hired: "from-status-hired-soft/50",
+    applied: "from-status-applied-soft/50",
+    quiet: "from-muted/70",
   }[tone];
   return (
     <div className="surface-card interactive-card group relative overflow-hidden p-5 sm:p-6">
-      <div className={cn("pointer-events-none absolute -right-6 -top-6 size-24 rounded-full opacity-50 blur-2xl transition-opacity group-hover:opacity-80", glowCls)} aria-hidden />
+      <div className={cn("pointer-events-none absolute inset-0 bg-gradient-to-br via-transparent to-transparent opacity-90", wash)} aria-hidden />
       <div className="relative flex items-center justify-between gap-3">
         <span className="text-sm font-medium text-muted-foreground">{label}</span>
         <span className={cn("flex size-9 items-center justify-center rounded-xl ring-1 transition-transform duration-300 group-hover:scale-105", toneCls)}>
@@ -46,11 +48,11 @@ export function StatCard({ label, value, icon: Icon, hint, loading, tone = "sign
         </span>
       </div>
       {loading ? (
-        <Skeleton className="mt-4 h-10 w-16" />
+        <Skeleton className="relative mt-4 h-10 w-16" />
       ) : (
-        <p className="mt-4 font-display text-4xl tabular-nums tracking-tight sm:text-[2.75rem]">{value ?? 0}</p>
+        <p className="type-data relative mt-5 text-4xl text-foreground">{value ?? 0}</p>
       )}
-      {hint && <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">{hint}</p>}
+      {hint && <p className="relative mt-2 text-sm leading-relaxed text-muted-foreground">{hint}</p>}
     </div>
   );
 }
@@ -59,11 +61,11 @@ export function Section({ title, description, action, children, className }: {
   title: string; description?: string; action?: ReactNode; children: ReactNode; className?: string;
 }) {
   return (
-    <section className={cn("space-y-4", className)}>
+    <section className={cn("flex flex-col gap-3", className)}>
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="min-w-0">
           <h2 className="text-lg font-semibold tracking-tight">{title}</h2>
-          {description && <p className="mt-0.5 text-sm text-muted-foreground">{description}</p>}
+          {description && <p className="mt-1 max-w-[68ch] text-sm leading-relaxed text-muted-foreground">{description}</p>}
         </div>
         {action}
       </div>
