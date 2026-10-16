@@ -23,6 +23,7 @@ describe("App routing", () => {
     "/seeker/applications",
     "/seeker/applications/abc",
     "/seeker/profile",
+    "/seeker/assistant",
     "/seeker/saved",
     "/recruiter",
     "/recruiter/applicants",

@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { buildOwnProfileUpdate, ownProfileSchema } from "@/lib/profile";
+import {
+  buildOwnProfileUpdate,
+  ownProfileSchema,
+  SKILLS_FEATURE_NOT_READY_MESSAGE,
+  SKILLS_MAX_LENGTH,
+} from "@/lib/profile";
 
 describe("ownProfileSchema", () => {
   it("requires a real name and valid email", () => {
@@ -21,6 +26,25 @@ describe("ownProfileSchema", () => {
     ).toBe(false);
   });
 
+  it("allows optional skills within the length cap", () => {
+    expect(
+      ownProfileSchema.safeParse({
+        full_name: "Priya Das",
+        email: "priya@example.com",
+        phone: "",
+        skills: "TypeScript, React",
+      }).success,
+    ).toBe(true);
+    expect(
+      ownProfileSchema.safeParse({
+        full_name: "Priya Das",
+        email: "priya@example.com",
+        phone: "",
+        skills: "x".repeat(SKILLS_MAX_LENGTH + 1),
+      }).success,
+    ).toBe(false);
+  });
+
   it("includes contact email but never role in own profile updates", () => {
     const payload = buildOwnProfileUpdate({
       full_name: "Priya Das",
@@ -33,5 +57,26 @@ describe("ownProfileSchema", () => {
       phone: "01806085616",
     });
     expect(payload).not.toHaveProperty("role");
+    expect(payload).not.toHaveProperty("skills");
+  });
+
+  it("includes skills only when explicitly requested and still omits role", () => {
+    const payload = buildOwnProfileUpdate(
+      {
+        full_name: "Priya Das",
+        email: "priya@example.com",
+        phone: "",
+        skills: "  SQL, Communication  ",
+      },
+      { includeSkills: true },
+    );
+    expect(payload).toEqual({
+      full_name: "Priya Das",
+      email: "priya@example.com",
+      phone: null,
+      skills: "SQL, Communication",
+    });
+    expect(payload).not.toHaveProperty("role");
+    expect(SKILLS_FEATURE_NOT_READY_MESSAGE).toMatch(/not ready|aren’t ready|aren't ready/i);
   });
 });

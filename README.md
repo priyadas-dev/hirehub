@@ -22,3 +22,9 @@ cd <repository-name>
 npm i
 npm run dev
 ```
+
+## AI Job Assistant (Assessment Track 3)
+
+Seeker route: `/seeker/assistant`. Setup, RAG behavior, and testing notes (no real secrets):
+
+See [`docs/ai-job-assistant.md`](docs/ai-job-assistant.md).
