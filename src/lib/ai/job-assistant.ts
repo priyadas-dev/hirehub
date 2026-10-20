@@ -7,7 +7,7 @@ import { GEMINI_SERVER_ENV } from "@/lib/ai/gemini";
 export const GEMINI_ASSISTANT_MODEL = "gemini-2.0-flash" as const;
 
 export const ASSISTANT_SETUP_HINT =
-  "Set GEMINI_API_KEY on the server (never VITE_). For corpus RAG, apply PROPOSED_0009 + PROPOSED_0010 and set SUPABASE_SERVICE_ROLE_KEY, then seed/embed the corpus." as const;
+  "Set GEMINI_API_KEY on the server (never VITE_). For corpus RAG, apply PROPOSED_0009 + PROPOSED_0010 (and PROPOSED_0011 for EMBEDDING_PROVIDER=gte), set SUPABASE_SERVICE_ROLE_KEY, then seed/embed the corpus." as const;
 
 export const askJobAssistantInputSchema = z.object({
   question: z

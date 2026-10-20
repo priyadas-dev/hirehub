@@ -9,6 +9,10 @@ import {
   type EmbeddingProviderName,
 } from "@/lib/ai/embed-provider";
 import {
+  embeddingDimensions,
+  embeddingStorageColumn,
+} from "@/lib/ai/embed-space";
+import {
   computeEmbedBackoffMs,
   fetchGeminiEmbedding,
   fetchGeminiEmbeddingsBatch,
@@ -58,7 +62,7 @@ export type BatchEmbedOptions = {
   pauseMs?: number;
   /** Max attempts per batch (or single fallback) on transient failures (Gemini). */
   maxAttempts?: number;
-  /** gemini (default) | local — must match query-time EMBEDDING_PROVIDER. */
+  /** gemini (default) | local | gte — must match query-time EMBEDDING_PROVIDER. */
   provider?: EmbeddingProviderName | string;
   apiKey?: string;
   fetchImpl?: typeof fetch;
@@ -100,11 +104,14 @@ export const DEFAULT_EMBED_CONCURRENCY = 1 as const;
 /** Default texts per Gemini `:batchEmbedContents` request (well under the 100 hard cap). */
 export const DEFAULT_EMBED_BATCH_SIZE = 16 as const;
 
-/** Default texts per local CPU batch (no cloud cap; keep memory bounded). */
+/** Default texts per local/gte CPU batch (no cloud cap; keep memory bounded). */
 export const DEFAULT_LOCAL_EMBED_BATCH_SIZE = 32 as const;
 
-/** Soft memory cap for local batches. */
+/** Soft memory cap for local / gte CPU batches. */
 export const LOCAL_EMBED_BATCH_MAX = 64 as const;
+
+/** Default texts per gte-small CPU batch (slightly smaller for 5k full runs). */
+export const DEFAULT_GTE_EMBED_BATCH_SIZE = 16 as const;
 
 /** Default attempts for 429 / transient 5xx recovery. */
 export const DEFAULT_EMBED_MAX_ATTEMPTS = 6 as const;
@@ -207,10 +214,15 @@ export async function embedTextsWithRetries(
 }
 
 function clampBatchSize(value: number | undefined, provider: EmbeddingProviderName): number {
+  const isCpu = provider === "local" || provider === "gte";
   const raw =
     value ??
-    (provider === "local" ? DEFAULT_LOCAL_EMBED_BATCH_SIZE : DEFAULT_EMBED_BATCH_SIZE);
-  const cap = provider === "local" ? LOCAL_EMBED_BATCH_MAX : GEMINI_BATCH_EMBED_MAX_REQUESTS;
+    (provider === "gte"
+      ? DEFAULT_GTE_EMBED_BATCH_SIZE
+      : provider === "local"
+        ? DEFAULT_LOCAL_EMBED_BATCH_SIZE
+        : DEFAULT_EMBED_BATCH_SIZE);
+  const cap = isCpu ? LOCAL_EMBED_BATCH_MAX : GEMINI_BATCH_EMBED_MAX_REQUESTS;
   return Math.max(1, Math.min(raw, cap));
 }
 
@@ -220,11 +232,14 @@ async function persistEmbedding(
   client: CorpusEmbedClient,
   rowId: string,
   embedding: number[],
+  provider: EmbeddingProviderName,
 ): Promise<{ error: { message: string } | null }> {
+  const column = embeddingStorageColumn(provider);
+  const dims = embeddingDimensions(provider);
   return client
     .from("job_corpus")
     .update({
-      embedding: formatEmbeddingForPgvector(embedding),
+      [column]: formatEmbeddingForPgvector(embedding, dims),
       updated_at: new Date().toISOString(),
     })
     .eq("id", rowId);
@@ -273,7 +288,7 @@ async function embedSliceWithSingleFallback(
       continue;
     }
 
-    const { error } = await persistEmbedding(client, row.id, embedded.embedding);
+    const { error } = await persistEmbedding(client, row.id, embedded.embedding, "gemini");
     if (error) {
       result.failed += 1;
       result.failures.push({ id: row.id, message: error.message, contentChars: row.content.length });
@@ -319,7 +334,7 @@ async function processOrderedSliceGemini(
       const row = slice[i]!;
       const embedding = batch.embeddings[i]!;
       result.processed += 1;
-      const { error } = await persistEmbedding(client, row.id, embedding);
+      const { error } = await persistEmbedding(client, row.id, embedding, "gemini");
       if (error) {
         result.failed += 1;
         result.failures.push({ id: row.id, message: error.message, contentChars: row.content.length });
@@ -362,10 +377,11 @@ async function processOrderedSliceGemini(
   }
 }
 
-async function processOrderedSliceLocal(
+async function processOrderedSliceCpu(
   client: CorpusEmbedClient,
   slice: PendingRow[],
   result: BatchEmbedResult,
+  provider: "local" | "gte",
   options: {
     embedTextsImpl?: (texts: string[]) => Promise<number[][]>;
   },
@@ -373,7 +389,7 @@ async function processOrderedSliceLocal(
 ): Promise<void> {
   const texts = slice.map((row) => row.content);
   const batch = await embedTexts(texts, {
-    provider: "local",
+    provider,
     embedTextsImpl: options.embedTextsImpl,
   });
 
@@ -384,7 +400,7 @@ async function processOrderedSliceLocal(
       result.failures.push({
         id: row.id,
         message: batch.ok
-          ? "Local embedding count did not match input order."
+          ? "Embedding count did not match input order."
           : batch.message,
         contentChars: row.content.length,
       });
@@ -393,11 +409,22 @@ async function processOrderedSliceLocal(
     return;
   }
 
+  const dims = embeddingDimensions(provider);
   for (let i = 0; i < slice.length; i++) {
     const row = slice[i]!;
     const embedding = batch.embeddings[i]!;
     result.processed += 1;
-    const { error } = await persistEmbedding(client, row.id, embedding);
+    if (!hasValidEmbedding(embedding, dims)) {
+      result.failed += 1;
+      result.failures.push({
+        id: row.id,
+        message: `Provider returned a vector that is not ${dims}-dimensional.`,
+        contentChars: row.content.length,
+      });
+      onProgress?.({ ...result, lastId: row.id });
+      continue;
+    }
+    const { error } = await persistEmbedding(client, row.id, embedding, provider);
     if (error) {
       result.failed += 1;
       result.failures.push({ id: row.id, message: error.message, contentChars: row.content.length });
@@ -409,13 +436,11 @@ async function processOrderedSliceLocal(
 }
 
 /**
- * Batch-embed job_corpus rows that lack a valid embedding.
- * Provider: gemini (batchEmbedContents) or local (Xenova 768-dim).
- * Skips rows that already have a valid 768-dim vector.
- * Failed rows are left with embedding NULL for a later run.
+ * Batch-embed job_corpus rows that lack a valid vector for the chosen provider space.
+ * - gemini / local → writes `embedding` (768); pending = embedding IS NULL
+ * - gte → writes `embedding_gte` (384) only; never touches `embedding`
+ * Failed rows keep the target column NULL for a later resumable run.
  * Server/service-role only — never call from the browser.
- *
- * Do not mix Gemini and local vectors in the same table without a full reset.
  */
 export async function batchEmbedJobCorpus(
   client: CorpusEmbedClient,
@@ -425,23 +450,30 @@ export async function batchEmbedJobCorpus(
   const limit = options.limit ?? 500;
   const batchSize = clampBatchSize(options.batchSize, provider);
   const concurrency = Math.max(1, Math.min(options.concurrency ?? DEFAULT_EMBED_CONCURRENCY, 5));
-  const pauseMs = options.pauseMs ?? (provider === "local" ? 0 : 200);
+  const pauseMs = options.pauseMs ?? (provider === "gemini" ? 200 : 0);
   const maxAttempts = options.maxAttempts ?? DEFAULT_EMBED_MAX_ATTEMPTS;
   const fetchImpl = options.fetchImpl ?? fetch;
   const sleep = options.sleep ?? defaultSleep;
   const random = options.random ?? Math.random;
   const apiKey = (options.apiKey ?? process.env[GEMINI_SERVER_ENV.apiKey] ?? "").trim();
+  const storageColumn = embeddingStorageColumn(provider);
+  const dims = embeddingDimensions(provider);
 
   if (provider === "gemini" && !apiKey && !options.embedTextsImpl) {
     throw new Error(
-      `Missing ${GEMINI_SERVER_ENV.apiKey}. Set it in server env, or pass --provider=local.`,
+      `Missing ${GEMINI_SERVER_ENV.apiKey}. Set it in server env, or pass --provider=local or --provider=gte.`,
     );
   }
 
+  // Only request embedding_gte when using the gte space (column added by PROPOSED_0011).
+  const selectCols =
+    provider === "gte"
+      ? "id,content,embedding,embedding_gte,corpus_key,job_id,title,location,category,skills_text,source,is_synthetic"
+      : "id,content,embedding,corpus_key,job_id,title,location,category,skills_text,source,is_synthetic";
   const pending = await client
     .from("job_corpus")
-    .select("id,content,embedding,corpus_key,job_id,title,location,category,skills_text,source,is_synthetic")
-    .is("embedding", null)
+    .select(selectCols)
+    .is(storageColumn, null)
     .range(0, Math.max(0, limit - 1));
 
   if (pending.error) throw new Error(pending.error.message);
@@ -457,7 +489,9 @@ export async function batchEmbedJobCorpus(
 
   const work: PendingRow[] = [];
   for (const row of pending.data ?? []) {
-    if (hasValidEmbedding(row.embedding)) {
+    const stored =
+      provider === "gte" ? (row.embedding_gte ?? null) : row.embedding;
+    if (hasValidEmbedding(stored, dims)) {
       result.processed += 1;
       result.skipped += 1;
       options.onProgress?.({ ...result, lastId: row.id });
@@ -483,23 +517,25 @@ export async function batchEmbedJobCorpus(
       const start = i + c * batchSize;
       const slice = work.slice(start, start + batchSize);
       if (!slice.length) continue;
-      if (provider === "local") {
+      if (provider === "local" || provider === "gte") {
         waveJobs.push(
-          processOrderedSliceLocal(
+          processOrderedSliceCpu(
             client,
             slice,
             result,
+            provider,
             { embedTextsImpl: options.embedTextsImpl },
             options.onProgress,
           ),
         );
       } else if (options.embedTextsImpl) {
-        // Test seam on Gemini path without network.
+        // Test seam on Gemini path without network (still writes 768 embedding column).
         waveJobs.push(
-          processOrderedSliceLocal(
+          processOrderedSliceCpu(
             client,
             slice,
             result,
+            "local",
             { embedTextsImpl: options.embedTextsImpl },
             options.onProgress,
           ),
@@ -520,7 +556,13 @@ export async function batchEmbedJobCorpus(
   return result;
 }
 
-/** Re-check already-filled rows and skip regenerating valid embeddings. */
-export function shouldSkipEmbedding(row: Pick<JobCorpusRow, "embedding">): boolean {
-  return hasValidEmbedding(row.embedding);
+/** Skip regenerating when the provider's target column already has a valid vector. */
+export function shouldSkipEmbedding(
+  row: Pick<JobCorpusRow, "embedding" | "embedding_gte">,
+  provider: EmbeddingProviderName | string = "gemini",
+): boolean {
+  const resolved = resolveEmbeddingProvider(provider);
+  const dims = embeddingDimensions(resolved);
+  const value = resolved === "gte" ? (row.embedding_gte ?? null) : row.embedding;
+  return hasValidEmbedding(value, dims);
 }

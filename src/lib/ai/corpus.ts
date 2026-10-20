@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { GEMINI_EMBEDDING_DIMENSIONS } from "@/lib/ai/gemini";
+import { GTE_EMBEDDING_DIMENSIONS } from "@/lib/ai/gte-embed";
 
 /** Stable source label for HireHub Assessment 2 synthetic corpus (not real vacancies). */
 export const CORPUS_SOURCE_SYNTHETIC_V1 = "hirehub-synthetic-v1" as const;
@@ -48,7 +49,10 @@ export type JobCorpusRow = {
   skills_text: string | null;
   source: string | null;
   is_synthetic: boolean;
+  /** 768-dim Gemini / all-mpnet space (legacy). */
   embedding: number[] | string | null;
+  /** 384-dim gte-small space (PROPOSED_0011). Never store 768 vectors here. */
+  embedding_gte?: number[] | string | null;
   created_at?: string;
   updated_at?: string;
 };
@@ -72,11 +76,17 @@ export function corpusKeyForIndex(index: number, version = "v1"): string {
   return `synthetic:${version}:${String(index).padStart(5, "0")}`;
 }
 
-/** True when a stored embedding looks like a usable 768-dim vector. */
-export function hasValidEmbedding(value: unknown): boolean {
+/**
+ * True when a stored embedding is a usable finite vector of the given length.
+ * Defaults to 768 (legacy column). Pass GTE_EMBEDDING_DIMENSIONS for embedding_gte.
+ */
+export function hasValidEmbedding(
+  value: unknown,
+  dimensions: number = GEMINI_EMBEDDING_DIMENSIONS,
+): boolean {
   if (Array.isArray(value)) {
     return (
-      value.length === GEMINI_EMBEDDING_DIMENSIONS &&
+      value.length === dimensions &&
       value.every((n) => typeof n === "number" && Number.isFinite(n))
     );
   }
@@ -86,7 +96,7 @@ export function hasValidEmbedding(value: unknown): boolean {
     if (!trimmed.startsWith("[") || !trimmed.endsWith("]")) return false;
     try {
       const parsed = JSON.parse(trimmed) as unknown;
-      return hasValidEmbedding(parsed);
+      return hasValidEmbedding(parsed, dimensions);
     } catch {
       return false;
     }
@@ -94,9 +104,16 @@ export function hasValidEmbedding(value: unknown): boolean {
   return false;
 }
 
-export function formatEmbeddingForPgvector(values: number[]): string {
-  if (!hasValidEmbedding(values)) {
-    throw new Error(`Embedding must be a ${GEMINI_EMBEDDING_DIMENSIONS}-length number array.`);
+export function hasValidGteEmbedding(value: unknown): boolean {
+  return hasValidEmbedding(value, GTE_EMBEDDING_DIMENSIONS);
+}
+
+export function formatEmbeddingForPgvector(
+  values: number[],
+  dimensions: number = GEMINI_EMBEDDING_DIMENSIONS,
+): string {
+  if (!hasValidEmbedding(values, dimensions)) {
+    throw new Error(`Embedding must be a ${dimensions}-length number array.`);
   }
   return `[${values.join(",")}]`;
 }

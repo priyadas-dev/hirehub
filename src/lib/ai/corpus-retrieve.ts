@@ -6,6 +6,7 @@ import {
   resolveEmbeddingProvider,
   type EmbeddingProviderName,
 } from "@/lib/ai/embed-provider";
+import { matchCorpusRpcName } from "@/lib/ai/embed-space";
 
 export type CorpusRpcClient = {
   rpc: (
@@ -28,8 +29,9 @@ export type RetrieveCorpusResult =
 
 /**
  * Semantic retrieval over corpus-only job_corpus rows (job_id IS NULL).
- * Uses service-role RPC `match_job_corpus`. Never returns applyable live jobs.
- * Query embedding uses the same EMBEDDING_PROVIDER as bulk corpus embed.
+ * - gemini / local → match_job_corpus (768 embedding column)
+ * - gte → match_job_corpus_gte (384 embedding_gte column)
+ * Never returns applyable live jobs.
  */
 export async function retrieveCorpusMatches(
   client: CorpusRpcClient,
@@ -61,18 +63,23 @@ export async function retrieveCorpusMatches(
   });
   if (!embedded.ok) return { ok: false, message: embedded.message };
 
-  const { data, error } = await client.rpc("match_job_corpus", {
+  const rpcName = matchCorpusRpcName(provider);
+  const { data, error } = await client.rpc(rpcName, {
     query_embedding: embedded.embedding,
     match_count: parsed.data.matchCount,
     filter_category: parsed.data.category ?? null,
   });
 
   if (error) {
+    const gteHint =
+      provider === "gte"
+        ? " Apply PROPOSED_0011_gte_small_embeddings.sql and embed with --provider=gte first."
+        : " Apply PROPOSED_0009 and PROPOSED_0010 in Supabase first.";
     return {
       ok: false,
       message:
-        /function|does not exist|schema cache|column/i.test(error.message)
-          ? "Corpus retrieval is not ready yet. Apply PROPOSED_0009 and PROPOSED_0010 in Supabase first."
+        /function|does not exist|schema cache|column|embedding_gte/i.test(error.message)
+          ? `Corpus retrieval is not ready yet.${gteHint}`
           : "Corpus retrieval failed. Try again shortly.",
     };
   }
@@ -92,7 +99,6 @@ export async function retrieveCorpusMatches(
       source: row.source ?? null,
       similarity: Number(row.similarity) || 0,
     };
-    // Defense in depth: never surface non-corpus / live-looking rows from RAG.
     if (!isSafeCorpusMatch(candidate)) continue;
     matches.push(candidate);
   }

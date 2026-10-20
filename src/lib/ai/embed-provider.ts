@@ -2,22 +2,28 @@
  * Embedding provider switch for HireHub RAG.
  * Corpus embed and query retrieve must use the SAME provider so vectors share one space.
  *
- * EMBEDDING_PROVIDER=gemini (default) | local
- * local = free Xenova 768-dim on-machine (no Gemini quota)
+ * EMBEDDING_PROVIDER=
+ *   gemini (default) — Gemini API → job_corpus.embedding (768) + match_job_corpus
+ *   local            — Xenova/all-mpnet-base-v2 → embedding (768) + match_job_corpus
+ *   gte              — Xenova/gte-small → embedding_gte (384) + match_job_corpus_gte
+ *
+ * Do not mix providers that share a column without resetting that column.
  */
 
 import {
+  embeddingModelForProvider,
+  type EmbeddingProviderName,
+} from "@/lib/ai/embed-space";
+import {
   fetchGeminiEmbedding,
   fetchGeminiEmbeddingsBatch,
-  GEMINI_EMBEDDING_MODEL,
   GEMINI_SERVER_ENV,
   type GeminiEmbedDiagnostic,
 } from "@/lib/ai/gemini";
-import { LOCAL_EMBEDDING_MODEL } from "@/lib/ai/local-embed";
 
 export const EMBEDDING_PROVIDER_ENV = "EMBEDDING_PROVIDER" as const;
 
-export type EmbeddingProviderName = "gemini" | "local";
+export type { EmbeddingProviderName };
 
 export type EmbedProviderSuccess = {
   ok: true;
@@ -41,22 +47,23 @@ export function resolveEmbeddingProvider(
   const raw = (override ?? process.env[EMBEDDING_PROVIDER_ENV] ?? "gemini")
     .trim()
     .toLowerCase();
+  if (raw === "gte" || raw === "gte-small") return "gte";
   if (raw === "local") return "local";
   if (raw === "gemini" || raw === "") return "gemini";
   throw new Error(
-    `Invalid ${EMBEDDING_PROVIDER_ENV}="${raw}". Use "gemini" or "local".`,
+    `Invalid ${EMBEDDING_PROVIDER_ENV}="${raw}". Use "gemini", "local", or "gte".`,
   );
 }
 
 export function embeddingModelLabel(provider: EmbeddingProviderName): string {
-  return provider === "local" ? LOCAL_EMBEDDING_MODEL : GEMINI_EMBEDDING_MODEL;
+  return embeddingModelForProvider(provider);
 }
 
 export type EmbedTextsOptions = {
   provider?: EmbeddingProviderName | string;
   apiKey?: string;
   fetchImpl?: typeof fetch;
-  /** Injected for tests — bypasses Gemini/local network & model download. */
+  /** Injected for tests — bypasses Gemini/local/gte network & model download. */
   embedTextsImpl?: (texts: string[]) => Promise<number[][]>;
 };
 
@@ -99,6 +106,25 @@ export async function embedTexts(
     }
   }
 
+  if (provider === "gte") {
+    try {
+      const { embedTextsGte } = await import("@/lib/ai/gte-embed");
+      const embeddings = await embedTextsGte(texts);
+      return {
+        ok: true,
+        embeddings,
+        model: embeddingModelLabel(provider),
+        provider,
+      };
+    } catch (err) {
+      return {
+        ok: false,
+        message: err instanceof Error ? err.message : "gte-small embedding failed.",
+        provider,
+      };
+    }
+  }
+
   if (provider === "local") {
     try {
       const { embedTextsLocal } = await import("@/lib/ai/local-embed");
@@ -106,7 +132,7 @@ export async function embedTexts(
       return {
         ok: true,
         embeddings,
-        model: LOCAL_EMBEDDING_MODEL,
+        model: embeddingModelLabel(provider),
         provider,
       };
     } catch (err) {
@@ -122,7 +148,7 @@ export async function embedTexts(
   if (!apiKey) {
     return {
       ok: false,
-      message: `Missing ${GEMINI_SERVER_ENV.apiKey}. Set it in server env, or use EMBEDDING_PROVIDER=local.`,
+      message: `Missing ${GEMINI_SERVER_ENV.apiKey}. Set it in server env, or use EMBEDDING_PROVIDER=local or gte.`,
       provider,
     };
   }

@@ -49,12 +49,16 @@ describe("synthetic corpus generator", () => {
 });
 
 describe("embedding validity helpers", () => {
-  it("accepts only 768-dim numeric vectors", () => {
+  it("accepts 768-dim by default and 384-dim when requested", () => {
     expect(hasValidEmbedding(vectorOf(768))).toBe(true);
+    expect(hasValidEmbedding(vectorOf(384))).toBe(false);
+    expect(hasValidEmbedding(vectorOf(384), 384)).toBe(true);
     expect(hasValidEmbedding(vectorOf(16))).toBe(false);
     expect(hasValidEmbedding(null)).toBe(false);
     expect(shouldSkipEmbedding({ embedding: vectorOf(768) })).toBe(true);
     expect(shouldSkipEmbedding({ embedding: null })).toBe(false);
+    expect(shouldSkipEmbedding({ embedding: null, embedding_gte: vectorOf(384) }, "gte")).toBe(true);
+    expect(shouldSkipEmbedding({ embedding: vectorOf(768), embedding_gte: null }, "gte")).toBe(false);
   });
 });
 
@@ -232,6 +236,53 @@ describe("retrieveCorpusMatches", () => {
   });
 });
 
+describe("retrieveCorpusMatches gte provider", () => {
+  it("calls match_job_corpus_gte with a 384-dim query embedding", async () => {
+    const values = vectorOf(384, 0.44);
+    let rpcName = "";
+    const client = {
+      rpc: async (fn: string, args: Record<string, unknown>) => {
+        rpcName = fn;
+        expect(args.query_embedding).toEqual(values);
+        expect((args.query_embedding as number[]).length).toBe(384);
+        return {
+          data: [
+            {
+              id: "1",
+              corpus_key: "synthetic:v1:00010",
+              title: "Frontend Developer",
+              content: CORPUS_DISCLAIMER,
+              location: "Dhaka",
+              category: "engineering",
+              skills_text: "React",
+              is_synthetic: true,
+              source: "hirehub-synthetic-v1",
+              similarity: 0.91,
+            },
+          ],
+          error: null,
+        };
+      },
+    };
+
+    const result = await retrieveCorpusMatches(
+      client,
+      { query: "React developer", matchCount: 3 },
+      {
+        provider: "gte",
+        embedTextsImpl: async () => [values],
+      },
+    );
+
+    expect(rpcName).toBe("match_job_corpus_gte");
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.provider).toBe("gte");
+      expect(result.matches).toHaveLength(1);
+    }
+  });
+});
+
 describe("batchEmbedJobCorpus local provider", () => {
   it("writes ordered local embeddings without calling Gemini", async () => {
     const vA = vectorOf(768, 0.01);
@@ -301,6 +352,70 @@ describe("batchEmbedJobCorpus local provider", () => {
     expect(updates.map((u) => u.id)).toEqual(["a", "b"]);
     expect(updates[0]?.first).toBeCloseTo(0.01, 5);
     expect(updates[1]?.first).toBeCloseTo(0.02, 5);
+  });
+});
+
+describe("batchEmbedJobCorpus gte provider", () => {
+  it("writes embedding_gte (384) only and never touches embedding", async () => {
+    const vA = vectorOf(384, 0.03);
+    const updates: Array<Record<string, unknown>> = [];
+    const client = {
+      from: () => ({
+        select: () => ({
+          is: (column: string, value: null) => {
+            expect(column).toBe("embedding_gte");
+            expect(value).toBeNull();
+            return {
+              range: async () => ({
+                data: [
+                  {
+                    id: "g1",
+                    content: "Gte A",
+                    embedding: vectorOf(768, 0.9),
+                    embedding_gte: null,
+                    corpus_key: "synthetic:v1:00000",
+                    job_id: null,
+                    title: "A",
+                    location: "Dhaka",
+                    category: "engineering",
+                    skills_text: "TS",
+                    source: "hirehub-synthetic-v1",
+                    is_synthetic: true,
+                  },
+                ],
+                error: null,
+              }),
+            };
+          },
+          not: () => ({ range: async () => ({ data: [], error: null }) }),
+        }),
+        update: (payload: Record<string, unknown>) => ({
+          eq: async (_column: string, id: string) => {
+            updates.push({ id, ...payload });
+            return { error: null };
+          },
+        }),
+      }),
+    };
+
+    const result = await batchEmbedJobCorpus(client, {
+      provider: "gte",
+      batchSize: 8,
+      pauseMs: 0,
+      embedTextsImpl: async (texts) => {
+        expect(texts).toEqual(["Gte A"]);
+        return [vA];
+      },
+    });
+
+    expect(result.provider).toBe("gte");
+    expect(result.embedded).toBe(1);
+    expect(updates).toHaveLength(1);
+    expect(updates[0]?.id).toBe("g1");
+    expect(updates[0]?.embedding).toBeUndefined();
+    const parsed = JSON.parse(String(updates[0]?.embedding_gte)) as number[];
+    expect(parsed).toHaveLength(384);
+    expect(parsed[0]).toBeCloseTo(0.03, 5);
   });
 });
 

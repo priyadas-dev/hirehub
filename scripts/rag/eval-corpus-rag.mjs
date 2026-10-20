@@ -14,22 +14,28 @@ import { EVAL_QUERY_BANK } from "../../src/lib/ai/corpus-eval.ts";
 
 function parseArgs(argv) {
   let matchCount = 5;
+  let provider = process.env.EMBEDDING_PROVIDER ?? "gemini";
   for (const arg of argv) {
     const m = arg.match(/^--match-count=(\d+)$/);
     if (m) matchCount = Number(m[1]);
+    const prov = arg.match(/^--provider=(local|gemini|gte|gte-small)$/i);
+    if (prov) {
+      const p = prov[1].toLowerCase();
+      provider = p === "gte-small" ? "gte" : p;
+    }
   }
-  return { matchCount };
+  return { matchCount, provider };
 }
 
 async function main() {
   loadProjectEnv();
-  const { matchCount } = parseArgs(process.argv.slice(2));
-  const env = getRagEnvStatus();
+  const { matchCount, provider } = parseArgs(process.argv.slice(2));
+  const env = getRagEnvStatus({ requireGemini: provider === "gemini" });
 
   if (env.missing.length) {
     console.error(`[rag:eval] BLOCKER: missing ${env.missing.join(", ")}`);
     console.error(
-      "[rag:eval] Apply PROPOSED_0009 + PROPOSED_0010 manually, set secrets, seed + embed, then re-run.",
+      "[rag:eval] Apply PROPOSED_0009 + PROPOSED_0010 (+ 0011 for gte) manually, set secrets, seed + embed, then re-run.",
     );
     process.exitCode = 2;
     return;
@@ -37,7 +43,17 @@ async function main() {
 
   const client = createRagAdminClient();
   const probe = await probeRagMigrations(client);
-  if (!probe.jobCorpusExists || !probe.corpusKeyReady || !probe.matchFnReady) {
+  if (!probe.jobCorpusExists || !probe.corpusKeyReady) {
+    console.error(`[rag:eval] BLOCKER: ${probe.message}`);
+    process.exitCode = 2;
+    return;
+  }
+  if (provider === "gte" && !probe.gteSpaceReady) {
+    console.error(`[rag:eval] BLOCKER: gte space not ready. ${probe.message}`);
+    process.exitCode = 2;
+    return;
+  }
+  if (provider !== "gte" && !probe.matchFnReady) {
     console.error(`[rag:eval] BLOCKER: ${probe.message}`);
     process.exitCode = 2;
     return;
@@ -49,11 +65,15 @@ async function main() {
   let emptyResults = 0;
 
   for (const item of EVAL_QUERY_BANK) {
-    const result = await retrieveCorpusMatches(client, {
-      query: item.query,
-      matchCount,
-      category: item.categoryFilter,
-    });
+    const result = await retrieveCorpusMatches(
+      client,
+      {
+        query: item.query,
+        matchCount,
+        category: item.categoryFilter,
+      },
+      { provider },
+    );
 
     if (!result.ok) {
       cases.push({

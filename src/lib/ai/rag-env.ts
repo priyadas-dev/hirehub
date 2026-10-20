@@ -41,10 +41,11 @@ export type RagEnvStatus = {
 
 /**
  * Env checks for RAG CLIs.
- * When provider is `local`, GEMINI_API_KEY is not required for embed/retrieve.
+ * When provider is `local` or `gte`, GEMINI_API_KEY is not required for embed/retrieve
+ * (Gemini flash for answers still needs the key in the app server).
  */
 export function getRagEnvStatus(options?: {
-  /** gemini (default) | local — when local, skip GEMINI_API_KEY requirement */
+  /** When false, skip GEMINI_API_KEY requirement (local / gte embed paths). */
   requireGemini?: boolean;
 }): RagEnvStatus {
   const requireGemini = options?.requireGemini !== false;
@@ -67,7 +68,8 @@ export function requireRagServiceEnv(): { url: string; serviceRoleKey: string } 
         "Missing server env for corpus DB access.",
         "Required: SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY (never VITE_ / never commit real keys).",
         "Also review/apply drizzle/migrations/PROPOSED_0009_ai_foundation.sql",
-        "then drizzle/migrations/PROPOSED_0010_rag_corpus.sql in the Supabase SQL Editor.",
+        "then drizzle/migrations/PROPOSED_0010_rag_corpus.sql",
+        "(and PROPOSED_0011_gte_small_embeddings.sql when using EMBEDDING_PROVIDER=gte).",
       ].join(" "),
     );
   }
