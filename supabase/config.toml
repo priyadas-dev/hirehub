@@ -3,3 +3,8 @@ project_id = "munqgybiuqpncxbgfvdp"
 # Edge Function: recruiter/admin status updates → seeker in-app notification.
 [functions.notify-application-status]
 verify_jwt = true
+
+# Cron / secret-header invoke only (x-hirehub-cron-secret). Do not require a user JWT
+# or scheduled POSTs fail at the gateway before CRON_SECRET is checked.
+[functions.close-expired-jobs]
+verify_jwt = false

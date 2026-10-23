@@ -1,16 +1,22 @@
 /**
- * Track 1 — evaluate corpus RAG with matching, noisy, and edge-case queries.
- * Writes a local report under scripts/rag/out/ (gitignored).
+ * Track 1 — evaluate corpus RAG with matching, noisy, edge, and clean-vs-noisy pairs.
+ * Writes local reports under scripts/rag/out/ (gitignored JSON; markdown summary printed).
+ *
+ * Does NOT reseed corpus or overwrite embeddings.
  *
  * Usage:
- *   node --import tsx scripts/rag/eval-corpus-rag.mjs [--match-count=5]
+ *   node --import tsx scripts/rag/eval-corpus-rag.mjs [--match-count=5] [--provider=gte]
  */
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { loadProjectEnv, getRagEnvStatus } from "../../src/lib/ai/rag-env.ts";
 import { createRagAdminClient, probeRagMigrations } from "../../src/lib/ai/rag-admin.ts";
 import { retrieveCorpusMatches } from "../../src/lib/ai/corpus-retrieve.ts";
-import { EVAL_QUERY_BANK } from "../../src/lib/ai/corpus-eval.ts";
+import {
+  EVAL_QUERY_BANK,
+  formatCleanVsNoisyMarkdown,
+  summarizeCleanVsNoisy,
+} from "../../src/lib/ai/corpus-eval.ts";
 
 function parseArgs(argv) {
   let matchCount = 5;
@@ -80,6 +86,8 @@ async function main() {
         id: item.id,
         kind: item.kind,
         query: item.query,
+        pairId: item.pairId ?? null,
+        pairRole: item.pairRole ?? null,
         ok: false,
         message: result.message,
       });
@@ -100,6 +108,8 @@ async function main() {
       id: item.id,
       kind: item.kind,
       query: item.query,
+      pairId: item.pairId ?? null,
+      pairRole: item.pairRole ?? null,
       ok: true,
       resultCount: result.matches.length,
       topSimilarity: top?.similarity ?? null,
@@ -122,9 +132,13 @@ async function main() {
     );
   }
 
+  const cleanVsNoisy = summarizeCleanVsNoisy(cases, EVAL_QUERY_BANK);
+  const cleanVsNoisyMarkdown = formatCleanVsNoisyMarkdown(cleanVsNoisy);
+
   const report = {
     generatedAt: new Date().toISOString(),
     matchCount,
+    provider,
     metrics: {
       totalCases: EVAL_QUERY_BANK.length,
       categoryHitRate: categoryCases ? categoryHits / categoryCases : null,
@@ -133,10 +147,13 @@ async function main() {
         : null,
       failedCalls: cases.filter((c) => !c.ok).length,
     },
+    cleanVsNoisy,
     cases,
     notes: [
       "Corpus matches are synthetic training documents — not live HireHub vacancies.",
       "Live recommendations must use recommendApprovedLiveJobs (approved jobs only).",
+      "cleanVsNoisy compares paired clean matching queries vs typo twins (with vs without noise).",
+      "This run does not reseed or overwrite embeddings.",
     ],
   };
 
@@ -144,8 +161,16 @@ async function main() {
   mkdirSync(outDir, { recursive: true });
   const outPath = path.join(outDir, "eval-report.json");
   writeFileSync(outPath, JSON.stringify(report, null, 2), "utf8");
+  const mdPath = path.join(outDir, "clean-vs-noisy.md");
+  writeFileSync(
+    mdPath,
+    `# Clean vs noisy RAG (generated)\n\nProvider: \`${provider}\`  \nGenerated: ${report.generatedAt}\n\n${cleanVsNoisyMarkdown}\n`,
+    "utf8",
+  );
   console.log(`[rag:eval] Wrote ${outPath}`);
+  console.log(`[rag:eval] Wrote ${mdPath}`);
   console.log("[rag:eval] Metrics:", report.metrics);
+  console.log("[rag:eval] Clean vs noisy:\n" + cleanVsNoisyMarkdown);
 }
 
 main().catch((err) => {

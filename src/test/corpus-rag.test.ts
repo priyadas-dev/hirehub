@@ -57,8 +57,12 @@ describe("embedding validity helpers", () => {
     expect(hasValidEmbedding(null)).toBe(false);
     expect(shouldSkipEmbedding({ embedding: vectorOf(768) })).toBe(true);
     expect(shouldSkipEmbedding({ embedding: null })).toBe(false);
-    expect(shouldSkipEmbedding({ embedding: null, embedding_gte: vectorOf(384) }, "gte")).toBe(true);
-    expect(shouldSkipEmbedding({ embedding: vectorOf(768), embedding_gte: null }, "gte")).toBe(false);
+    expect(shouldSkipEmbedding({ embedding: null, embedding_gte: vectorOf(384) }, "gte")).toBe(
+      true,
+    );
+    expect(shouldSkipEmbedding({ embedding: vectorOf(768), embedding_gte: null }, "gte")).toBe(
+      false,
+    );
   });
 });
 
@@ -432,7 +436,10 @@ describe("live recommendations stay separate from corpus RAG", () => {
             expect(value).toBe("approved");
             return builder;
           },
+          eq: () => builder,
           ilike: () => builder,
+          or: () => builder,
+          in: () => builder,
           order: () => builder,
           limit: async () => ({
             data: [
@@ -444,6 +451,8 @@ describe("live recommendations stay separate from corpus RAG", () => {
                 status: "approved",
                 company_id: "co-1",
                 created_at: "2026-01-01T00:00:00Z",
+                job_type: "full_time",
+                companies: { name: "Acme" },
               },
               {
                 id: "live-2",
@@ -453,6 +462,8 @@ describe("live recommendations stay separate from corpus RAG", () => {
                 status: "pending",
                 company_id: "co-1",
                 created_at: "2026-01-02T00:00:00Z",
+                job_type: "full_time",
+                companies: { name: "Acme" },
               },
             ],
             error: null,
@@ -480,6 +491,6 @@ describe("evaluation bank", () => {
     expect(kinds.has("matching")).toBe(true);
     expect(kinds.has("noisy")).toBe(true);
     expect(kinds.has("edge")).toBe(true);
-    expect(EVAL_QUERY_BANK.length).toBeGreaterThanOrEqual(8);
+    expect(EVAL_QUERY_BANK.length).toBeGreaterThanOrEqual(11);
   });
 });

@@ -18,7 +18,13 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { JOB_TYPE_LABEL } from "@/lib/hirehub";
 import {
   fmtDeadline,
@@ -29,6 +35,7 @@ import {
   type JobStatus,
 } from "@/lib/job-fields";
 import { useAuth } from "@/lib/auth";
+import { isClosedReasonMissingError, manualClosePayload } from "@/lib/job-expiry-reopen";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/components/dashboard/parts";
 
@@ -78,15 +85,26 @@ function MyJobsPage() {
   const closeJob = useMutation({
     mutationFn: async (jobId: string) => {
       if (!id) throw new Error("Not signed in");
-      const { data, error } = await supabase
+      const withReason = manualClosePayload("recruiter");
+      let result = await supabase
         .from("jobs")
-        .update({ status: "closed" })
+        // closed_reason is additive (PROPOSED_0014); cast until types regenerate.
+        .update(withReason as never)
         .eq("id", jobId)
         .eq("recruiter_id", id)
         .neq("status", "closed")
         .select("id");
-      if (error) throw error;
-      if (!data?.length) throw new Error("Job was already closed.");
+      if (result.error && isClosedReasonMissingError(result.error)) {
+        result = await supabase
+          .from("jobs")
+          .update({ status: "closed" })
+          .eq("id", jobId)
+          .eq("recruiter_id", id)
+          .neq("status", "closed")
+          .select("id");
+      }
+      if (result.error) throw result.error;
+      if (!result.data?.length) throw new Error("Job was already closed.");
     },
     onSuccess: async () => {
       toast.success("Job closed");
@@ -200,7 +218,9 @@ function MyJobsPage() {
                     className="min-w-0 flex-1 space-y-2 rounded-lg outline-none transition-colors hover:bg-muted/30 focus-visible:ring-2 focus-visible:ring-ring lg:-m-2 lg:p-2"
                   >
                     <div className="flex flex-wrap items-start justify-between gap-2">
-                      <p className="min-w-0 flex-1 font-medium leading-snug text-foreground">{j.title}</p>
+                      <p className="min-w-0 flex-1 font-medium leading-snug text-foreground">
+                        {j.title}
+                      </p>
                       <span
                         className={cn(
                           "shrink-0 rounded-full border px-2.5 py-0.5 text-xs font-medium lg:hidden",
@@ -232,7 +252,11 @@ function MyJobsPage() {
                     </span>
                     <div className="flex flex-wrap gap-2">
                       <Button variant="outline" size="sm" asChild>
-                        <Link to="/recruiter/applicants" search={{ jobId: j.id }} onClick={(e) => e.stopPropagation()}>
+                        <Link
+                          to="/recruiter/applicants"
+                          search={{ jobId: j.id }}
+                          onClick={(e) => e.stopPropagation()}
+                        >
                           <Users /> Applicants
                         </Link>
                       </Button>
@@ -264,8 +288,8 @@ function MyJobsPage() {
                             <AlertDialogHeader>
                               <AlertDialogTitle>Close this job?</AlertDialogTitle>
                               <AlertDialogDescription>
-                                “{j.title}” will no longer appear to seekers. Existing applications stay available for
-                                review.
+                                “{j.title}” will no longer appear to seekers. Existing applications
+                                stay available for review.
                               </AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter>

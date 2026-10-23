@@ -1,5 +1,11 @@
 # HireHub AI Job Assistant (Track 3)
 
+Assessment verification checklist (manual demos, automations, metrics): [`assessment-2-verification.md`](./assessment-2-verification.md).
+
+Deploy / proposed migrations: [`deploy-assessment-2.md`](./deploy-assessment-2.md).
+
+Project overview and measured results: root [`README.md`](../README.md).
+
 Seeker-only assistant at `/seeker/assistant`. It answers questions about skills, experience, and career direction using:
 
 1. **Corpus RAG** — synthetic `job_corpus` documents (practice context only)
@@ -13,7 +19,7 @@ Set these in local `.env` and in your host’s secret store (Vercel/Lovable). **
 
 | Variable | Purpose |
 |----------|---------|
-| `GEMINI_API_KEY` | Assistant **text** generation (`gemini-2.0-flash`). Also used when `EMBEDDING_PROVIDER=gemini` for embeddings. |
+| `GEMINI_API_KEY` | Assistant **text** generation (`gemini-3.8-flash`). Also used when `EMBEDDING_PROVIDER=gemini` for embeddings. |
 | `SUPABASE_URL` | Supabase project URL |
 | `SUPABASE_PUBLISHABLE_KEY` | Browser/user JWT client (existing) |
 | `SUPABASE_SERVICE_ROLE_KEY` | Server-only corpus RAG RPCs |
@@ -56,7 +62,7 @@ npm run rag:embed -- --provider=gte --limit=5000 --confirm-gte-bulk --batch-size
 
 # Set app retrieve to the same space, keep Gemini for answers
 # EMBEDDING_PROVIDER=gte
-# GEMINI_API_KEY=...   (still required for gemini-2.0-flash answers)
+# GEMINI_API_KEY=...   (still required for gemini-3.8-flash answers)
 
 npm run rag:eval -- --provider=gte
 npm run dev
@@ -87,7 +93,7 @@ WHERE job_id IS NULL;
 2. Server verifies JWT (`requireSupabaseAuth`) and `profiles.role` = job seeker.
 3. Server embeds the question with `EMBEDDING_PROVIDER` and calls the matching RPC (`match_job_corpus` or `match_job_corpus_gte`) with the **service role**.
 4. Server loads approved live jobs with the **user JWT** (never invents vacancies).
-5. Server asks Gemini (`gemini-2.0-flash`) to answer only from that grounded context.
+5. Server asks Gemini (`gemini-3.8-flash`) to answer only from that grounded context.
 6. UI labels corpus citations as synthetic and live citations as real approved jobs.
 
 ## How to test
@@ -103,12 +109,14 @@ npm run dev
 # Sign in as a job seeker → Sidebar → AI Job Assistant
 ```
 
-Classifier / corpus eval:
+Classifier / corpus eval (does **not** reseed or overwrite embeddings):
 
 ```sh
 npm run rag:seed:dry
 npm run rag:classify
 npm run rag:eval -- --provider=gte
+# → scripts/rag/out/eval-report.json
+# → scripts/rag/out/clean-vs-noisy.md  (with vs without noise)
 ```
 
 ## Security notes

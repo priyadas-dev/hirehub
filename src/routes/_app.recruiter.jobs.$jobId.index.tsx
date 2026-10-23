@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Pencil, Trash2, Users } from "lucide-react";
 import { toast } from "sonner";
 import { CardSkeleton, ErrorState, PageHeader } from "@/components/feedback/States";
+import { DeadlineDatePicker } from "@/components/jobs/DeadlineDatePicker";
 import { fmtPostedDate } from "@/components/jobs/RecruiterJobMeta";
 import {
   AlertDialog,
@@ -17,6 +18,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 import { JOB_TYPE_LABEL } from "@/lib/hirehub";
 import {
   fmtDeadline,
@@ -27,7 +29,13 @@ import {
   stripDeadlineMarker,
   type JobStatus,
 } from "@/lib/job-fields";
-import { canDeleteJobWithApplications, countApplicationsForJob, deleteOwnJob } from "@/lib/job-delete";
+import {
+  canDeleteJobWithApplications,
+  countApplicationsForJob,
+  deleteOwnJob,
+} from "@/lib/job-delete";
+import { recruiterReopenExpiredJob } from "@/lib/job-expiry-reopen-api";
+import { isExpiryAutoClosedJob } from "@/lib/job-expiry-reopen";
 import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/components/dashboard/parts";
@@ -58,11 +66,24 @@ function RecruiterJobDetailsPage() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const [deleteBlockedReason, setDeleteBlockedReason] = useState<string | null>(null);
+  const [reopenDeadline, setReopenDeadline] = useState("");
 
   const job = useQuery({
     queryKey: ["recruiter-job-details", jobId, id],
     enabled: !!id && !!jobId,
     queryFn: async () => {
+      // closed_reason is additive (PROPOSED_0014); cast select until types regenerate.
+      const withReason = await supabase
+        .from("jobs")
+        .select(
+          "id,title,description,location,salary_range,job_type,status,created_at,application_deadline,rejection_reason,closed_reason,companies(id,name,industry,website,status),applications(count)" as never,
+        )
+        .eq("id", jobId)
+        .eq("recruiter_id", id!)
+        .maybeSingle();
+      if (!withReason.error && withReason.data) {
+        return withReason.data as typeof withReason.data & { closed_reason?: string | null };
+      }
       const primary = await supabase
         .from("jobs")
         .select(
@@ -82,11 +103,42 @@ function RecruiterJobDetailsPage() {
           .maybeSingle();
         if (fallback.error) throw fallback.error;
         if (!fallback.data) throw new Error("Job not found");
-        return { ...fallback.data, rejection_reason: null as string | null };
+        return {
+          ...fallback.data,
+          rejection_reason: null as string | null,
+          closed_reason: null as string | null,
+        };
       }
       if (!primary.data) throw new Error("Job not found");
-      return primary.data;
+      return { ...primary.data, closed_reason: null as string | null };
     },
+  });
+
+  const reopenExpired = useMutation({
+    mutationFn: async () => {
+      if (!id || !job.data) throw new Error("Not signed in");
+      return recruiterReopenExpiredJob({
+        job: {
+          id: job.data.id,
+          status: job.data.status,
+          recruiter_id: id,
+          closed_reason: (job.data as { closed_reason?: string | null }).closed_reason ?? null,
+          application_deadline: job.data.application_deadline,
+        },
+        callerId: id,
+        newDeadline: reopenDeadline,
+      });
+    },
+    onSuccess: async () => {
+      toast.success("Deadline extended — job reopened");
+      setReopenDeadline("");
+      await qc.invalidateQueries({ queryKey: ["recruiter-job-details", jobId] });
+      await qc.invalidateQueries({ queryKey: ["recruiter-jobs"] });
+      await qc.invalidateQueries({ queryKey: ["seeker-jobs"] });
+      await qc.invalidateQueries({ queryKey: ["admin-jobs"] });
+      await qc.invalidateQueries({ queryKey: ["notifications"] });
+    },
+    onError: (e: Error) => toast.error("Could not reopen job", { description: e.message }),
   });
 
   const remove = useMutation({
@@ -129,6 +181,8 @@ function RecruiterJobDetailsPage() {
   const deadlineLabel = fmtDeadline(deadline);
   const deadlineExpired = isApplicationDeadlinePassed(deadline);
   const canEdit = status !== "closed" && status !== "rejected";
+  const closedReason = (j as { closed_reason?: string | null }).closed_reason ?? null;
+  const canExtendReopen = isExpiryAutoClosedJob({ status, closed_reason: closedReason });
   const company = j.companies;
 
   return (
@@ -150,12 +204,7 @@ function RecruiterJobDetailsPage() {
               </Link>
             </Button>
             {canEdit && (
-              <Button
-                variant="signal"
-                size="sm"
-                asChild
-                onClick={(e) => e.stopPropagation()}
-              >
+              <Button variant="signal" size="sm" asChild onClick={(e) => e.stopPropagation()}>
                 <Link to="/recruiter/jobs/$jobId/edit" params={{ jobId }}>
                   <Pencil /> Edit
                 </Link>
@@ -183,12 +232,13 @@ function RecruiterJobDetailsPage() {
                   <AlertDialogDescription asChild>
                     <div className="space-y-2 text-sm text-muted-foreground">
                       <p>
-                        This permanently removes <span className="font-medium text-foreground">{j.title}</span> if it
-                        has no applications.
+                        This permanently removes{" "}
+                        <span className="font-medium text-foreground">{j.title}</span> if it has no
+                        applications.
                       </p>
                       <p>
-                        If candidates have already applied, deletion is blocked so application records are not removed.
-                        Use Close on the job list instead in that case.
+                        If candidates have already applied, deletion is blocked so application
+                        records are not removed. Use Close on the job list instead in that case.
                       </p>
                       {deleteBlockedReason && (
                         <p className="rounded-lg border border-destructive/25 bg-destructive/5 px-3 py-2 text-destructive">
@@ -220,7 +270,12 @@ function RecruiterJobDetailsPage() {
       />
 
       <div className="flex flex-wrap items-center gap-2">
-        <span className={cn("rounded-full border px-2.5 py-1 text-xs font-medium", JOB_STATUS_BADGE_CLASS[status])}>
+        <span
+          className={cn(
+            "rounded-full border px-2.5 py-1 text-xs font-medium",
+            JOB_STATUS_BADGE_CLASS[status],
+          )}
+        >
           {JOB_STATUS_LABEL[status]}
         </span>
         {deadlineExpired && (
@@ -239,9 +294,51 @@ function RecruiterJobDetailsPage() {
 
       {status === "approved" && (
         <p className="text-sm text-muted-foreground">
-          Editing this approved job submits a proposed revision for admin review. The live listing stays unchanged until
-          approved.
+          Editing this approved job submits a proposed revision for admin review. The live listing
+          stays unchanged until approved.
         </p>
+      )}
+
+      {status === "closed" && canExtendReopen && (
+        <section className="surface-card space-y-4 p-5 sm:p-6">
+          <div className="space-y-1">
+            <h2 className="text-sm font-semibold tracking-tight">Extend deadline &amp; reopen</h2>
+            <p className="text-sm text-muted-foreground">
+              This listing was closed automatically when its application deadline passed. Choose a
+              new deadline (today or later) and confirm reopen. Changing the date alone does not
+              reopen the job.
+            </p>
+          </div>
+          <div className="max-w-sm space-y-2">
+            <Label htmlFor="reopen_deadline">New application deadline</Label>
+            <DeadlineDatePicker
+              id="reopen_deadline"
+              value={reopenDeadline}
+              onChange={setReopenDeadline}
+            />
+          </div>
+          <Button
+            type="button"
+            variant="signal"
+            disabled={!reopenDeadline || reopenExpired.isPending}
+            onClick={() => reopenExpired.mutate()}
+          >
+            {reopenExpired.isPending ? "Reopening…" : "Extend deadline & reopen job"}
+          </Button>
+        </section>
+      )}
+
+      {status === "closed" && !canExtendReopen && (
+        <div className="rounded-xl border bg-card px-4 py-3 text-sm text-muted-foreground">
+          This listing is closed
+          {closedReason === "recruiter" || closedReason === "admin"
+            ? " manually"
+            : closedReason
+              ? ""
+              : " (close reason unknown)"}
+          . Recruiters can only reopen jobs that were auto-closed for an expired deadline. Ask an
+          admin if you need this listing live again.
+        </div>
       )}
 
       <dl className="surface-card grid gap-6 p-5 sm:grid-cols-2 sm:p-6">
@@ -266,7 +363,11 @@ function RecruiterJobDetailsPage() {
         <Field label="Salary range">{j.salary_range?.trim() || "Not provided"}</Field>
         <Field label="Posted">{fmtPostedDate(j.created_at)}</Field>
         <Field label="Application deadline">
-          {deadlineLabel ? (deadlineExpired ? `${deadlineLabel} (expired)` : deadlineLabel) : "Not provided"}
+          {deadlineLabel
+            ? deadlineExpired
+              ? `${deadlineLabel} (expired)`
+              : deadlineLabel
+            : "Not provided"}
         </Field>
         <Field label="Applicants">
           {appCount} applicant{appCount === 1 ? "" : "s"}
@@ -277,7 +378,9 @@ function RecruiterJobDetailsPage() {
       <section className="surface-card space-y-3 p-5 sm:p-6">
         <h2 className="text-sm font-semibold tracking-tight">Description</h2>
         {description ? (
-          <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">{description}</p>
+          <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">
+            {description}
+          </p>
         ) : (
           <p className="text-sm text-muted-foreground">Not provided</p>
         )}
