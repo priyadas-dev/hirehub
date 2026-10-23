@@ -10,7 +10,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { DeadlineDatePicker } from "@/components/jobs/DeadlineDatePicker";
 import { JOB_TYPE_LABEL, type JobType } from "@/lib/hirehub";
 import {
@@ -22,11 +28,7 @@ import {
   stripDeadlineMarker,
   type JobStatus,
 } from "@/lib/job-fields";
-import {
-  canDirectEditLiveJob,
-  canSubmitJobRevision,
-  jobContentChanged,
-} from "@/lib/job-revisions";
+import { canDirectEditLiveJob, canSubmitJobRevision, jobContentChanged } from "@/lib/job-revisions";
 import { submitJobRevision, isReviewSchemaUnavailable } from "@/lib/review-api";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/components/dashboard/parts";
@@ -160,9 +162,14 @@ function EditJobPage() {
         throw new Error("This listing cannot be edited.");
       }
 
-      const previousDeadline = resolveJobDeadline(job.data.application_deadline, job.data.description);
+      const previousDeadline = resolveJobDeadline(
+        job.data.application_deadline,
+        job.data.description,
+      );
       if (!canSetApplicationDeadline(values.application_deadline, previousDeadline)) {
-        throw new Error("Deadline must be today or a future date (or leave the current expired deadline unchanged).");
+        throw new Error(
+          "Deadline must be today or a future date (or leave the current expired deadline unchanged).",
+        );
       }
 
       const proposed = {
@@ -266,9 +273,15 @@ function EditJobPage() {
         title="Edit job"
         description={
           closed || rejected
-            ? `This listing is ${status} and can no longer be edited.`
+            ? `This listing is ${status} and can no longer be edited here.${
+                closed
+                  ? " If it was auto-closed for an expired deadline, use Extend deadline & reopen on the job details page."
+                  : ""
+              }`
             : `${job.data?.companies?.name ?? "Company"} · ${JOB_STATUS_LABEL[status]}${
-                deadlineLabel ? ` · Deadline ${deadlineLabel}${deadlineExpired ? " (expired)" : ""}` : ""
+                deadlineLabel
+                  ? ` · Deadline ${deadlineLabel}${deadlineExpired ? " (expired)" : ""}`
+                  : ""
               }`
         }
         actions={
@@ -299,29 +312,34 @@ function EditJobPage() {
 
       {approved && pendingRevision.data && (
         <div className="rounded-xl border border-status-interview/30 bg-status-interview-soft/40 px-4 py-3 text-sm">
-          Proposed edits are pending admin review. The live approved listing is unchanged for job seekers until an admin
-          decides.
+          Proposed edits are pending admin review. The live approved listing is unchanged for job
+          seekers until an admin decides.
         </div>
       )}
 
       {approved && !pendingRevision.data && latestRejectedRevision.data?.rejection_reason && (
         <div className="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm">
           <p className="font-medium text-destructive">Latest revision was rejected</p>
-          <p className="mt-1 text-muted-foreground">{latestRejectedRevision.data.rejection_reason}</p>
-          <p className="mt-1 text-xs text-muted-foreground">Your live approved listing was not changed. You can submit a new revision.</p>
+          <p className="mt-1 text-muted-foreground">
+            {latestRejectedRevision.data.rejection_reason}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Your live approved listing was not changed. You can submit a new revision.
+          </p>
         </div>
       )}
 
       {approved && !pendingRevision.data && (
         <div className="rounded-xl border bg-card px-4 py-3 text-sm text-muted-foreground">
-          Saving submits proposed changes for admin approval. Job seekers continue to see the current approved version
-          until then.
+          Saving submits proposed changes for admin approval. Job seekers continue to see the
+          current approved version until then.
         </div>
       )}
 
       {deadlineExpired && !locked && (
         <div className="rounded-xl border border-status-interview/30 bg-status-interview-soft/40 px-4 py-3 text-sm">
-          The application deadline has expired. Set a new date of today or later to reopen applications.
+          The application deadline has expired. Set a new date of today or later to reopen
+          applications.
         </div>
       )}
 
@@ -331,7 +349,12 @@ function EditJobPage() {
       >
         <div className="space-y-2">
           <Label htmlFor="title">Job title</Label>
-          <Input id="title" disabled={locked} {...form.register("title")} placeholder="Senior Engineer" />
+          <Input
+            id="title"
+            disabled={locked}
+            {...form.register("title")}
+            placeholder="Senior Engineer"
+          />
           {form.formState.errors.title && (
             <p className="text-xs text-destructive">{form.formState.errors.title.message}</p>
           )}
@@ -352,7 +375,12 @@ function EditJobPage() {
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
             <Label htmlFor="location">Location</Label>
-            <Input id="location" disabled={locked} {...form.register("location")} placeholder="Remote / City" />
+            <Input
+              id="location"
+              disabled={locked}
+              {...form.register("location")}
+              placeholder="Remote / City"
+            />
             {form.formState.errors.location && (
               <p className="text-xs text-destructive">{form.formState.errors.location.message}</p>
             )}
@@ -373,7 +401,9 @@ function EditJobPage() {
             <Select
               value={form.watch("job_type")}
               disabled={locked}
-              onValueChange={(v) => form.setValue("job_type", v as JobType, { shouldValidate: true })}
+              onValueChange={(v) =>
+                form.setValue("job_type", v as JobType, { shouldValidate: true })
+              }
             >
               <SelectTrigger>
                 <SelectValue />
@@ -395,10 +425,14 @@ function EditJobPage() {
               disabled={locked}
               disablePast
               placeholder={deadlineExpired ? "Extend deadline…" : "Pick a deadline"}
-              onChange={(iso) => form.setValue("application_deadline", iso, { shouldValidate: true })}
+              onChange={(iso) =>
+                form.setValue("application_deadline", iso, { shouldValidate: true })
+              }
             />
             {form.formState.errors.application_deadline && (
-              <p className="text-xs text-destructive">{form.formState.errors.application_deadline.message}</p>
+              <p className="text-xs text-destructive">
+                {form.formState.errors.application_deadline.message}
+              </p>
             )}
           </div>
         </div>

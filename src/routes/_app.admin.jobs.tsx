@@ -10,6 +10,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { JOB_TYPE_LABEL } from "@/lib/hirehub";
 import { useAuth } from "@/lib/auth";
+import {
+  adminReopenPayload,
+  isClosedReasonMissingError,
+  manualClosePayload,
+} from "@/lib/job-expiry-reopen";
 import { adminReviewJob } from "@/lib/review-api";
 import { fmtDate, supabase } from "@/components/dashboard/parts";
 
@@ -52,7 +57,10 @@ function AdminJobsPage() {
           .select("id,title,location,job_type,status,created_at,companies(name)")
           .order("created_at", { ascending: false });
         if (fallback.error) throw fallback.error;
-        return (fallback.data ?? []).map((j) => ({ ...j, rejection_reason: null as string | null }));
+        return (fallback.data ?? []).map((j) => ({
+          ...j,
+          rejection_reason: null as string | null,
+        }));
       }
       return data;
     },
@@ -71,8 +79,15 @@ function AdminJobsPage() {
 
   const closeJob = useMutation({
     mutationFn: async (jobId: string) => {
-      const { error } = await supabase.from("jobs").update({ status: "closed" }).eq("id", jobId);
-      if (error) throw error;
+      const withReason = manualClosePayload("admin");
+      let result = await supabase
+        .from("jobs")
+        .update(withReason as never)
+        .eq("id", jobId);
+      if (result.error && isClosedReasonMissingError(result.error)) {
+        result = await supabase.from("jobs").update({ status: "closed" }).eq("id", jobId);
+      }
+      if (result.error) throw result.error;
     },
     onSuccess: async () => {
       toast.success("Job closed");
@@ -83,8 +98,15 @@ function AdminJobsPage() {
 
   const reopenJob = useMutation({
     mutationFn: async (jobId: string) => {
-      const { error } = await supabase.from("jobs").update({ status: "approved" }).eq("id", jobId);
-      if (error) throw error;
+      const payload = adminReopenPayload();
+      let result = await supabase
+        .from("jobs")
+        .update(payload as never)
+        .eq("id", jobId);
+      if (result.error && isClosedReasonMissingError(result.error)) {
+        result = await supabase.from("jobs").update({ status: "approved" }).eq("id", jobId);
+      }
+      if (result.error) throw result.error;
     },
     onSuccess: async () => {
       toast.success("Job re-opened");
@@ -180,7 +202,9 @@ function AdminJobsPage() {
                 icon={ShieldCheck}
                 title={q ? "No pending jobs match" : "No pending jobs"}
                 description={
-                  q ? "Try another search term or clear the header search." : "All submitted roles are reviewed."
+                  q
+                    ? "Try another search term or clear the header search."
+                    : "All submitted roles are reviewed."
                 }
               />
             )}
@@ -201,7 +225,9 @@ function AdminJobsPage() {
                         {j.companies?.name ?? "Company"} · {fmtDate(j.created_at)}
                       </p>
                       {j.status === "rejected" && j.rejection_reason && (
-                        <p className="mt-1 text-xs text-destructive">Reason: {j.rejection_reason}</p>
+                        <p className="mt-1 text-xs text-destructive">
+                          Reason: {j.rejection_reason}
+                        </p>
                       )}
                     </div>
                     <div className="flex flex-wrap items-center gap-2">

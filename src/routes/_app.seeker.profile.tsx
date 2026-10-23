@@ -14,9 +14,16 @@ import { Label } from "@/components/ui/label";
 import { useFileUploadsReady } from "@/hooks/use-file-uploads-ready";
 import { useAuth } from "@/lib/auth";
 import { isMissingSchemaError } from "@/lib/hirehub-storage";
-import { ownProfileSchema, resumeUrlSchema, updateOwnProfile } from "@/lib/profile";
+import {
+  ownProfileSchema,
+  resumeUrlSchema,
+  SKILLS_FEATURE_NOT_READY_MESSAGE,
+  SKILLS_MAX_LENGTH,
+  updateOwnProfile,
+} from "@/lib/profile";
 import { removeResumeObject, saveProfileResume } from "@/lib/resume-upload";
 import { supabase } from "@/integrations/supabase/client";
+import { Textarea } from "@/components/ui/textarea";
 
 const schema = ownProfileSchema.extend({
   resume_url: resumeUrlSchema,
@@ -69,6 +76,24 @@ function SeekerProfilePage() {
         throw withStorage.error;
       }
 
+      // PROPOSED_0009 skills — optional; must not break the page when the column is absent.
+      let skillsAvailable = true;
+      let skillsValue = "";
+      const skillsProbe = await supabase
+        .from("profiles")
+        // Generated Database types omit `skills` until the migration is applied + types regenerated.
+        .select("skills" as "id")
+        .eq("id", id!)
+        .maybeSingle();
+      if (skillsProbe.error && isMissingSchemaError(skillsProbe.error.message)) {
+        skillsAvailable = false;
+      } else if (skillsProbe.error) {
+        throw skillsProbe.error;
+      } else {
+        const row = skillsProbe.data as { skills?: string | null } | null;
+        skillsValue = typeof row?.skills === "string" ? row.skills : "";
+      }
+
       const [{ data: authData, error: authErr }, latestApp] = await Promise.all([
         supabase.auth.getUser(),
         supabase
@@ -91,6 +116,8 @@ function SeekerProfilePage() {
         full_name: p?.full_name ?? "",
         email: p?.email ?? "",
         phone: p?.phone ?? "",
+        skills: skillsValue,
+        skillsAvailable,
         resume_storage_path: p?.resume_storage_path ?? null,
         resume_file_name: p?.resume_file_name ?? null,
         resume_url: metaResume || appResume || "",
@@ -108,7 +135,7 @@ function SeekerProfilePage() {
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { full_name: "", email: "", phone: "", resume_url: "" },
+    defaultValues: { full_name: "", email: "", phone: "", skills: "", resume_url: "" },
   });
 
   useEffect(() => {
@@ -117,6 +144,7 @@ function SeekerProfilePage() {
         full_name: profile.data.full_name,
         email: profile.data.email || user?.email || "",
         phone: profile.data.phone ?? "",
+        skills: profile.data.skills ?? "",
         resume_url: profile.data.resume_url,
       });
       setResumeValue(
@@ -134,11 +162,17 @@ function SeekerProfilePage() {
     mutationFn: async (values: FormValues) => {
       if (!id) throw new Error("Not signed in");
 
-      await updateOwnProfile(id, {
-        full_name: values.full_name,
-        email: values.email,
-        phone: values.phone,
-      });
+      const skillsReady = profile.data?.skillsAvailable === true;
+      const result = await updateOwnProfile(
+        id,
+        {
+          full_name: values.full_name,
+          email: values.email,
+          phone: values.phone,
+          skills: values.skills,
+        },
+        { includeSkills: skillsReady },
+      );
 
       if (canPersist) {
         const previousPath = profile.data?.resume_storage_path ?? null;
@@ -165,12 +199,18 @@ function SeekerProfilePage() {
         });
         if (metaErr) throw metaErr;
       }
+
+      return result;
     },
-    onSuccess: async () => {
+    onSuccess: async (result) => {
+      const skillsNote =
+        result.skillsUnavailable || profile.data?.skillsAvailable === false
+          ? ` ${SKILLS_FEATURE_NOT_READY_MESSAGE}`
+          : "";
       toast.success("Profile updated", {
         description: canPersist
-          ? "Email, name, phone, and resume file are saved."
-          : "Email, name, phone, and preferred resume URL are saved.",
+          ? `Email, name, phone, and resume file are saved.${skillsNote}`
+          : `Email, name, phone, and preferred resume URL are saved.${skillsNote}`,
       });
       await qc.invalidateQueries({ queryKey: ["seeker-profile", id] });
       await qc.invalidateQueries({ queryKey: ["seeker-latest-resume", id] });
@@ -239,6 +279,31 @@ function SeekerProfilePage() {
           <Input id="phone" {...form.register("phone")} placeholder="+880…" inputMode="tel" />
           {form.formState.errors.phone && (
             <p className="text-xs text-destructive">{form.formState.errors.phone.message}</p>
+          )}
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="skills">Skills (optional)</Label>
+          <Textarea
+            id="skills"
+            rows={3}
+            maxLength={SKILLS_MAX_LENGTH}
+            placeholder="e.g. TypeScript, React, SQL, customer support…"
+            disabled={profile.data?.skillsAvailable === false}
+            aria-invalid={!!form.formState.errors.skills}
+            {...form.register("skills")}
+          />
+          {form.formState.errors.skills && (
+            <p className="text-xs text-destructive">{form.formState.errors.skills.message}</p>
+          )}
+          {profile.data?.skillsAvailable === false ? (
+            <p className="text-xs text-muted-foreground" role="status">
+              {SKILLS_FEATURE_NOT_READY_MESSAGE}
+            </p>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              Short list of skills used for job matching. Max {SKILLS_MAX_LENGTH} characters.
+            </p>
           )}
         </div>
 
