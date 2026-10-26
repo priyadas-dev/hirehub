@@ -54,7 +54,7 @@ describe("contactMessageSchema", () => {
   });
 
   it("exposes the verified public support email", () => {
-    expect(SUPPORT_EMAIL).toBe("priya.das@sjinnovation.com");
+    expect(SUPPORT_EMAIL).toBe("hirehub@gmail.com");
   });
 
   it("builds Gmail compose and mailto links to the support inbox", () => {
@@ -96,14 +96,14 @@ describe("buildResendContactPayload", () => {
   it("uses configured From, CONTACT_TO as To, and visitor as reply_to only", () => {
     const payload = buildResendContactPayload({
       from: "HireHub <onboarding@resend.dev>",
-      to: "priya.das@sjinnovation.com",
+      to: "hirehub@gmail.com",
       visitorName: "Visitor Name",
       visitorEmail: "visitor@example.com",
       subject: "Need help",
       message: "Please help with my account.",
     });
     expect(payload.from).toBe("HireHub <onboarding@resend.dev>");
-    expect(payload.to).toEqual(["priya.das@sjinnovation.com"]);
+    expect(payload.to).toEqual(["hirehub@gmail.com"]);
     expect(payload.reply_to).toBe("visitor@example.com");
     expect(payload.subject).toBe("[HireHub] Need help");
     expect(payload.text).toContain("visitor@example.com");
@@ -114,7 +114,7 @@ describe("buildResendContactPayload", () => {
     expect(() =>
       buildResendContactPayload({
         from: "visitor@example.com",
-        to: "priya.das@sjinnovation.com",
+        to: "hirehub@gmail.com",
         visitorName: "Visitor",
         visitorEmail: "visitor@example.com",
         subject: "Help",

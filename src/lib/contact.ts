@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 /** Public support email shown on the marketing site (not a secret). */
-export const SUPPORT_EMAIL = "priya.das@sjinnovation.com" as const;
+export const SUPPORT_EMAIL = "hirehub@gmail.com" as const;
 
 /** Default mail client compose (To = support email). */
 export const SUPPORT_MAILTO_HREF = `mailto:${SUPPORT_EMAIL}` as const;
