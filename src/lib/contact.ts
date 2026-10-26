@@ -10,11 +10,11 @@ export const SUPPORT_MAILTO_HREF = `mailto:${SUPPORT_EMAIL}` as const;
 export const SUPPORT_GMAIL_COMPOSE_HREF =
   `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(SUPPORT_EMAIL)}` as const;
 
-/** Display number as provided by the project owner. */
-export const SUPPORT_PHONE_DISPLAY = "01806085616" as const;
+/** Public placeholder support number (not a personal phone). */
+export const SUPPORT_PHONE_DISPLAY = "+1 202-555-0100" as const;
 
-/** Bangladesh E.164 for dialer links (018… → +88018…). */
-export const SUPPORT_PHONE_TEL = "+8801806085616" as const;
+/** E.164 for dialer links. */
+export const SUPPORT_PHONE_TEL = "+12025550100" as const;
 
 export const SUPPORT_TEL_HREF = `tel:${SUPPORT_PHONE_TEL}` as const;
 

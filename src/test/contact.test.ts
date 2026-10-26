@@ -64,8 +64,8 @@ describe("contactMessageSchema", () => {
   });
 
   it("builds an international tel link for the dialer", () => {
-    expect(SUPPORT_PHONE_TEL).toBe("+8801806085616");
-    expect(SUPPORT_TEL_HREF).toBe("tel:+8801806085616");
+    expect(SUPPORT_PHONE_TEL).toBe("+12025550100");
+    expect(SUPPORT_TEL_HREF).toBe("tel:+12025550100");
   });
 
   it("builds draft links addressed to support", () => {
