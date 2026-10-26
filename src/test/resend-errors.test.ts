@@ -5,7 +5,7 @@ describe("classifyResendFailure", () => {
   it("detects free-plan recipient restriction", () => {
     const kind = classifyResendFailure(403, {
       message:
-        "You can only send testing emails to your own email address (priya.das@sjinnovation.com). To send emails to other recipients, please verify a domain.",
+        "You can only send testing emails to your own email address (hirehub@gmail.com). To send emails to other recipients, please verify a domain.",
     });
     expect(kind).toBe("testing_recipient_restricted");
     expect(userMessageForResendFailure(kind)).toMatch(/Gmail draft|limited/i);
