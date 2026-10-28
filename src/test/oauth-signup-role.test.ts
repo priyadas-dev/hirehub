@@ -159,7 +159,7 @@ describe("shouldApplyOAuthSignupRole", () => {
     ).toBe(false);
   });
 
-  it("ignores email-only accounts and expired claim windows", () => {
+  it("ignores email-only accounts and expired claim windows without unused upgrade", () => {
     expect(
       shouldApplyOAuthSignupRole({
         requestedRole: "recruiter",
@@ -178,6 +178,19 @@ describe("shouldApplyOAuthSignupRole", () => {
         nowMs: now,
       }),
     ).toBe(false);
+  });
+
+  it("allows an unused older Google seeker to claim recruiter when they choose it on signup", () => {
+    expect(
+      shouldApplyOAuthSignupRole({
+        requestedRole: "recruiter",
+        currentRole: "job_seeker",
+        userCreatedAt: new Date(now - OAUTH_SIGNUP_ROLE_CLAIM_WINDOW_MS - 1).toISOString(),
+        hasGoogleIdentity: true,
+        unusedSeekerAccount: true,
+        nowMs: now,
+      }),
+    ).toBe(true);
   });
 
   it("does not apply when the UI selected job_seeker (trigger default stands)", () => {

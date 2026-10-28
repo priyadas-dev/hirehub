@@ -152,6 +152,8 @@ function AuthPage() {
           if (cancelled) return;
           if (!claimed.ok) {
             toast.error("Could not finish recruiter signup", { description: claimed.message });
+          } else if (!claimed.applied && claimed.reason) {
+            toast.message("Signed in with your existing role", { description: claimed.reason });
           }
           const s = await refresh();
           if (cancelled) return;
@@ -357,18 +359,13 @@ function AuthPage() {
             </div>
           )}
 
-          <Button type="button" variant="outline" size="lg" className="mt-6 w-full bg-card" onClick={onGoogle} disabled={!!busy}>
-            {busy === "google" ? <Loader2 className="animate-spin" /> : <GoogleIcon />}
-            Continue with Google
-          </Button>
-          <div className="my-6 flex items-center gap-3 text-xs text-muted-foreground">
-            <span className="h-px flex-1 bg-border" /> or with email <span className="h-px flex-1 bg-border" />
-          </div>
-
-          <form onSubmit={onSubmit} className="space-y-5" noValidate>
-            {mode === "signup" && (
-            <fieldset>
+          {/* Role first on signup so Google OAuth follows the user's choice. */}
+          {mode === "signup" && (
+            <fieldset className="mt-6">
               <legend className="mb-2 text-sm font-medium">I am a…</legend>
+              <p className="mb-2 text-xs text-muted-foreground">
+                Choose Job Seeker or Recruiter before Continue with Google or email signup.
+              </p>
               <div className="grid grid-cols-2 gap-2">
                 {ROLES.map((r) => {
                   const Icon = r.icon;
@@ -383,8 +380,18 @@ function AuthPage() {
                 })}
               </div>
             </fieldset>
-            )}
+          )}
 
+          <Button type="button" variant="outline" size="lg" className="mt-6 w-full bg-card" onClick={onGoogle} disabled={!!busy || oauthClaiming}>
+            {busy === "google" || oauthClaiming ? <Loader2 className="animate-spin" /> : <GoogleIcon />}
+            Continue with Google
+            {mode === "signup" ? ` as ${role === "recruiter" ? "Recruiter" : "Job Seeker"}` : ""}
+          </Button>
+          <div className="my-6 flex items-center gap-3 text-xs text-muted-foreground">
+            <span className="h-px flex-1 bg-border" /> or with email <span className="h-px flex-1 bg-border" />
+          </div>
+
+          <form onSubmit={onSubmit} className="space-y-5" noValidate>
             {mode === "signup" && <Field id="name" label="Full name" autoComplete="name" error={errors["name"]} />}
             <Field id="email" label="Email" type="email" autoComplete="email" error={errors["email"]} />
             <Field id="password" label="Password" type="password" autoComplete={mode === "signin" ? "current-password" : "new-password"} error={errors["password"]} />
