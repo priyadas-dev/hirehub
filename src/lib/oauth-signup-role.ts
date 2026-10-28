@@ -13,6 +13,32 @@ export const OAUTH_SIGNUP_ROLE_STORAGE_KEY = "hirehub.oauthSignupRole" as const;
 /** New Google accounts may claim a public signup role only within this window. */
 export const OAUTH_SIGNUP_ROLE_CLAIM_WINDOW_MS = 15 * 60 * 1000;
 
+/** How long we wait for Supabase to start the Google redirect before resetting the button. */
+export const GOOGLE_OAUTH_START_TIMEOUT_MS = 15_000;
+
+/** How long we wait for the post-OAuth recruiter role claim before falling back. */
+export const OAUTH_SIGNUP_ROLE_CLAIM_TIMEOUT_MS = 12_000;
+
+/**
+ * Reject if `promise` does not settle within `ms`.
+ * Does not cancel the underlying work; callers must still ignore late results when unmounted.
+ */
+export function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(message)), ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (err: unknown) => {
+        clearTimeout(timer);
+        reject(err);
+      },
+    );
+  });
+}
+
 export function parseSignupRole(value: unknown): SignupRole | undefined {
   if (value === "job_seeker" || value === "recruiter") return value;
   return undefined;

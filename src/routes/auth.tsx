@@ -29,9 +29,12 @@ import { claimOAuthSignupRole } from "@/lib/claim-oauth-signup-role";
 import {
   buildGoogleOAuthRedirectTo,
   clearOAuthSignupRole,
+  GOOGLE_OAUTH_START_TIMEOUT_MS,
+  OAUTH_SIGNUP_ROLE_CLAIM_TIMEOUT_MS,
+  peekOAuthSignupRole,
   resolvePendingOAuthSignupRole,
   stashOAuthSignupRole,
-  takeOAuthSignupRole,
+  withTimeout,
 } from "@/lib/oauth-signup-role";
 import { sendAccountMail } from "@/lib/send-account-mail";
 import { supabase } from "@/integrations/supabase/client";
@@ -87,10 +90,22 @@ function AuthPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [oauthClaiming, setOauthClaiming] = useState(false);
   const postAuthHandled = useRef(false);
+  const googleBusySafetyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mailAccount = useServerFn(sendAccountMail);
   const claimGoogleSignupRole = useServerFn(claimOAuthSignupRole);
   const { user, loading, profileError, refresh, signOut } = useAuth();
   const navigate = useNavigate();
+
+  function clearGoogleBusySafetyTimer() {
+    if (googleBusySafetyTimer.current) {
+      clearTimeout(googleBusySafetyTimer.current);
+      googleBusySafetyTimer.current = null;
+    }
+  }
+
+  useEffect(() => {
+    return () => clearGoogleBusySafetyTimer();
+  }, []);
 
   useEffect(() => {
     if (search.intent) setRole(intentToSignupRole(search.intent));
@@ -132,56 +147,77 @@ function AuthPage() {
   // role if needed, then go to the verified profiles.role workspace.
   // Wait until auth finished loading so we never redirect with a stale/wrong role.
   useEffect(() => {
-    if (loading || oauthClaiming || postAuthHandled.current) return;
+    if (loading || postAuthHandled.current) return;
     if (!user) return;
 
     let cancelled = false;
+    let finished = false;
     postAuthHandled.current = true;
+    // Peek (don't take) so React Strict Mode remounts still see the stashed role.
+    const pending = resolvePendingOAuthSignupRole({
+      stashedRole: peekOAuthSignupRole(),
+      intent: search.intent,
+      mode: search.mode === "signup" || mode === "signup" ? "signup" : "signin",
+    });
 
     void (async () => {
-      const pending = resolvePendingOAuthSignupRole({
-        stashedRole: takeOAuthSignupRole(),
-        intent: search.intent,
-        mode: search.mode === "signup" || mode === "signup" ? "signup" : "signin",
-      });
-
-      if (pending === "recruiter") {
-        setOauthClaiming(true);
-        try {
-          const claimed = await claimGoogleSignupRole({ data: { requestedRole: "recruiter" } });
-          if (cancelled) return;
-          if (!claimed.ok) {
-            toast.error("Could not finish recruiter signup", { description: claimed.message });
-          } else if (!claimed.applied && claimed.reason) {
-            toast.message("Signed in with your existing role", { description: claimed.reason });
-          }
-          const s = await refresh();
-          if (cancelled) return;
-          if (s) {
-            if (claimed.ok && claimed.applied) {
-              toast.success("Welcome to HireHub", {
-                description: workspaceWelcomeDescription(s.role),
-              });
+      try {
+        if (pending === "recruiter") {
+          setOauthClaiming(true);
+          try {
+            const claimed = await withTimeout(
+              claimGoogleSignupRole({ data: { requestedRole: "recruiter" } }),
+              OAUTH_SIGNUP_ROLE_CLAIM_TIMEOUT_MS,
+              "Applying your recruiter role timed out. Opening your workspace with the saved profile role.",
+            );
+            if (cancelled) return;
+            if (!claimed.ok) {
+              toast.error("Could not finish recruiter signup", { description: claimed.message });
+            } else if (!claimed.applied && claimed.reason) {
+              toast.message("Signed in with your existing role", { description: claimed.reason });
             }
-            goHome(s.role);
-            return;
+            const s = await withTimeout(
+              refresh(),
+              OAUTH_SIGNUP_ROLE_CLAIM_TIMEOUT_MS,
+              "Loading your profile timed out after Google sign-in.",
+            );
+            if (cancelled) return;
+            if (s) {
+              if (claimed.ok && claimed.applied) {
+                toast.success("Welcome to HireHub", {
+                  description: workspaceWelcomeDescription(s.role),
+                });
+              }
+              finished = true;
+              goHome(s.role);
+              return;
+            }
+          } catch (err) {
+            if (!cancelled) {
+              toast.error(friendly(err));
+              // Fall through to goHome with the current session role.
+            }
+          } finally {
+            clearOAuthSignupRole();
+            setOauthClaiming(false);
           }
-        } catch (err) {
-          if (!cancelled) {
-            postAuthHandled.current = false;
-            toast.error(friendly(err));
-          }
-        } finally {
-          clearOAuthSignupRole();
-          if (!cancelled) setOauthClaiming(false);
         }
-      }
 
-      if (!cancelled) goHome(user.role);
+        if (!cancelled) {
+          finished = true;
+          goHome(user.role);
+        }
+      } finally {
+        // Strict Mode cleanup cancels the first run — allow the remount to retry.
+        if (cancelled && !finished) postAuthHandled.current = false;
+      }
     })();
 
     return () => {
       cancelled = true;
+      setOauthClaiming(false);
+      setBusy(null);
+      clearGoogleBusySafetyTimer();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, loading]);
@@ -256,7 +292,16 @@ function AuthPage() {
   }
 
   async function onGoogle() {
+    clearGoogleBusySafetyTimer();
     setBusy("google");
+    // If the browser never leaves this page (blocked redirect / hung request),
+    // always reset the spinner so the user can retry.
+    // Silent backup if the page never unloads after a successful OAuth URL assign.
+    googleBusySafetyTimer.current = setTimeout(() => {
+      setBusy((current) => (current === "google" ? null : current));
+      clearOAuthSignupRole();
+    }, GOOGLE_OAUTH_START_TIMEOUT_MS + 2_000);
+
     try {
       // Supabase Google OAuth cannot attach `options.data` (unlike email signup),
       // so the selected role is carried via redirectTo ?intent= + sessionStorage
@@ -275,13 +320,25 @@ function AuthPage() {
         ...(search.redirect ? { redirect: search.redirect } : {}),
         ...(search.intent ? { intent: search.intent } : {}),
       });
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: { redirectTo },
-      });
+      const { data, error } = await withTimeout(
+        supabase.auth.signInWithOAuth({
+          provider: "google",
+          options: { redirectTo },
+        }),
+        GOOGLE_OAUTH_START_TIMEOUT_MS,
+        "Google sign-in timed out before redirect. Check your connection and try again.",
+      );
       if (error) throw error;
-      // Browser navigates to Google; session is restored on return to /auth.
+      // Prefer an explicit assign when Supabase returns the provider URL so we
+      // control navigation; otherwise the client redirects itself.
+      if (data?.url) {
+        window.location.assign(data.url);
+        return;
+      }
+      // No URL and no error — do not leave the spinner spinning forever.
+      throw new Error("Google sign-in did not return a redirect URL. Try again.");
     } catch (err) {
+      clearGoogleBusySafetyTimer();
       clearOAuthSignupRole();
       toast.error("Google sign-in didn't work", { description: friendly(err) });
       setBusy(null);
