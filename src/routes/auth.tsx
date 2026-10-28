@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { ArrowLeft, Briefcase, Loader2, MailCheck, Search } from "lucide-react";
@@ -25,6 +25,14 @@ import {
   type SignupRole,
 } from "@/lib/auth-intent";
 import { signUpWithAccountEmail } from "@/lib/account-password";
+import { claimOAuthSignupRole } from "@/lib/claim-oauth-signup-role";
+import {
+  buildGoogleOAuthRedirectTo,
+  clearOAuthSignupRole,
+  resolvePendingOAuthSignupRole,
+  stashOAuthSignupRole,
+  takeOAuthSignupRole,
+} from "@/lib/oauth-signup-role";
 import { sendAccountMail } from "@/lib/send-account-mail";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
@@ -77,7 +85,10 @@ function AuthPage() {
   const [errors, setErrors] = useState<Partial<Record<string, string>>>({});
   const [busy, setBusy] = useState<"form" | "google" | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [oauthClaiming, setOauthClaiming] = useState(false);
+  const postAuthHandled = useRef(false);
   const mailAccount = useServerFn(sendAccountMail);
+  const claimGoogleSignupRole = useServerFn(claimOAuthSignupRole);
   const { user, loading, profileError, refresh, signOut } = useAuth();
   const navigate = useNavigate();
 
@@ -117,11 +128,59 @@ function AuthPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search.error, search.error_description]);
 
-  // Already signed in (including after returning from Google) → go to role area.
+  // Already signed in (including after returning from Google) → claim OAuth signup
+  // role if needed, then go to the verified profiles.role workspace.
   // Wait until auth finished loading so we never redirect with a stale/wrong role.
   useEffect(() => {
-    if (loading) return;
-    if (user) goHome(user.role);
+    if (loading || oauthClaiming || postAuthHandled.current) return;
+    if (!user) return;
+
+    let cancelled = false;
+    postAuthHandled.current = true;
+
+    void (async () => {
+      const pending = resolvePendingOAuthSignupRole({
+        stashedRole: takeOAuthSignupRole(),
+        intent: search.intent,
+        mode: search.mode === "signup" || mode === "signup" ? "signup" : "signin",
+      });
+
+      if (pending === "recruiter") {
+        setOauthClaiming(true);
+        try {
+          const claimed = await claimGoogleSignupRole({ data: { requestedRole: "recruiter" } });
+          if (cancelled) return;
+          if (!claimed.ok) {
+            toast.error("Could not finish recruiter signup", { description: claimed.message });
+          }
+          const s = await refresh();
+          if (cancelled) return;
+          if (s) {
+            if (claimed.ok && claimed.applied) {
+              toast.success("Welcome to HireHub", {
+                description: workspaceWelcomeDescription(s.role),
+              });
+            }
+            goHome(s.role);
+            return;
+          }
+        } catch (err) {
+          if (!cancelled) {
+            postAuthHandled.current = false;
+            toast.error(friendly(err));
+          }
+        } finally {
+          clearOAuthSignupRole();
+          if (!cancelled) setOauthClaiming(false);
+        }
+      }
+
+      if (!cancelled) goHome(user.role);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, loading]);
 
@@ -197,18 +256,31 @@ function AuthPage() {
   async function onGoogle() {
     setBusy("google");
     try {
-      // Supabase Google OAuth (works on localhost + Vercel). Requires Google provider
-      // enabled and redirect URLs allowlisted in Supabase Auth settings — see
+      // Supabase Google OAuth cannot attach `options.data` (unlike email signup),
+      // so the selected role is carried via redirectTo ?intent= + sessionStorage
+      // and applied once after callback for new Google users only.
+      // Requires Google provider enabled and redirect URLs allowlisted — see
       // GOOGLE_OAUTH_REDIRECT_URLS in src/lib/assignment-verification.ts.
+      if (mode === "signup") {
+        stashOAuthSignupRole(role);
+      } else {
+        clearOAuthSignupRole();
+      }
+      const redirectTo = buildGoogleOAuthRedirectTo({
+        origin: window.location.origin,
+        mode,
+        role,
+        ...(search.redirect ? { redirect: search.redirect } : {}),
+        ...(search.intent ? { intent: search.intent } : {}),
+      });
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
-        options: {
-          redirectTo: `${window.location.origin}/auth`,
-        },
+        options: { redirectTo },
       });
       if (error) throw error;
       // Browser navigates to Google; session is restored on return to /auth.
     } catch (err) {
+      clearOAuthSignupRole();
       toast.error("Google sign-in didn't work", { description: friendly(err) });
       setBusy(null);
     }
