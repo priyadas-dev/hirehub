@@ -8,22 +8,35 @@ const requestSchema = z.object({
 });
 
 export type ClaimOAuthSignupRoleResult =
-  | { ok: true; applied: boolean; role: "job_seeker" | "recruiter" | "admin" }
+  | { ok: true; applied: boolean; role: "job_seeker" | "recruiter" | "admin"; reason?: string }
   | { ok: false; message: string };
 
 /**
- * After Google OAuth, apply the UI-selected public signup role for brand-new
- * Google users only. Existing profiles keep their database role unchanged.
+ * After Google OAuth, apply the UI-selected public signup role.
+ * Existing recruiters/admins are never changed. Never accepts `admin`.
  *
  * Uses the service-role client so `protect_profile_role` cannot block a
- * one-time job_seeker → recruiter write (same privilege boundary as other
- * trusted server ops). Never accepts `admin`.
+ * one-time job_seeker → recruiter write for eligible Google signups.
  */
 export const claimOAuthSignupRole = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((data: unknown) => requestSchema.parse(data))
   .handler(async ({ data, context }): Promise<ClaimOAuthSignupRoleResult> => {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    let supabaseAdmin: Awaited<
+      typeof import("@/integrations/supabase/client.server")
+    >["supabaseAdmin"];
+    try {
+      ({ supabaseAdmin } = await import("@/integrations/supabase/client.server"));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Server auth admin is not configured.";
+      return {
+        ok: false,
+        message:
+          msg.includes("SUPABASE_SERVICE_ROLE_KEY") || msg.includes("SUPABASE_URL")
+            ? "Server is missing SUPABASE_SERVICE_ROLE_KEY. Add it to your local .env (see .env.example), restart npm run dev, then try Google signup again as Recruiter."
+            : msg,
+      };
+    }
 
     const { data: userData, error: userError } = await supabaseAdmin.auth.admin.getUserById(
       context.userId,
@@ -50,20 +63,39 @@ export const claimOAuthSignupRole = createServerFn({ method: "POST" })
       return { ok: false, message: "Your profile role is invalid." };
     }
 
+    const [{ count: companyCount }, { count: applicationCount }] = await Promise.all([
+      supabaseAdmin
+        .from("companies")
+        .select("id", { count: "exact", head: true })
+        .eq("recruiter_id", context.userId),
+      supabaseAdmin
+        .from("applications")
+        .select("id", { count: "exact", head: true })
+        .eq("seeker_id", context.userId),
+    ]);
+
+    const unusedSeekerAccount = (companyCount ?? 0) === 0 && (applicationCount ?? 0) === 0;
+
     if (
       !shouldApplyOAuthSignupRole({
         requestedRole: data.requestedRole,
         currentRole,
         userCreatedAt: user.created_at,
         hasGoogleIdentity,
+        unusedSeekerAccount,
       })
     ) {
-      return { ok: true, applied: false, role: currentRole };
+      return {
+        ok: true,
+        applied: false,
+        role: currentRole,
+        reason:
+          currentRole === "job_seeker" && data.requestedRole === "recruiter"
+            ? "This Google account already has seeker activity, so HireHub kept job_seeker. Use a different Google account to sign up as a recruiter."
+            : undefined,
+      };
     }
 
-    // Prefer UPDATE. If protect_profile_role still blocks non-admin changes when
-    // auth.uid() is null (pre-0007), fall back to delete+insert (INSERT is not
-    // guarded by that trigger).
     const { error: updateError } = await supabaseAdmin
       .from("profiles")
       .update({ role: "recruiter" })
@@ -71,12 +103,20 @@ export const claimOAuthSignupRole = createServerFn({ method: "POST" })
       .eq("role", "job_seeker");
 
     if (!updateError) {
-      return { ok: true, applied: true, role: "recruiter" };
-    }
-
-    const blockedByRoleGuard = /only admins can change roles/i.test(updateError.message);
-    if (!blockedByRoleGuard) {
-      return { ok: false, message: updateError.message };
+      const { data: verified } = await supabaseAdmin
+        .from("profiles")
+        .select("role")
+        .eq("id", context.userId)
+        .maybeSingle();
+      if (verified?.role === "recruiter") {
+        return { ok: true, applied: true, role: "recruiter" };
+      }
+      // Fall through — trigger may have blocked without a clear error in some setups.
+    } else {
+      const blockedByRoleGuard = /only admins can change roles/i.test(updateError.message);
+      if (!blockedByRoleGuard) {
+        return { ok: false, message: updateError.message };
+      }
     }
 
     const { error: deleteError } = await supabaseAdmin
@@ -98,7 +138,6 @@ export const claimOAuthSignupRole = createServerFn({ method: "POST" })
       created_at: profile.created_at,
     });
     if (insertError) {
-      // Best-effort restore as job_seeker so the account is not left without a profile.
       await supabaseAdmin.from("profiles").insert({
         id: profile.id,
         email: profile.email,

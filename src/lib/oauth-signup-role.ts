@@ -106,17 +106,24 @@ export function isWithinOAuthSignupClaimWindow(
 
 /**
  * Decide whether a Google OAuth callback may set `profiles.role` from the UI choice.
- * Existing users (outside the claim window, non-default role, or non-Google) are never changed.
+ * Never touches recruiter/admin. Never invents admin.
+ *
+ * Allows job_seeker → recruiter when:
+ * - brand-new Google account (claim window), or
+ * - unused Google seeker (no applications / companies) who explicitly chose Recruiter
+ *   on the signup screen (covers accounts stuck as seeker from earlier Google signups).
  */
 export function shouldApplyOAuthSignupRole(input: {
   requestedRole: SignupRole;
   currentRole: string | null | undefined;
   userCreatedAt: string | null | undefined;
   hasGoogleIdentity: boolean;
+  unusedSeekerAccount?: boolean;
   nowMs?: number;
 }): boolean {
   if (!input.hasGoogleIdentity) return false;
   if (input.requestedRole !== "recruiter") return false;
   if (input.currentRole !== "job_seeker") return false;
-  return isWithinOAuthSignupClaimWindow(input.userCreatedAt, input.nowMs);
+  if (isWithinOAuthSignupClaimWindow(input.userCreatedAt, input.nowMs)) return true;
+  return input.unusedSeekerAccount === true;
 }
