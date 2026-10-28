@@ -11,6 +11,7 @@ import {
   shouldApplyOAuthSignupRole,
   stashOAuthSignupRole,
   takeOAuthSignupRole,
+  withTimeout,
 } from "@/lib/oauth-signup-role";
 
 describe("parseSignupRole", () => {
@@ -212,5 +213,16 @@ describe("isWithinOAuthSignupClaimWindow", () => {
     expect(isWithinOAuthSignupClaimWindow(null, now)).toBe(false);
     expect(isWithinOAuthSignupClaimWindow("not-a-date", now)).toBe(false);
     expect(isWithinOAuthSignupClaimWindow(new Date(now + 5_000).toISOString(), now)).toBe(false);
+  });
+});
+
+describe("withTimeout", () => {
+  it("resolves when the promise finishes in time", async () => {
+    await expect(withTimeout(Promise.resolve("ok"), 100, "timed out")).resolves.toBe("ok");
+  });
+
+  it("rejects with the timeout message when the promise hangs", async () => {
+    const hang = new Promise<string>(() => {});
+    await expect(withTimeout(hang, 20, "timed out")).rejects.toThrow("timed out");
   });
 });
