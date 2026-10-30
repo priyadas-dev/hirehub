@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { supabase } from "@/integrations/supabase/client";
 import { authRedirectCandidates, isAuthRedirectError } from "@/lib/account-mail";
+import { buildEmailSignupMetadata } from "@/lib/oauth-signup-role-claim";
+import type { SignupRole } from "@/lib/auth-intent";
 
 /** Shared strength rules for new passwords (never log or persist these values). */
 export function passwordStrengthIssue(password: string): string | null {
@@ -12,7 +14,8 @@ export function passwordStrengthIssue(password: string): string | null {
   return null;
 }
 
-const newPasswordField = z
+/** Shared Zod field for new passwords (signup, change, set, reset). */
+export const newPasswordField = z
   .string()
   .min(8, "At least 8 characters")
   .max(128)
@@ -22,6 +25,19 @@ const newPasswordField = z
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: issue });
     }
   });
+
+/** Email + password signup form (Auth Phase 3 — same strength rules as Settings). */
+export const authSignupFormSchema = z.object({
+  name: z.string().trim().min(2, "Enter your name").max(80),
+  email: z.string().trim().email("Enter a valid email").max(255),
+  password: newPasswordField,
+});
+
+/** Sign-in only checks presence — strength was enforced at signup/reset. */
+export const authSignInFormSchema = z.object({
+  email: z.string().trim().email("Enter a valid email").max(255),
+  password: z.string().min(1, "Enter your password").max(128),
+});
 
 export const changePasswordSchema = z
   .object({
@@ -115,10 +131,16 @@ export async function signUpWithAccountEmail(input: {
   email: string;
   password: string;
   fullName: string;
-  requestedRole: string;
+  requestedRole: SignupRole | string;
   origin: string;
 }) {
-  const metadata = { full_name: input.fullName, requested_role: input.requestedRole };
+  const requestedRole: SignupRole =
+    input.requestedRole === "recruiter" ? "recruiter" : "job_seeker";
+  // `requested_role` is read by DB trigger handle_new_user (migration 0001).
+  const metadata = buildEmailSignupMetadata({
+    fullName: input.fullName,
+    requestedRole,
+  });
   let last: Awaited<ReturnType<typeof supabase.auth.signUp>> | null = null;
   for (const emailRedirectTo of authRedirectCandidates(input.origin, "/auth")) {
     const result = await supabase.auth.signUp({

@@ -149,35 +149,40 @@ describe("retrieveCorpusMatches", () => {
     const values = vectorOf(GEMINI_EMBEDDING_DIMENSIONS);
     const fetchMock = vi.fn(async () => Response.json({ embedding: { values } }, { status: 200 }));
     const client = {
-      rpc: async () => ({
-        data: [
-          {
-            id: "1",
-            corpus_key: "synthetic:v1:00010",
-            title: "Frontend Developer",
-            content: CORPUS_DISCLAIMER,
-            location: "Dhaka",
-            category: "engineering",
-            skills_text: "React",
-            is_synthetic: true,
-            source: "hirehub-synthetic-v1",
-            similarity: 0.82,
-          },
-          {
-            id: "2",
-            corpus_key: null,
-            title: "Should be filtered",
-            content: "nope",
-            location: null,
-            category: null,
-            skills_text: null,
-            is_synthetic: false,
-            source: null,
-            similarity: 0.99,
-          },
-        ],
-        error: null,
-      }),
+      rpc: async (fn: string) => {
+        if (fn === "search_job_corpus_fts") {
+          return { data: [], error: null };
+        }
+        return {
+          data: [
+            {
+              id: "1",
+              corpus_key: "synthetic:v1:00010",
+              title: "Frontend Developer",
+              content: CORPUS_DISCLAIMER,
+              location: "Dhaka",
+              category: "engineering",
+              skills_text: "React",
+              is_synthetic: true,
+              source: "hirehub-synthetic-v1",
+              similarity: 0.82,
+            },
+            {
+              id: "2",
+              corpus_key: null,
+              title: "Should be filtered",
+              content: "nope",
+              location: null,
+              category: null,
+              skills_text: null,
+              is_synthetic: false,
+              source: null,
+              similarity: 0.99,
+            },
+          ],
+          error: null,
+        };
+      },
     };
 
     const result = await retrieveCorpusMatches(
@@ -190,6 +195,7 @@ describe("retrieveCorpusMatches", () => {
     if (result.ok) {
       expect(result.matches).toHaveLength(1);
       expect(result.provider).toBe("gemini");
+      expect(result.hybrid).toBe(true);
       expect(isSafeCorpusMatch(result.matches[0]!)).toBe(true);
       expect(JSON.stringify(result)).not.toContain("secret-gemini-key");
     }
@@ -198,7 +204,10 @@ describe("retrieveCorpusMatches", () => {
   it("embeds queries with the local provider inject so corpus + query share one space", async () => {
     const values = vectorOf(GEMINI_EMBEDDING_DIMENSIONS, 0.33);
     const client = {
-      rpc: async (_fn: string, args: Record<string, unknown>) => {
+      rpc: async (fn: string, args: Record<string, unknown>) => {
+        if (fn === "search_job_corpus_fts") {
+          return { data: [], error: null };
+        }
         expect(args.query_embedding).toEqual(values);
         return {
           data: [
@@ -236,6 +245,50 @@ describe("retrieveCorpusMatches", () => {
     if (result.ok) {
       expect(result.provider).toBe("local");
       expect(result.matches).toHaveLength(1);
+      expect(result.hybrid).toBe(true);
+    }
+  });
+
+  it("falls back to dense-only when FTS RPC is missing", async () => {
+    const values = vectorOf(GEMINI_EMBEDDING_DIMENSIONS, 0.2);
+    const client = {
+      rpc: async (fn: string) => {
+        if (fn === "search_job_corpus_fts") {
+          return { data: null, error: { message: "function search_job_corpus_fts does not exist" } };
+        }
+        return {
+          data: [
+            {
+              id: "1",
+              corpus_key: "synthetic:v1:00010",
+              title: "Frontend Developer",
+              content: CORPUS_DISCLAIMER,
+              location: "Dhaka",
+              category: "engineering",
+              skills_text: "React",
+              is_synthetic: true,
+              source: "hirehub-synthetic-v1",
+              similarity: 0.88,
+            },
+          ],
+          error: null,
+        };
+      },
+    };
+
+    const result = await retrieveCorpusMatches(
+      client,
+      { query: "React developer", matchCount: 3 },
+      {
+        provider: "local",
+        embedTextsImpl: async () => [values],
+      },
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.hybrid).toBe(false);
+      expect(result.matches).toHaveLength(1);
     }
   });
 });
@@ -243,10 +296,29 @@ describe("retrieveCorpusMatches", () => {
 describe("retrieveCorpusMatches gte provider", () => {
   it("calls match_job_corpus_gte with a 384-dim query embedding", async () => {
     const values = vectorOf(384, 0.44);
-    let rpcName = "";
+    const rpcNames: string[] = [];
     const client = {
       rpc: async (fn: string, args: Record<string, unknown>) => {
-        rpcName = fn;
+        rpcNames.push(fn);
+        if (fn === "search_job_corpus_fts") {
+          return {
+            data: [
+              {
+                id: "1",
+                corpus_key: "synthetic:v1:00010",
+                title: "Frontend Developer",
+                content: CORPUS_DISCLAIMER,
+                location: "Dhaka",
+                category: "engineering",
+                skills_text: "React",
+                is_synthetic: true,
+                source: "hirehub-synthetic-v1",
+                fts_rank: 0.7,
+              },
+            ],
+            error: null,
+          };
+        }
         expect(args.query_embedding).toEqual(values);
         expect((args.query_embedding as number[]).length).toBe(384);
         return {
@@ -278,10 +350,12 @@ describe("retrieveCorpusMatches gte provider", () => {
       },
     );
 
-    expect(rpcName).toBe("match_job_corpus_gte");
+    expect(rpcNames).toContain("match_job_corpus_gte");
+    expect(rpcNames).toContain("search_job_corpus_fts");
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.provider).toBe("gte");
+      expect(result.hybrid).toBe(true);
       expect(result.matches).toHaveLength(1);
     }
   });

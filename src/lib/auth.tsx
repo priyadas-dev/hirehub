@@ -42,6 +42,30 @@ export function mapDbRole(r: string | null | undefined): Role | null {
   return null;
 }
 
+/**
+ * Role layout gate (Phase 5). When the signed-in role does not match the area,
+ * return that user's home path so the route can redirect — never the requested area.
+ */
+export function wrongRoleHome(actual: Role, required: Role): string | null {
+  if (actual === required) return null;
+  return ROLE_HOME[actual];
+}
+
+/**
+ * Safe path to send back to `/auth?redirect=` after login.
+ * Rejects open redirects and non-path values; falls back to `/dashboard`.
+ */
+export function safeAuthReturnPath(
+  raw: string | undefined,
+  origin?: string,
+): string {
+  const normalized = normalizeAuthRedirect(raw, origin);
+  if (!normalized || normalized.startsWith("//") || normalized.startsWith("/auth")) {
+    return "/dashboard";
+  }
+  return normalized;
+}
+
 /** Post-login toast copy from the verified profile role only. */
 export function workspaceWelcomeDescription(role: Role): string {
   if (role === "admin") return "Opening your admin workspace.";

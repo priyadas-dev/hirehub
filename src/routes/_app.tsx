@@ -1,7 +1,7 @@
 import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
 import { AppSidebar } from "@/components/shell/AppSidebar";
 import { AppHeader } from "@/components/shell/AppHeader";
-import { ProfileSessionError, readSession, useAuth } from "@/lib/auth";
+import { ProfileSessionError, readSession, safeAuthReturnPath, useAuth } from "@/lib/auth";
 import { APP_CONTENT_SHELL } from "@/lib/shell-layout";
 
 /** Path only. `location.search` is a parsed object, not a query string. */
@@ -13,7 +13,7 @@ function returnPath(location: { pathname: string; searchStr: string; hash: strin
 export const Route = createFileRoute("/_app")({
   ssr: false,
   beforeLoad: async ({ location }) => {
-    const returnTo = returnPath(location);
+    const returnTo = safeAuthReturnPath(returnPath(location));
     let session;
     try {
       session = await readSession();

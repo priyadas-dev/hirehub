@@ -7,9 +7,9 @@ import {
 } from "@/lib/ai/corpus-eval";
 
 describe("clean vs noisy eval helpers", () => {
-  it("defines at least three clean/noisy pairs in the bank", () => {
+  it("defines at least twelve clean/noisy pairs in the bank", () => {
     const pairs = listCleanNoisyPairs();
-    expect(pairs.length).toBeGreaterThanOrEqual(3);
+    expect(pairs.length).toBeGreaterThanOrEqual(12);
     for (const p of pairs) {
       const clean = EVAL_QUERY_BANK.find((q) => q.id === p.cleanQueryId);
       const noisy = EVAL_QUERY_BANK.find((q) => q.id === p.noisyQueryId);

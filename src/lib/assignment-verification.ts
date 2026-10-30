@@ -101,6 +101,12 @@ export const PASSWORD_RESET_REDIRECT_URLS = [
   "https://YOUR_VERCEL_PROJECT.vercel.app/reset-password",
 ] as const;
 
+/** Re-export Phase 6 allowlist ops checklists (see `auth-recovery.ts`). */
+export {
+  GOOGLE_OAUTH_ALLOWLIST_CHECKLIST,
+  PASSWORD_RESET_ALLOWLIST_CHECKLIST,
+} from "@/lib/auth-recovery";
+
 /**
  * Bootstrap the first admin (Dashboard → SQL Editor) after
  * PROPOSED_0007_bootstrap_admin_role_guard.sql is applied — or with the trigger
@@ -125,11 +131,39 @@ WHERE email = 'YOUR_ADMIN_EMAIL@example.com';
  * add Google OAuth redirect URLs from GOOGLE_OAUTH_REDIRECT_URLS and password
  * reset URLs from PASSWORD_RESET_REDIRECT_URLS.
  */
+/**
+ * Auth Phase 7 — automated unit files to run before demo / merge.
+ * `npm test --` with these paths (or `AUTH_UNIT_REGRESSION_GLOB`).
+ */
+export const AUTH_UNIT_REGRESSION_FILES = [
+  "src/test/auth-role-routing.test.ts",
+  "src/test/auth-intent.test.ts",
+  "src/test/auth-errors.test.ts",
+  "src/test/auth-recovery.test.ts",
+  "src/test/account-password.test.ts",
+  "src/test/password-recovery.test.ts",
+  "src/test/oauth-signup-role.test.ts",
+  "src/test/oauth-signup-role-claim.test.ts",
+  "src/test/delete-own-account.test.ts",
+  "src/test/assignment-verification.test.ts",
+  "src/test/app-routing.test.tsx",
+] as const;
+
+/** Vitest path filter covering AUTH_UNIT_REGRESSION_FILES. */
+export const AUTH_UNIT_REGRESSION_GLOB =
+  "src/test/{auth-role-routing,auth-intent,auth-errors,auth-recovery,account-password,password-recovery,oauth-signup-role,oauth-signup-role-claim,delete-own-account,assignment-verification,app-routing}.test.{ts,tsx}";
+
+/** Selective Playwright auth smoke (skips without E2E_SEEKER_*). */
+export const AUTH_E2E_SMOKE_SPEC = "e2e/auth-smoke.spec.ts" as const;
+
 export const LIVE_DEMO_CHECKLIST = [
-  "Email/password signup + login on Vercel origin",
-  "Google login via supabase.auth.signInWithOAuth on localhost and Vercel",
-  "Forgot password email → /reset-password on the same HireHub origin",
+  "Email/password signup + login on Vercel origin (seeker and recruiter)",
+  "Google signup with role on Sign up; Google sign-in keeps saved role (incl. admin)",
+  "Forgot password email → /reset-password on the same HireHub origin (allowlist checked)",
   "Seeker / recruiter / admin sidebars and cross-role redirect",
+  "Failed Google recruiter claim shows recovery actions (continue seeker / sign out / retry)",
+  "Auth unit regression green (AUTH_UNIT_REGRESSION_FILES / npm test)",
+  "Optional Playwright: npm run test:e2e -- e2e/auth-smoke.spec.ts (needs E2E_SEEKER_* + dev server)",
   "Company stays pending until admin approves",
   "Job pending → admin approve → seeker apply",
   "Status tracker + saved jobs",

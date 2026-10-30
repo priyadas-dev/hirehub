@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   ADMIN_BOOTSTRAP_SQL,
+  AUTH_E2E_SMOKE_SPEC,
+  AUTH_UNIT_REGRESSION_FILES,
+  AUTH_UNIT_REGRESSION_GLOB,
   CONFIGURED_SUPABASE_PROJECT_REF,
   DEADLINE_MIGRATION_VERIFY_SQL,
   GOOGLE_OAUTH_REDIRECT_URLS,
@@ -8,6 +11,7 @@ import {
   NEXT_WEEK_AI_AGENT_ROADMAP,
   NOTIFY_EDGE_FUNCTION_DECISION,
   OPTIONAL_AI_DECISION,
+  PASSWORD_RESET_ALLOWLIST_CHECKLIST,
   PASSWORD_RESET_REDIRECT_URLS,
 } from "@/lib/assignment-verification";
 
@@ -51,11 +55,23 @@ describe("assignment verification constants", () => {
     expect(PASSWORD_RESET_REDIRECT_URLS.some((u) => u.includes("localhost:8083/reset-password"))).toBe(true);
     expect(PASSWORD_RESET_REDIRECT_URLS.some((u) => u.includes("vercel.app/reset-password"))).toBe(true);
     expect(LIVE_DEMO_CHECKLIST.some((c) => c.includes("Forgot password"))).toBe(true);
+    expect(LIVE_DEMO_CHECKLIST.some((c) => c.includes("claim"))).toBe(true);
+    expect(PASSWORD_RESET_ALLOWLIST_CHECKLIST.some((c) => c.includes("/reset-password"))).toBe(true);
   });
 
   it("documents first-admin bootstrap SQL (signup never creates admins)", () => {
     expect(ADMIN_BOOTSTRAP_SQL).toMatch(/SET role = 'admin'/);
     expect(ADMIN_BOOTSTRAP_SQL).toMatch(/profiles_protect_role/);
+  });
+
+  it("lists Phase 7 auth unit + E2E regression entry points", () => {
+    expect(AUTH_UNIT_REGRESSION_FILES).toContain("src/test/auth-role-routing.test.ts");
+    expect(AUTH_UNIT_REGRESSION_FILES).toContain("src/test/oauth-signup-role-claim.test.ts");
+    expect(AUTH_UNIT_REGRESSION_FILES).toContain("src/test/auth-recovery.test.ts");
+    expect(AUTH_UNIT_REGRESSION_GLOB).toMatch(/auth-recovery/);
+    expect(AUTH_E2E_SMOKE_SPEC).toBe("e2e/auth-smoke.spec.ts");
+    expect(LIVE_DEMO_CHECKLIST.some((c) => c.includes("AUTH_UNIT_REGRESSION"))).toBe(true);
+    expect(LIVE_DEMO_CHECKLIST.some((c) => c.includes("auth-smoke"))).toBe(true);
   });
 });
 

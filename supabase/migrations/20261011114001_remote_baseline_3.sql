@@ -1,0 +1,4 @@
+-- HISTORY MARKER ONLY — already applied on remote munqgybiuqpncxbgfvdp.
+-- Do not re-run. Version recorded remotely as 20261011114001 (2026-10-11).
+-- Suspected counterpart: early live baseline / drizzle 0000–0003 era (Dashboard or Lovable).
+-- See docs/supabase-migration-history-reconciliation.md

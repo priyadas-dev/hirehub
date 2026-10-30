@@ -125,7 +125,7 @@ function Landing() {
           <Link
             key={title}
             to="/auth"
-            search={{ intent }}
+            search={{ mode: "signup", intent }}
             aria-label={`${title} — sign in or create an account`}
             className="surface-card interactive-card group block rounded-xl p-6 outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:p-7"
           >

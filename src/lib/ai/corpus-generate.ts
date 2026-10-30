@@ -78,6 +78,26 @@ const SKILLS_BY_CATEGORY: Record<JobCorpusCategory, readonly string[]> = {
 
 const SENIORITY = ["Junior", "Mid-level", "Senior", "Lead", "Staff"] as const;
 
+/** Seniority prefixes prepended by the synthetic title builder. */
+export const SYNTHETIC_SENIORITY_PREFIX_RE =
+  /^(Junior|Mid-level|Senior|Lead|Staff)\s+/i;
+
+/**
+ * Base role title without seniority (e.g. "Senior Software Engineer" → "Software Engineer").
+ * Used only for offline classifier template-group splitting — not a DB column.
+ */
+export function syntheticBaseTitle(title: string): string {
+  return title.replace(SYNTHETIC_SENIORITY_PREFIX_RE, "").trim();
+}
+
+/**
+ * Stable template group for leakage-resistant splits: category + base title.
+ * All seniority/location/index variants of the same role template share one group.
+ */
+export function syntheticTemplateGroupId(category: JobCorpusCategory, title: string): string {
+  return `${category}::${syntheticBaseTitle(title).toLowerCase()}`;
+}
+
 function pick<T>(items: readonly T[], index: number): T {
   return items[index % items.length]!;
 }
@@ -129,11 +149,14 @@ export function generateSyntheticJobCorpus(count = 5000): GeneratedCorpusDoc[] {
   const docs: GeneratedCorpusDoc[] = [];
   for (let i = 0; i < count; i++) {
     const category = pick(JOB_CORPUS_CATEGORIES, i);
-    const baseTitle = pick(TITLE_BY_CATEGORY[category], i);
-    const seniority = pick(SENIORITY, Math.floor(i / JOB_CORPUS_CATEGORIES.length));
+    // Role cycle advances once per full category pass so every base title appears in each class.
+    // Using raw `i` for titles collapses many classes to a single base title (i % titles.length is constant).
+    const roleCycle = Math.floor(i / JOB_CORPUS_CATEGORIES.length);
+    const baseTitle = pick(TITLE_BY_CATEGORY[category], roleCycle);
+    const seniority = pick(SENIORITY, roleCycle);
     const title = `${seniority} ${baseTitle}`;
     const location = pick(LOCATIONS, i * 7);
-    const skills_text = skillsFor(category, i);
+    const skills_text = skillsFor(category, roleCycle);
     const record: CorpusRecordInput = {
       corpus_key: corpusKeyForIndex(i),
       title,

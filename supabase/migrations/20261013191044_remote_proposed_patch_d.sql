@@ -1,0 +1,4 @@
+-- HISTORY MARKER ONLY — already applied on remote munqgybiuqpncxbgfvdp.
+-- Do not re-run. Version recorded remotely as 20261013191044 (2026-10-13).
+-- Suspected counterpart: PROPOSED_0006b or final Oct-13 reviews/revisions apply (drizzle/).
+-- See docs/supabase-migration-history-reconciliation.md
