@@ -26,17 +26,19 @@ Deploy steps: [`deploy-assessment-2.md`](./deploy-assessment-2.md).
 | gte embeddings | count `embedding_gte` not null | 5000 | | |
 | Legacy 768 | count `embedding` not null | 1015 | | |
 | Provider | `EMBEDDING_PROVIDER` | `gte` | | |
-| Classifier | `npm run rag:classify` | ≥70% held-out; last run 100% (synthetic) | | |
-| Confusion matrix | `scripts/rag/out/classifier-eval.json` | exists | | |
+| Classifier (NB) | `npm run rag:classify` | ≥70% held-out; last run **95.28%** acc / macro F1 **0.937** (3814/1186, seed 42, template_group) | | |
+| Classifier compare | `scripts/rag/out/classifier-compare.json` | NB + TF-IDF+LogReg; per-class P/R/F1 + confusion matrices | | |
+| Confusion matrix | `scripts/rag/out/classifier-eval.json` | exists (regenerate locally; `scripts/rag/out/` is gitignored) | | |
 | RAG eval | `npm run rag:eval -- --provider=gte` | cases + clean-vs-noisy table | | |
-| Clean vs noisy | `scripts/rag/out/clean-vs-noisy.md` | exists after eval | | |
+| Clean vs noisy | `scripts/rag/out/clean-vs-noisy.md` | exists after eval; ≥12 pairs | | |
+| Hybrid FTS | apply `PROPOSED_0018_job_corpus_fts.sql` | `search_job_corpus_fts` + `search_tsv` | | |
 | Unit tests | `npm test` | all pass | | |
 | Build | `npm run build` | succeeds | | |
 | E2E (optional) | `npm run test:e2e` | skips without `E2E_SEEKER_*` | | |
 
-**Classifier caveat:** 100% accuracy is on **synthetic** labelled corpus text (seed 42). Treat as meeting the ≥70% bar, not as proof of perfect real-job classification.
+**Classifier caveat:** Scores are on **synthetic** text with template-group splits (zero group overlap in last run). Description-only ablation was **100%** — strong generator/tooling signal, not proof of real-job classification or “leakage-free” perfection. TF-IDF+LogReg baseline was **75.38%** / macro F1 **0.741** (`fixed_preset`; train holdout non-discriminative).
 
-**RAG caveat:** Retrieval succeeds at scale. Top-k relevance is imperfect on some queries. Use the **clean vs noisy** table for with/without-noise evidence — do not reseed embeddings to chase scores.
+**RAG caveat:** App code supports hybrid dense + Postgres FTS (`PROPOSED_0018`) + re-rank when `search_tsv` / `search_job_corpus_fts` exist. **Confirm on your Supabase** before claiming live FTS; local `eval-report.json` may show `hybrid`/`ftsReady` from the DB used at eval time. Eval bank is ≥50 queries — use **clean vs noisy** for noise evidence; do not reseed embeddings to chase scores.
 
 ## AI Job Assistant — browser scenarios
 

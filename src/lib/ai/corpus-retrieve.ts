@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { CorpusMatch } from "@/lib/ai/corpus";
 import { isSafeCorpusMatch } from "@/lib/ai/corpus";
+import { rerankHybridCandidates } from "@/lib/ai/corpus-rerank";
 import {
   embedText,
   resolveEmbeddingProvider,
@@ -24,13 +25,38 @@ const retrieveInputSchema = z.object({
 export type RetrieveCorpusInput = z.input<typeof retrieveInputSchema>;
 
 export type RetrieveCorpusResult =
-  | { ok: true; matches: CorpusMatch[]; model: string; provider: EmbeddingProviderName }
+  | {
+      ok: true;
+      matches: CorpusMatch[];
+      model: string;
+      provider: EmbeddingProviderName;
+      /** True when Postgres FTS returned candidates that were merged via re-rank. */
+      hybrid: boolean;
+    }
   | { ok: false; message: string };
 
+function rowToMatch(row: Record<string, unknown>, scoreKey: "similarity" | "fts_rank"): CorpusMatch | null {
+  const candidate: CorpusMatch = {
+    id: String(row.id),
+    corpus_key: (row.corpus_key as string | null) ?? null,
+    title: (row.title as string | null) ?? null,
+    content: String(row.content ?? ""),
+    location: (row.location as string | null) ?? null,
+    category: (row.category as string | null) ?? null,
+    skills_text: (row.skills_text as string | null) ?? null,
+    is_synthetic: row.is_synthetic === true,
+    source: (row.source as string | null) ?? null,
+    similarity: Number(row[scoreKey]) || 0,
+  };
+  if (!isSafeCorpusMatch(candidate)) return null;
+  return candidate;
+}
+
 /**
- * Semantic retrieval over corpus-only job_corpus rows (job_id IS NULL).
- * - gemini / local → match_job_corpus (768 embedding column)
- * - gte → match_job_corpus_gte (384 embedding_gte column)
+ * Hybrid retrieval over corpus-only job_corpus rows (job_id IS NULL):
+ * dense vector (match_job_corpus / match_job_corpus_gte) + Postgres FTS
+ * (search_job_corpus_fts) + RRF/lexical re-rank.
+ * Falls back to dense-only when FTS is unavailable.
  * Never returns applyable live jobs.
  */
 export async function retrieveCorpusMatches(
@@ -63,10 +89,12 @@ export async function retrieveCorpusMatches(
   });
   if (!embedded.ok) return { ok: false, message: embedded.message };
 
+  const limit = parsed.data.matchCount;
+  const pool = Math.min(50, Math.max(limit * 3, limit));
   const rpcName = matchCorpusRpcName(provider);
   const { data, error } = await client.rpc(rpcName, {
     query_embedding: embedded.embedding,
-    match_count: parsed.data.matchCount,
+    match_count: pool,
     filter_category: parsed.data.category ?? null,
   });
 
@@ -84,24 +112,43 @@ export async function retrieveCorpusMatches(
     };
   }
 
-  const matches: CorpusMatch[] = [];
+  const vectorHits: CorpusMatch[] = [];
   for (const row of data ?? []) {
     if (!row || typeof row !== "object") continue;
-    const candidate: CorpusMatch = {
-      id: String(row.id),
-      corpus_key: row.corpus_key ?? null,
-      title: row.title ?? null,
-      content: String(row.content ?? ""),
-      location: row.location ?? null,
-      category: row.category ?? null,
-      skills_text: row.skills_text ?? null,
-      is_synthetic: row.is_synthetic === true,
-      source: row.source ?? null,
-      similarity: Number(row.similarity) || 0,
-    };
-    if (!isSafeCorpusMatch(candidate)) continue;
-    matches.push(candidate);
+    const match = rowToMatch(row as Record<string, unknown>, "similarity");
+    if (match) vectorHits.push(match);
   }
 
-  return { ok: true, matches, model: embedded.model, provider: embedded.provider };
+  const ftsResult = await client.rpc("search_job_corpus_fts", {
+    query_text: parsed.data.query,
+    match_count: pool,
+    filter_category: parsed.data.category ?? null,
+  });
+
+  const ftsAvailable =
+    !ftsResult.error ||
+    !/function|does not exist|schema cache/i.test(ftsResult.error.message);
+
+  const ftsHits: CorpusMatch[] = [];
+  if (ftsAvailable && !ftsResult.error) {
+    for (const row of ftsResult.data ?? []) {
+      if (!row || typeof row !== "object") continue;
+      const match = rowToMatch(row as Record<string, unknown>, "fts_rank");
+      if (match) ftsHits.push(match);
+    }
+  }
+
+  const hybrid = ftsAvailable && !ftsResult.error;
+  const matches = rerankHybridCandidates(vectorHits, hybrid ? ftsHits : [], {
+    query: parsed.data.query,
+    limit,
+  });
+
+  return {
+    ok: true,
+    matches,
+    model: embedded.model,
+    provider: embedded.provider,
+    hybrid,
+  };
 }

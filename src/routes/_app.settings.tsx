@@ -4,6 +4,7 @@ import { Building2, UserCircle } from "lucide-react";
 import { CardSkeleton, ErrorState, PageHeader } from "@/components/feedback/States";
 import { ContactProfileCard } from "@/components/profile/ContactProfileCard";
 import { ChangePasswordForm } from "@/components/settings/ChangePasswordForm";
+import { DeleteProfileSection } from "@/components/settings/DeleteProfileSection";
 import { Button } from "@/components/ui/button";
 import { ROLE_HOME, useAuth } from "@/lib/auth";
 import { fetchOwnProfile } from "@/lib/profile";
@@ -12,7 +13,7 @@ export const Route = createFileRoute("/_app/settings")({
   head: () => ({
     meta: [
       { title: "Settings — HireHub" },
-      { name: "description", content: "Edit your profile and password." },
+      { name: "description", content: "Edit your profile, password, or delete your account to sign up again." },
     ],
   }),
   component: SettingsPage,
@@ -39,7 +40,7 @@ function SettingsPage() {
       <PageHeader
         eyebrow="Account"
         title="Settings"
-        description="Update the profile fields you are allowed to change, and manage your sign-in password."
+        description="Update the profile fields you are allowed to change, manage your password, or delete your account and sign up again as a Job Seeker or Recruiter."
         actions={
           <Button variant="outline" size="sm" asChild>
             <Link to={ROLE_HOME[user.role]}>Back to dashboard</Link>
@@ -121,6 +122,8 @@ function SettingsPage() {
         </div>
         <ChangePasswordForm email={user.email} />
       </section>
+
+      <DeleteProfileSection currentRole={user.role} />
     </div>
   );
 }

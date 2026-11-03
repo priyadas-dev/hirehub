@@ -43,3 +43,9 @@ dist-ssr
 supabase/.temp/
 test-results/
 scripts/_secret-audit-paths.mjs
+docs/authentication-phase-1-verify-result.json
+.agents/
+.codex/
+.cursor/
+.impeccable/
+/capture-replay-tool/

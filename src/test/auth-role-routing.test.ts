@@ -4,7 +4,9 @@ import {
   normalizeAuthRedirect,
   resolvePostAuthPath,
   ROLE_HOME,
+  safeAuthReturnPath,
   workspaceWelcomeDescription,
+  wrongRoleHome,
 } from "@/lib/auth";
 
 describe("mapDbRole", () => {
@@ -80,5 +82,30 @@ describe("workspaceWelcomeDescription", () => {
     expect(workspaceWelcomeDescription("seeker")).not.toMatch(/Admin access/i);
     expect(workspaceWelcomeDescription("recruiter")).not.toMatch(/Admin access/i);
     expect(workspaceWelcomeDescription("admin")).toBe("Opening your admin workspace.");
+  });
+});
+
+describe("wrongRoleHome", () => {
+  it("allows matching roles and sends others to their own home", () => {
+    expect(wrongRoleHome("seeker", "seeker")).toBeNull();
+    expect(wrongRoleHome("recruiter", "seeker")).toBe("/recruiter");
+    expect(wrongRoleHome("admin", "recruiter")).toBe("/admin");
+    expect(wrongRoleHome("seeker", "admin")).toBe("/seeker");
+  });
+});
+
+describe("safeAuthReturnPath", () => {
+  it("keeps safe app paths and rejects auth loops / open redirects", () => {
+    expect(safeAuthReturnPath("/seeker/jobs")).toBe("/seeker/jobs");
+    expect(safeAuthReturnPath("/auth")).toBe("/dashboard");
+    expect(safeAuthReturnPath("//evil.example")).toBe("/dashboard");
+    expect(safeAuthReturnPath("https://evil.example/x", "http://localhost:8080")).toBe("/dashboard");
+    expect(safeAuthReturnPath(undefined)).toBe("/dashboard");
+  });
+
+  it("rejects javascript: and data: schemes used as return paths", () => {
+    expect(safeAuthReturnPath("javascript:alert(1)")).toBe("/dashboard");
+    expect(safeAuthReturnPath("data:text/html,hi")).toBe("/dashboard");
+    expect(normalizeAuthRedirect("javascript:alert(1)", "http://localhost:8080")).toBeUndefined();
   });
 });

@@ -1,9 +1,10 @@
 import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
-import { ROLE_HOME } from "@/lib/auth";
+import { wrongRoleHome } from "@/lib/auth";
 
 export const Route = createFileRoute("/_app/recruiter")({
   beforeLoad: ({ context }) => {
-    if (context.session.role !== "recruiter") throw redirect({ to: ROLE_HOME[context.session.role], replace: true });
+    const home = wrongRoleHome(context.session.role, "recruiter");
+    if (home) throw redirect({ to: home, replace: true });
   },
   component: () => <Outlet />,
 });

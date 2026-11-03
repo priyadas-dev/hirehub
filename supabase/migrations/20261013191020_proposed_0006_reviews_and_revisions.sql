@@ -1,0 +1,11 @@
+-- PROPOSED — DO NOT APPLY as a single file.
+--
+-- This monolithic draft was split to satisfy PostgreSQL's rule that enum values
+-- added with ALTER TYPE ... ADD VALUE cannot be used until after COMMIT:
+--
+--   1) PROPOSED_0006a_add_rejected_enum_values.sql   — ADD VALUE only, then COMMIT
+--   2) PROPOSED_0006b_reviews_and_revisions.sql      — columns, triggers, RPCs, notifies
+--
+-- Full apply order: PROPOSED_0004 → PROPOSED_0005 → PROPOSED_0006a → PROPOSED_0006b
+--
+-- Keep this file only as a pointer so older docs that cite PROPOSED_0006 remain findable.

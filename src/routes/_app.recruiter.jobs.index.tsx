@@ -318,7 +318,7 @@ function MyJobsPage() {
           description={
             hasFilters
               ? "Try another title or status, or clear filters to see all listings."
-              : "Create your company if you have not yet, then post a role. The company is active immediately; the job stays pending until an admin approves it."
+              : "Create your company if you have not yet, then post a role. The company stays pending until an admin approves it; the job also stays pending until approved."
           }
           action={
             hasFilters ? (

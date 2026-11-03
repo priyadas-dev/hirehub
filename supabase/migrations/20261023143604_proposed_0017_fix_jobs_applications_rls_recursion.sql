@@ -1,0 +1,5 @@
+-- HISTORY MARKER ONLY — already applied on remote munqgybiuqpncxbgfvdp.
+-- Do not re-run. Version recorded remotely as 20261023143604 (2026-10-23 14:36:04).
+-- Corresponds to: drizzle/migrations/PROPOSED_0017_fix_jobs_applications_rls_recursion.sql
+-- Live effect confirmed: public.seeker_has_applied_to_job (SECURITY DEFINER) is callable.
+-- See docs/supabase-migration-history-reconciliation.md

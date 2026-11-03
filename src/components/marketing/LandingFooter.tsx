@@ -28,7 +28,7 @@ export function LandingFooter() {
             <li>
               <Link
                 to="/auth"
-                search={{ intent: "seeker" }}
+                search={{ mode: "signup", intent: "seeker" }}
                 className="text-muted-foreground transition-colors hover:text-foreground"
               >
                 Find jobs
@@ -37,7 +37,7 @@ export function LandingFooter() {
             <li>
               <Link
                 to="/auth"
-                search={{ intent: "recruiter" }}
+                search={{ mode: "signup", intent: "recruiter" }}
                 className="text-muted-foreground transition-colors hover:text-foreground"
               >
                 For recruiters

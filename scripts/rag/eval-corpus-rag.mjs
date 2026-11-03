@@ -111,6 +111,7 @@ async function main() {
       pairId: item.pairId ?? null,
       pairRole: item.pairRole ?? null,
       ok: true,
+      hybrid: result.hybrid,
       resultCount: result.matches.length,
       topSimilarity: top?.similarity ?? null,
       topTitle: top?.title ?? null,
@@ -128,6 +129,7 @@ async function main() {
 
     console.log(
       `[rag:eval] ${item.id} (${item.kind}) → ${result.matches.length} hits` +
+        (result.hybrid ? " [hybrid]" : " [vector+rerank]") +
         (top ? ` top=${top.similarity.toFixed(3)} ${top.title}` : ""),
     );
   }
@@ -135,10 +137,14 @@ async function main() {
   const cleanVsNoisy = summarizeCleanVsNoisy(cases, EVAL_QUERY_BANK);
   const cleanVsNoisyMarkdown = formatCleanVsNoisyMarkdown(cleanVsNoisy);
 
+  const hybridUsed = cases.some((c) => c.hybrid === true);
+
   const report = {
     generatedAt: new Date().toISOString(),
     matchCount,
     provider,
+    hybrid: hybridUsed,
+    ftsReady: probe.ftsReady === true,
     metrics: {
       totalCases: EVAL_QUERY_BANK.length,
       categoryHitRate: categoryCases ? categoryHits / categoryCases : null,
@@ -146,14 +152,21 @@ async function main() {
         ? emptyResults / cases.filter((c) => c.ok).length
         : null,
       failedCalls: cases.filter((c) => !c.ok).length,
+      cleanNoisyPairCount: cleanVsNoisy.pairCount,
+      noisyCategoryHitRate: cleanVsNoisy.noisyCategoryHitRate,
+      cleanCategoryHitRate: cleanVsNoisy.cleanCategoryHitRate,
     },
     cleanVsNoisy,
     cases,
     notes: [
       "Corpus matches are synthetic training documents — not live HireHub vacancies.",
       "Live recommendations must use recommendApprovedLiveJobs (approved jobs only).",
+      "Retrieval is hybrid: dense vector + Postgres FTS (PROPOSED_0018) + RRF/lexical re-rank.",
       "cleanVsNoisy compares paired clean matching queries vs typo twins (with vs without noise).",
       "This run does not reseed or overwrite embeddings.",
+      probe.ftsReady
+        ? "FTS RPC search_job_corpus_fts is available."
+        : "FTS not applied yet — lexical re-rank still runs; apply PROPOSED_0018_job_corpus_fts.sql for full hybrid.",
     ],
   };
 

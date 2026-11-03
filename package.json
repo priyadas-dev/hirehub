@@ -18,7 +18,8 @@
     "rag:embed": "node --import tsx scripts/rag/embed-job-corpus.mjs",
     "rag:reset-embeddings": "node --import tsx scripts/rag/reset-corpus-embeddings.mjs",
     "rag:eval": "node --import tsx scripts/rag/eval-corpus-rag.mjs",
-    "rag:classify": "node --import tsx scripts/rag/train-job-classifier.mjs"
+    "rag:classify": "node --import tsx scripts/rag/train-job-classifier.mjs",
+    "rag:classify:original": "node --import tsx scripts/rag/eval-original-descriptions.mjs"
   },
   "overrides": {
     "rolldown": "1.2.1"

@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Logo } from "@/components/brand/Logo";
 import { sendPasswordRecoveryEmail } from "@/lib/account-password";
+import { formatAuthErrorMessage } from "@/lib/auth-errors";
 import { sendAccountMail } from "@/lib/send-account-mail";
 
 export const Route = createFileRoute("/forgot-password")({
@@ -54,7 +55,7 @@ function ForgotPasswordPage() {
         description: "If an account exists for that address, a reset link is on the way.",
       });
     } catch (err) {
-      toast.error(friendly(err));
+      toast.error(formatPasswordRecoveryError(err));
     } finally {
       setBusy(false);
     }
@@ -125,7 +126,7 @@ function ForgotPasswordPage() {
   );
 }
 
-function friendly(err: unknown): string {
+function formatPasswordRecoveryError(err: unknown): string {
   const msg =
     err instanceof Error
       ? err.message
@@ -133,10 +134,11 @@ function friendly(err: unknown): string {
         ? String((err as { message: unknown }).message)
         : "";
   const m = msg.toLowerCase();
-  if (m.includes("rate limit") || m.includes("too many") || m.includes("429")) {
-    return "Too many reset emails. Wait 30–60 minutes, or sign in with Google / set a password in the Supabase Dashboard.";
+  if (m.includes("redirect")) {
+    return "Password reset redirect isn't allowlisted yet. Ask an admin to add this site's /reset-password URL in Supabase Auth settings.";
   }
-  if (m.includes("fetch") || m.includes("network")) return "Can't reach the server. Check your connection and try again.";
-  if (m.includes("redirect")) return "Password reset redirect isn't allowlisted yet. Ask an admin to add this site's /reset-password URL in Supabase Auth settings.";
-  return msg || "Something went wrong. Please try again.";
+  if (m.includes("rate limit") || m.includes("too many") || m.includes("429")) {
+    return "Too many reset emails. Wait 30–60 minutes, or sign in with Google.";
+  }
+  return formatAuthErrorMessage(err);
 }
