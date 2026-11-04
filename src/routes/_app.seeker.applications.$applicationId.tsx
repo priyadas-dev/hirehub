@@ -2,6 +2,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { ResumeOpenLink } from "@/components/applications/ResumeOpenLink";
+import { SeekerInterviewSection } from "@/components/interviews/SeekerInterviewSection";
 import { CardSkeleton, ErrorState, PageHeader } from "@/components/feedback/States";
 import { StatusBadge } from "@/components/status/StatusBadge";
 import { StatusTracker } from "@/components/status/StatusTracker";
@@ -40,7 +41,9 @@ function ApplicationDetailPage() {
       if (withStorage.error && isMissingSchemaError(withStorage.error.message)) {
         const fallback = await supabase
           .from("applications")
-          .select("id,status,created_at,cover_note,resume_url,jobs(id,title,location,companies(name))")
+          .select(
+            "id,status,created_at,cover_note,resume_url,jobs(id,title,location,companies(name))",
+          )
           .eq("id", applicationId)
           .eq("seeker_id", id!)
           .maybeSingle();
@@ -91,7 +94,12 @@ function ApplicationDetailPage() {
   if (app.isLoading) return <CardSkeleton rows={5} />;
   if (app.isError) return <ErrorState onRetry={() => void app.refetch()} />;
   if (!app.data) {
-    return <ErrorState title="Application not found" description="This application is missing or you do not own it." />;
+    return (
+      <ErrorState
+        title="Application not found"
+        description="This application is missing or you do not own it."
+      />
+    );
   }
 
   const a = app.data;
@@ -113,6 +121,8 @@ function ApplicationDetailPage() {
         }
       />
 
+      <SeekerInterviewSection applicationId={applicationId} />
+
       <section className="surface-card space-y-6 p-5 sm:p-8">
         <div>
           <h2 className="text-lg font-semibold tracking-tight">Status tracker</h2>
@@ -127,7 +137,9 @@ function ApplicationDetailPage() {
         <h2 className="text-lg font-semibold tracking-tight">Your submission</h2>
         <div className="space-y-2 text-sm">
           <p className="font-medium">Cover note</p>
-          <p className="whitespace-pre-wrap text-muted-foreground">{a.cover_note || "No cover note."}</p>
+          <p className="whitespace-pre-wrap text-muted-foreground">
+            {a.cover_note || "No cover note."}
+          </p>
         </div>
         {(a.resume_storage_path || a.resume_url) && (
           <div className="space-y-2 text-sm">
