@@ -4,6 +4,7 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
 import { Bookmark, Briefcase, Building2, Calendar, MapPin } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -29,7 +30,10 @@ import {
   PORTFOLIO_PERSISTENCE_NOTE,
   validatePortfolioUrl,
 } from "@/lib/resume-upload";
+import { applyToJob } from "@/lib/apply-to-job";
+import { createSupabaseApplyToJobClient } from "@/lib/apply-to-job-supabase";
 import { useAuth } from "@/lib/auth";
+import { syncCrmContactFromApplication } from "@/lib/crm/sync-from-application.server";
 import { fmtDate, supabase } from "@/components/dashboard/parts";
 
 const applySchema = z.object({
@@ -62,6 +66,7 @@ function JobDetailPage() {
   const id = user?.id;
   const qc = useQueryClient();
   const navigate = useNavigate();
+  const syncCrmFromApplication = useServerFn(syncCrmContactFromApplication);
   const uploadsReady = useFileUploadsReady();
   const canPersist = !!uploadsReady.data;
   const [resumeValue, setResumeValue] = useState<ResumePickerValue | null>(null);
@@ -219,104 +224,51 @@ function JobDetailPage() {
     mutationFn: async (values: ApplyValues) => {
       if (!id) throw new Error("Not signed in");
 
-      const { data: liveJob, error: liveErr } = await supabase
-        .from("jobs")
-        .select("id,status,application_deadline,description")
-        .eq("id", jobId)
-        .eq("status", "approved")
-        .maybeSingle();
-      if (liveErr) throw liveErr;
-      if (!liveJob) throw new Error("This job is no longer available.");
-
-      const deadline = resolveJobDeadline(liveJob.application_deadline, liveJob.description);
-      if (isApplicationDeadlinePassed(deadline)) {
-        throw new Error("The application deadline for this job has passed.");
-      }
-
-      const { data: existing, error: existingErr } = await supabase
-        .from("applications")
-        .select("id")
-        .eq("seeker_id", id)
-        .eq("job_id", jobId)
-        .maybeSingle();
-      if (existingErr) throw existingErr;
-      if (existing) {
-        const err = new Error("Already applied");
-        (err as Error & { applicationId?: string }).applicationId = existing.id;
-        throw err;
-      }
-
       const portfolio = validatePortfolioUrl(values.portfolio_url ?? "");
       if (!portfolio.ok) throw new Error(portfolio.error);
 
-      const legacyResume = values.resume_url?.trim() || "";
       const storagePath =
         resumeValue?.storagePath || latestResume.data?.resume_storage_path || null;
       const fileName =
         resumeValue?.fileName || latestResume.data?.resume_file_name || null;
 
-      if (canPersist) {
-        if (!storagePath && !legacyResume) {
-          throw new Error("Upload a resume PDF or provide a resume URL.");
-        }
-        if (storagePath) {
-          if (!storagePathIsSafe(storagePath) || storageFirstFolder(storagePath) !== id) {
+      const result = await applyToJob(createSupabaseApplyToJobClient(supabase), {
+        jobId,
+        seekerId: id,
+        canPersistStorage: canPersist,
+        resumeStoragePath: storagePath,
+        resumeFileName: fileName,
+        resumeUrl: values.resume_url?.trim() || null,
+        portfolioUrl: portfolio.url,
+        coverNote: values.cover_note?.trim() || null,
+        isDeadlinePassed: (job) => {
+          const deadline = resolveJobDeadline(job.application_deadline, job.description);
+          return isApplicationDeadlinePassed(deadline);
+        },
+        assertResumeStoragePath: (path, seekerId) => {
+          if (!storagePathIsSafe(path) || storageFirstFolder(path) !== seekerId) {
             throw new Error("Resume Storage path must be {seeker_id}/{file}.");
           }
-        }
-        if (legacyResume && !/^https?:\/\/\S+/i.test(legacyResume)) {
-          throw new Error("Resume must be a full URL starting with http:// or https://");
-        }
+        },
+      });
 
-        const { data, error } = await supabase
-          .from("applications")
-          .insert({
-            job_id: jobId,
-            seeker_id: id,
-            resume_storage_path: storagePath,
-            resume_file_name: storagePath ? fileName : null,
-            resume_url: storagePath ? null : legacyResume,
-            portfolio_url: portfolio.url,
-            cover_note: values.cover_note?.trim() || null,
-          })
-          .select("id")
-          .single();
-        if (error) {
-          if (error.code === "23505" || /duplicate|unique/i.test(error.message)) {
-            throw new Error("Already applied");
-          }
-          throw error;
-        }
-        return data;
+      if (!result.ok) throw new Error(result.message);
+
+      if (result.status === "already_applied") {
+        const err = new Error("Already applied");
+        (err as Error & { applicationId?: string }).applicationId = result.applicationId;
+        throw err;
       }
 
-      if (!legacyResume) {
-        throw new Error("Resume URL is required until PDF upload storage is available");
-      }
-      if (!/^https?:\/\/\S+/i.test(legacyResume)) {
-        throw new Error("Resume must be a full URL starting with http:// or https://");
-      }
-
-      const { data, error } = await supabase
-        .from("applications")
-        .insert({
-          job_id: jobId,
-          seeker_id: id,
-          resume_url: legacyResume,
-          cover_note: values.cover_note?.trim() || null,
-        })
-        .select("id")
-        .single();
-      if (error) {
-        if (error.code === "23505" || /duplicate|unique/i.test(error.message)) {
-          throw new Error("Already applied");
-        }
-        throw error;
-      }
-      return data;
+      return { id: result.applicationId };
     },
     onSuccess: async (data) => {
       toast.success("Application submitted");
+      try {
+        await syncCrmFromApplication({ data: { applicationId: data.id } });
+      } catch {
+        /* soft-fail CRM sync */
+      }
       await qc.invalidateQueries({ queryKey: ["seeker-app-for-job", id, jobId] });
       await qc.invalidateQueries({ queryKey: ["seeker-applications"] });
       await qc.invalidateQueries({ queryKey: ["seeker-recent"] });

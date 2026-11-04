@@ -14,6 +14,8 @@ const base = {
   salary_range: "80k",
   job_type: "full_time" as const,
   application_deadline: "2026-12-01",
+  jobCategoryId: "00000000-0000-4000-8000-000000000001",
+  categoryName: "IT",
 };
 
 describe("job revisions helpers", () => {

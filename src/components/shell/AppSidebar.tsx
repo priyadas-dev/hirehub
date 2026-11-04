@@ -32,6 +32,11 @@ export function isNavItemActive(to: AppNavPath, pathname: string): boolean {
     return path.startsWith("/seeker/applications/");
   }
 
+  if (to === "/recruiter/crm") {
+    if (path === "/recruiter/crm") return true;
+    return path.startsWith("/recruiter/crm/");
+  }
+
   if (to === "/admin/jobs") {
     return path === "/admin/jobs";
   }

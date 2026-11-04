@@ -106,9 +106,51 @@ export type Database = {
           },
         ];
       };
+      job_categories: {
+        Row: {
+          id: string;
+          scope: string;
+          owner_recruiter_id: string | null;
+          name: string;
+          name_normalized: string;
+          active: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          scope: string;
+          owner_recruiter_id?: string | null;
+          name: string;
+          name_normalized?: string;
+          active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          scope?: string;
+          owner_recruiter_id?: string | null;
+          name?: string;
+          name_normalized?: string;
+          active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "job_categories_owner_recruiter_id_fkey";
+            columns: ["owner_recruiter_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       jobs: {
         Row: {
           application_deadline: string | null;
+          job_category_id: string;
           closed_reason: string | null;
           company_id: string;
           created_at: string;
@@ -124,6 +166,7 @@ export type Database = {
         };
         Insert: {
           application_deadline?: string | null;
+          job_category_id?: string;
           closed_reason?: string | null;
           company_id: string;
           created_at?: string;
@@ -139,6 +182,7 @@ export type Database = {
         };
         Update: {
           application_deadline?: string | null;
+          job_category_id?: string;
           closed_reason?: string | null;
           company_id?: string;
           created_at?: string;
@@ -165,6 +209,13 @@ export type Database = {
             columns: ["recruiter_id"];
             isOneToOne: false;
             referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "jobs_job_category_id_fkey";
+            columns: ["job_category_id"];
+            isOneToOne: false;
+            referencedRelation: "job_categories";
             referencedColumns: ["id"];
           },
         ];
@@ -219,6 +270,8 @@ export type Database = {
           baseline_job_type: Database["public"]["Enums"]["job_type"];
           baseline_salary_range: string | null;
           baseline_application_deadline: string | null;
+          job_category_id: string;
+          baseline_job_category_id: string;
           status: Database["public"]["Enums"]["review_status"];
           rejection_reason: string | null;
           reviewed_by: string | null;
@@ -241,6 +294,8 @@ export type Database = {
           baseline_job_type: Database["public"]["Enums"]["job_type"];
           baseline_salary_range?: string | null;
           baseline_application_deadline?: string | null;
+          job_category_id?: string;
+          baseline_job_category_id?: string;
           status?: Database["public"]["Enums"]["review_status"];
           rejection_reason?: string | null;
           reviewed_by?: string | null;
@@ -263,6 +318,8 @@ export type Database = {
           baseline_job_type?: Database["public"]["Enums"]["job_type"];
           baseline_salary_range?: string | null;
           baseline_application_deadline?: string | null;
+          job_category_id?: string;
+          baseline_job_category_id?: string;
           status?: Database["public"]["Enums"]["review_status"];
           rejection_reason?: string | null;
           reviewed_by?: string | null;
@@ -348,8 +405,13 @@ export type Database = {
           _job_type: Database["public"]["Enums"]["job_type"];
           _salary_range: string | null;
           _application_deadline: string | null;
+          _job_category_id?: string;
         };
         Returns: Database["public"]["Tables"]["job_revisions"]["Row"];
+      };
+      job_category_assignable: {
+        Args: { _category_id: string; _user_id: string };
+        Returns: boolean;
       };
       admin_review_job_revision: {
         Args: { _revision_id: string; _decision: string; _reason?: string | null };

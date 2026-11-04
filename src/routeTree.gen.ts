@@ -23,6 +23,7 @@ import { Route as AppSettingsRouteImport } from './routes/_app.settings'
 import { Route as AppAdminIndexRouteImport } from './routes/_app.admin.index'
 import { Route as AppAdminApplicationsRouteImport } from './routes/_app.admin.applications'
 import { Route as AppAdminCompaniesRouteImport } from './routes/_app.admin.companies'
+import { Route as AppAdminJobCategoriesRouteImport } from './routes/_app.admin.job-categories'
 import { Route as AppAdminJobRevisionsRouteImport } from './routes/_app.admin.job-revisions'
 import { Route as AppAdminJobsRouteImport } from './routes/_app.admin.jobs'
 import { Route as AppAdminProfileRouteImport } from './routes/_app.admin.profile'
@@ -31,6 +32,8 @@ import { Route as AppAdminUsersRouteImport } from './routes/_app.admin.users'
 import { Route as AppRecruiterIndexRouteImport } from './routes/_app.recruiter.index'
 import { Route as AppRecruiterApplicantsRouteImport } from './routes/_app.recruiter.applicants'
 import { Route as AppRecruiterCompanyRouteImport } from './routes/_app.recruiter.company'
+import { Route as AppRecruiterCrmRouteImport } from './routes/_app.recruiter.crm'
+import { Route as AppRecruiterJobCategoriesRouteImport } from './routes/_app.recruiter.job-categories'
 import { Route as AppRecruiterJobsRouteImport } from './routes/_app.recruiter.jobs'
 import { Route as AppSeekerIndexRouteImport } from './routes/_app.seeker.index'
 import { Route as AppSeekerApplicationsRouteImport } from './routes/_app.seeker.applications'
@@ -38,6 +41,10 @@ import { Route as AppSeekerAssistantRouteImport } from './routes/_app.seeker.ass
 import { Route as AppSeekerJobsRouteImport } from './routes/_app.seeker.jobs'
 import { Route as AppSeekerProfileRouteImport } from './routes/_app.seeker.profile'
 import { Route as AppSeekerSavedRouteImport } from './routes/_app.seeker.saved'
+import { Route as AppRecruiterCrmIndexRouteImport } from './routes/_app.recruiter.crm.index'
+import { Route as AppRecruiterCrmCampaignsRouteImport } from './routes/_app.recruiter.crm.campaigns'
+import { Route as AppRecruiterCrmContactsRouteImport } from './routes/_app.recruiter.crm.contacts'
+import { Route as AppRecruiterCrmSegmentsRouteImport } from './routes/_app.recruiter.crm.segments'
 import { Route as AppRecruiterJobsIndexRouteImport } from './routes/_app.recruiter.jobs.index'
 import { Route as AppRecruiterJobsJobIdRouteImport } from './routes/_app.recruiter.jobs.$jobId'
 import { Route as AppRecruiterJobsNewRouteImport } from './routes/_app.recruiter.jobs.new'
@@ -45,6 +52,10 @@ import { Route as AppSeekerApplicationsIndexRouteImport } from './routes/_app.se
 import { Route as AppSeekerApplicationsApplicationIdRouteImport } from './routes/_app.seeker.applications.$applicationId'
 import { Route as AppSeekerJobsIndexRouteImport } from './routes/_app.seeker.jobs.index'
 import { Route as AppSeekerJobsJobIdRouteImport } from './routes/_app.seeker.jobs.$jobId'
+import { Route as AppRecruiterCrmCampaignsIndexRouteImport } from './routes/_app.recruiter.crm.campaigns.index'
+import { Route as AppRecruiterCrmCampaignsCampaignIdRouteImport } from './routes/_app.recruiter.crm.campaigns.$campaignId'
+import { Route as AppRecruiterCrmSegmentsIndexRouteImport } from './routes/_app.recruiter.crm.segments.index'
+import { Route as AppRecruiterCrmSegmentsSegmentIdRouteImport } from './routes/_app.recruiter.crm.segments.$segmentId'
 import { Route as AppRecruiterJobsJobIdIndexRouteImport } from './routes/_app.recruiter.jobs.$jobId.index'
 import { Route as AppRecruiterJobsJobIdEditRouteImport } from './routes/_app.recruiter.jobs.$jobId.edit'
 
@@ -117,6 +128,11 @@ const AppAdminCompaniesRoute = AppAdminCompaniesRouteImport.update({
   path: '/companies',
   getParentRoute: () => AppAdminRoute,
 } as any)
+const AppAdminJobCategoriesRoute = AppAdminJobCategoriesRouteImport.update({
+  id: '/job-categories',
+  path: '/job-categories',
+  getParentRoute: () => AppAdminRoute,
+} as any)
 const AppAdminJobRevisionsRoute = AppAdminJobRevisionsRouteImport.update({
   id: '/job-revisions',
   path: '/job-revisions',
@@ -157,6 +173,17 @@ const AppRecruiterCompanyRoute = AppRecruiterCompanyRouteImport.update({
   path: '/company',
   getParentRoute: () => AppRecruiterRoute,
 } as any)
+const AppRecruiterCrmRoute = AppRecruiterCrmRouteImport.update({
+  id: '/crm',
+  path: '/crm',
+  getParentRoute: () => AppRecruiterRoute,
+} as any)
+const AppRecruiterJobCategoriesRoute =
+  AppRecruiterJobCategoriesRouteImport.update({
+    id: '/job-categories',
+    path: '/job-categories',
+    getParentRoute: () => AppRecruiterRoute,
+  } as any)
 const AppRecruiterJobsRoute = AppRecruiterJobsRouteImport.update({
   id: '/jobs',
   path: '/jobs',
@@ -191,6 +218,27 @@ const AppSeekerSavedRoute = AppSeekerSavedRouteImport.update({
   id: '/saved',
   path: '/saved',
   getParentRoute: () => AppSeekerRoute,
+} as any)
+const AppRecruiterCrmIndexRoute = AppRecruiterCrmIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AppRecruiterCrmRoute,
+} as any)
+const AppRecruiterCrmCampaignsRoute =
+  AppRecruiterCrmCampaignsRouteImport.update({
+    id: '/campaigns',
+    path: '/campaigns',
+    getParentRoute: () => AppRecruiterCrmRoute,
+  } as any)
+const AppRecruiterCrmContactsRoute = AppRecruiterCrmContactsRouteImport.update({
+  id: '/contacts',
+  path: '/contacts',
+  getParentRoute: () => AppRecruiterCrmRoute,
+} as any)
+const AppRecruiterCrmSegmentsRoute = AppRecruiterCrmSegmentsRouteImport.update({
+  id: '/segments',
+  path: '/segments',
+  getParentRoute: () => AppRecruiterCrmRoute,
 } as any)
 const AppRecruiterJobsIndexRoute = AppRecruiterJobsIndexRouteImport.update({
   id: '/',
@@ -229,6 +277,30 @@ const AppSeekerJobsJobIdRoute = AppSeekerJobsJobIdRouteImport.update({
   path: '/$jobId',
   getParentRoute: () => AppSeekerJobsRoute,
 } as any)
+const AppRecruiterCrmCampaignsIndexRoute =
+  AppRecruiterCrmCampaignsIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => AppRecruiterCrmCampaignsRoute,
+  } as any)
+const AppRecruiterCrmCampaignsCampaignIdRoute =
+  AppRecruiterCrmCampaignsCampaignIdRouteImport.update({
+    id: '/$campaignId',
+    path: '/$campaignId',
+    getParentRoute: () => AppRecruiterCrmCampaignsRoute,
+  } as any)
+const AppRecruiterCrmSegmentsIndexRoute =
+  AppRecruiterCrmSegmentsIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => AppRecruiterCrmSegmentsRoute,
+  } as any)
+const AppRecruiterCrmSegmentsSegmentIdRoute =
+  AppRecruiterCrmSegmentsSegmentIdRouteImport.update({
+    id: '/$segmentId',
+    path: '/$segmentId',
+    getParentRoute: () => AppRecruiterCrmSegmentsRoute,
+  } as any)
 const AppRecruiterJobsJobIdIndexRoute =
   AppRecruiterJobsJobIdIndexRouteImport.update({
     id: '/',
@@ -255,6 +327,7 @@ export interface FileRoutesByFullPath {
   '/settings': typeof AppSettingsRoute
   '/admin/applications': typeof AppAdminApplicationsRoute
   '/admin/companies': typeof AppAdminCompaniesRoute
+  '/admin/job-categories': typeof AppAdminJobCategoriesRoute
   '/admin/job-revisions': typeof AppAdminJobRevisionsRoute
   '/admin/jobs': typeof AppAdminJobsRoute
   '/admin/profile': typeof AppAdminProfileRoute
@@ -262,6 +335,8 @@ export interface FileRoutesByFullPath {
   '/admin/users': typeof AppAdminUsersRoute
   '/recruiter/applicants': typeof AppRecruiterApplicantsRoute
   '/recruiter/company': typeof AppRecruiterCompanyRoute
+  '/recruiter/crm': typeof AppRecruiterCrmRouteWithChildren
+  '/recruiter/job-categories': typeof AppRecruiterJobCategoriesRoute
   '/recruiter/jobs': typeof AppRecruiterJobsRouteWithChildren
   '/seeker/applications': typeof AppSeekerApplicationsRouteWithChildren
   '/seeker/assistant': typeof AppSeekerAssistantRoute
@@ -271,14 +346,22 @@ export interface FileRoutesByFullPath {
   '/admin/': typeof AppAdminIndexRoute
   '/recruiter/': typeof AppRecruiterIndexRoute
   '/seeker/': typeof AppSeekerIndexRoute
+  '/recruiter/crm/campaigns': typeof AppRecruiterCrmCampaignsRouteWithChildren
+  '/recruiter/crm/contacts': typeof AppRecruiterCrmContactsRoute
+  '/recruiter/crm/segments': typeof AppRecruiterCrmSegmentsRouteWithChildren
   '/recruiter/jobs/$jobId': typeof AppRecruiterJobsJobIdRouteWithChildren
   '/recruiter/jobs/new': typeof AppRecruiterJobsNewRoute
   '/seeker/applications/$applicationId': typeof AppSeekerApplicationsApplicationIdRoute
   '/seeker/jobs/$jobId': typeof AppSeekerJobsJobIdRoute
+  '/recruiter/crm/': typeof AppRecruiterCrmIndexRoute
   '/recruiter/jobs/': typeof AppRecruiterJobsIndexRoute
   '/seeker/applications/': typeof AppSeekerApplicationsIndexRoute
   '/seeker/jobs/': typeof AppSeekerJobsIndexRoute
+  '/recruiter/crm/campaigns/$campaignId': typeof AppRecruiterCrmCampaignsCampaignIdRoute
+  '/recruiter/crm/segments/$segmentId': typeof AppRecruiterCrmSegmentsSegmentIdRoute
   '/recruiter/jobs/$jobId/edit': typeof AppRecruiterJobsJobIdEditRoute
+  '/recruiter/crm/campaigns/': typeof AppRecruiterCrmCampaignsIndexRoute
+  '/recruiter/crm/segments/': typeof AppRecruiterCrmSegmentsIndexRoute
   '/recruiter/jobs/$jobId/': typeof AppRecruiterJobsJobIdIndexRoute
 }
 export interface FileRoutesByTo {
@@ -291,6 +374,7 @@ export interface FileRoutesByTo {
   '/settings': typeof AppSettingsRoute
   '/admin/applications': typeof AppAdminApplicationsRoute
   '/admin/companies': typeof AppAdminCompaniesRoute
+  '/admin/job-categories': typeof AppAdminJobCategoriesRoute
   '/admin/job-revisions': typeof AppAdminJobRevisionsRoute
   '/admin/jobs': typeof AppAdminJobsRoute
   '/admin/profile': typeof AppAdminProfileRoute
@@ -298,19 +382,26 @@ export interface FileRoutesByTo {
   '/admin/users': typeof AppAdminUsersRoute
   '/recruiter/applicants': typeof AppRecruiterApplicantsRoute
   '/recruiter/company': typeof AppRecruiterCompanyRoute
+  '/recruiter/job-categories': typeof AppRecruiterJobCategoriesRoute
   '/seeker/assistant': typeof AppSeekerAssistantRoute
   '/seeker/profile': typeof AppSeekerProfileRoute
   '/seeker/saved': typeof AppSeekerSavedRoute
   '/admin': typeof AppAdminIndexRoute
   '/recruiter': typeof AppRecruiterIndexRoute
   '/seeker': typeof AppSeekerIndexRoute
+  '/recruiter/crm/contacts': typeof AppRecruiterCrmContactsRoute
   '/recruiter/jobs/new': typeof AppRecruiterJobsNewRoute
   '/seeker/applications/$applicationId': typeof AppSeekerApplicationsApplicationIdRoute
   '/seeker/jobs/$jobId': typeof AppSeekerJobsJobIdRoute
+  '/recruiter/crm': typeof AppRecruiterCrmIndexRoute
   '/recruiter/jobs': typeof AppRecruiterJobsIndexRoute
   '/seeker/applications': typeof AppSeekerApplicationsIndexRoute
   '/seeker/jobs': typeof AppSeekerJobsIndexRoute
+  '/recruiter/crm/campaigns/$campaignId': typeof AppRecruiterCrmCampaignsCampaignIdRoute
+  '/recruiter/crm/segments/$segmentId': typeof AppRecruiterCrmSegmentsSegmentIdRoute
   '/recruiter/jobs/$jobId/edit': typeof AppRecruiterJobsJobIdEditRoute
+  '/recruiter/crm/campaigns': typeof AppRecruiterCrmCampaignsIndexRoute
+  '/recruiter/crm/segments': typeof AppRecruiterCrmSegmentsIndexRoute
   '/recruiter/jobs/$jobId': typeof AppRecruiterJobsJobIdIndexRoute
 }
 export interface FileRoutesById {
@@ -328,6 +419,7 @@ export interface FileRoutesById {
   '/_app/settings': typeof AppSettingsRoute
   '/_app/admin/applications': typeof AppAdminApplicationsRoute
   '/_app/admin/companies': typeof AppAdminCompaniesRoute
+  '/_app/admin/job-categories': typeof AppAdminJobCategoriesRoute
   '/_app/admin/job-revisions': typeof AppAdminJobRevisionsRoute
   '/_app/admin/jobs': typeof AppAdminJobsRoute
   '/_app/admin/profile': typeof AppAdminProfileRoute
@@ -335,6 +427,8 @@ export interface FileRoutesById {
   '/_app/admin/users': typeof AppAdminUsersRoute
   '/_app/recruiter/applicants': typeof AppRecruiterApplicantsRoute
   '/_app/recruiter/company': typeof AppRecruiterCompanyRoute
+  '/_app/recruiter/crm': typeof AppRecruiterCrmRouteWithChildren
+  '/_app/recruiter/job-categories': typeof AppRecruiterJobCategoriesRoute
   '/_app/recruiter/jobs': typeof AppRecruiterJobsRouteWithChildren
   '/_app/seeker/applications': typeof AppSeekerApplicationsRouteWithChildren
   '/_app/seeker/assistant': typeof AppSeekerAssistantRoute
@@ -344,14 +438,22 @@ export interface FileRoutesById {
   '/_app/admin/': typeof AppAdminIndexRoute
   '/_app/recruiter/': typeof AppRecruiterIndexRoute
   '/_app/seeker/': typeof AppSeekerIndexRoute
+  '/_app/recruiter/crm/campaigns': typeof AppRecruiterCrmCampaignsRouteWithChildren
+  '/_app/recruiter/crm/contacts': typeof AppRecruiterCrmContactsRoute
+  '/_app/recruiter/crm/segments': typeof AppRecruiterCrmSegmentsRouteWithChildren
   '/_app/recruiter/jobs/$jobId': typeof AppRecruiterJobsJobIdRouteWithChildren
   '/_app/recruiter/jobs/new': typeof AppRecruiterJobsNewRoute
   '/_app/seeker/applications/$applicationId': typeof AppSeekerApplicationsApplicationIdRoute
   '/_app/seeker/jobs/$jobId': typeof AppSeekerJobsJobIdRoute
+  '/_app/recruiter/crm/': typeof AppRecruiterCrmIndexRoute
   '/_app/recruiter/jobs/': typeof AppRecruiterJobsIndexRoute
   '/_app/seeker/applications/': typeof AppSeekerApplicationsIndexRoute
   '/_app/seeker/jobs/': typeof AppSeekerJobsIndexRoute
+  '/_app/recruiter/crm/campaigns/$campaignId': typeof AppRecruiterCrmCampaignsCampaignIdRoute
+  '/_app/recruiter/crm/segments/$segmentId': typeof AppRecruiterCrmSegmentsSegmentIdRoute
   '/_app/recruiter/jobs/$jobId/edit': typeof AppRecruiterJobsJobIdEditRoute
+  '/_app/recruiter/crm/campaigns/': typeof AppRecruiterCrmCampaignsIndexRoute
+  '/_app/recruiter/crm/segments/': typeof AppRecruiterCrmSegmentsIndexRoute
   '/_app/recruiter/jobs/$jobId/': typeof AppRecruiterJobsJobIdIndexRoute
 }
 export interface FileRouteTypes {
@@ -369,6 +471,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/admin/applications'
     | '/admin/companies'
+    | '/admin/job-categories'
     | '/admin/job-revisions'
     | '/admin/jobs'
     | '/admin/profile'
@@ -376,6 +479,8 @@ export interface FileRouteTypes {
     | '/admin/users'
     | '/recruiter/applicants'
     | '/recruiter/company'
+    | '/recruiter/crm'
+    | '/recruiter/job-categories'
     | '/recruiter/jobs'
     | '/seeker/applications'
     | '/seeker/assistant'
@@ -385,14 +490,22 @@ export interface FileRouteTypes {
     | '/admin/'
     | '/recruiter/'
     | '/seeker/'
+    | '/recruiter/crm/campaigns'
+    | '/recruiter/crm/contacts'
+    | '/recruiter/crm/segments'
     | '/recruiter/jobs/$jobId'
     | '/recruiter/jobs/new'
     | '/seeker/applications/$applicationId'
     | '/seeker/jobs/$jobId'
+    | '/recruiter/crm/'
     | '/recruiter/jobs/'
     | '/seeker/applications/'
     | '/seeker/jobs/'
+    | '/recruiter/crm/campaigns/$campaignId'
+    | '/recruiter/crm/segments/$segmentId'
     | '/recruiter/jobs/$jobId/edit'
+    | '/recruiter/crm/campaigns/'
+    | '/recruiter/crm/segments/'
     | '/recruiter/jobs/$jobId/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -405,6 +518,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/admin/applications'
     | '/admin/companies'
+    | '/admin/job-categories'
     | '/admin/job-revisions'
     | '/admin/jobs'
     | '/admin/profile'
@@ -412,19 +526,26 @@ export interface FileRouteTypes {
     | '/admin/users'
     | '/recruiter/applicants'
     | '/recruiter/company'
+    | '/recruiter/job-categories'
     | '/seeker/assistant'
     | '/seeker/profile'
     | '/seeker/saved'
     | '/admin'
     | '/recruiter'
     | '/seeker'
+    | '/recruiter/crm/contacts'
     | '/recruiter/jobs/new'
     | '/seeker/applications/$applicationId'
     | '/seeker/jobs/$jobId'
+    | '/recruiter/crm'
     | '/recruiter/jobs'
     | '/seeker/applications'
     | '/seeker/jobs'
+    | '/recruiter/crm/campaigns/$campaignId'
+    | '/recruiter/crm/segments/$segmentId'
     | '/recruiter/jobs/$jobId/edit'
+    | '/recruiter/crm/campaigns'
+    | '/recruiter/crm/segments'
     | '/recruiter/jobs/$jobId'
   id:
     | '__root__'
@@ -441,6 +562,7 @@ export interface FileRouteTypes {
     | '/_app/settings'
     | '/_app/admin/applications'
     | '/_app/admin/companies'
+    | '/_app/admin/job-categories'
     | '/_app/admin/job-revisions'
     | '/_app/admin/jobs'
     | '/_app/admin/profile'
@@ -448,6 +570,8 @@ export interface FileRouteTypes {
     | '/_app/admin/users'
     | '/_app/recruiter/applicants'
     | '/_app/recruiter/company'
+    | '/_app/recruiter/crm'
+    | '/_app/recruiter/job-categories'
     | '/_app/recruiter/jobs'
     | '/_app/seeker/applications'
     | '/_app/seeker/assistant'
@@ -457,14 +581,22 @@ export interface FileRouteTypes {
     | '/_app/admin/'
     | '/_app/recruiter/'
     | '/_app/seeker/'
+    | '/_app/recruiter/crm/campaigns'
+    | '/_app/recruiter/crm/contacts'
+    | '/_app/recruiter/crm/segments'
     | '/_app/recruiter/jobs/$jobId'
     | '/_app/recruiter/jobs/new'
     | '/_app/seeker/applications/$applicationId'
     | '/_app/seeker/jobs/$jobId'
+    | '/_app/recruiter/crm/'
     | '/_app/recruiter/jobs/'
     | '/_app/seeker/applications/'
     | '/_app/seeker/jobs/'
+    | '/_app/recruiter/crm/campaigns/$campaignId'
+    | '/_app/recruiter/crm/segments/$segmentId'
     | '/_app/recruiter/jobs/$jobId/edit'
+    | '/_app/recruiter/crm/campaigns/'
+    | '/_app/recruiter/crm/segments/'
     | '/_app/recruiter/jobs/$jobId/'
   fileRoutesById: FileRoutesById
 }
@@ -577,6 +709,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppAdminCompaniesRouteImport
       parentRoute: typeof AppAdminRoute
     }
+    '/_app/admin/job-categories': {
+      id: '/_app/admin/job-categories'
+      path: '/job-categories'
+      fullPath: '/admin/job-categories'
+      preLoaderRoute: typeof AppAdminJobCategoriesRouteImport
+      parentRoute: typeof AppAdminRoute
+    }
     '/_app/admin/job-revisions': {
       id: '/_app/admin/job-revisions'
       path: '/job-revisions'
@@ -633,6 +772,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppRecruiterCompanyRouteImport
       parentRoute: typeof AppRecruiterRoute
     }
+    '/_app/recruiter/crm': {
+      id: '/_app/recruiter/crm'
+      path: '/crm'
+      fullPath: '/recruiter/crm'
+      preLoaderRoute: typeof AppRecruiterCrmRouteImport
+      parentRoute: typeof AppRecruiterRoute
+    }
+    '/_app/recruiter/job-categories': {
+      id: '/_app/recruiter/job-categories'
+      path: '/job-categories'
+      fullPath: '/recruiter/job-categories'
+      preLoaderRoute: typeof AppRecruiterJobCategoriesRouteImport
+      parentRoute: typeof AppRecruiterRoute
+    }
     '/_app/recruiter/jobs': {
       id: '/_app/recruiter/jobs'
       path: '/jobs'
@@ -681,6 +834,34 @@ declare module '@tanstack/react-router' {
       fullPath: '/seeker/saved'
       preLoaderRoute: typeof AppSeekerSavedRouteImport
       parentRoute: typeof AppSeekerRoute
+    }
+    '/_app/recruiter/crm/': {
+      id: '/_app/recruiter/crm/'
+      path: '/'
+      fullPath: '/recruiter/crm/'
+      preLoaderRoute: typeof AppRecruiterCrmIndexRouteImport
+      parentRoute: typeof AppRecruiterCrmRoute
+    }
+    '/_app/recruiter/crm/campaigns': {
+      id: '/_app/recruiter/crm/campaigns'
+      path: '/campaigns'
+      fullPath: '/recruiter/crm/campaigns'
+      preLoaderRoute: typeof AppRecruiterCrmCampaignsRouteImport
+      parentRoute: typeof AppRecruiterCrmRoute
+    }
+    '/_app/recruiter/crm/contacts': {
+      id: '/_app/recruiter/crm/contacts'
+      path: '/contacts'
+      fullPath: '/recruiter/crm/contacts'
+      preLoaderRoute: typeof AppRecruiterCrmContactsRouteImport
+      parentRoute: typeof AppRecruiterCrmRoute
+    }
+    '/_app/recruiter/crm/segments': {
+      id: '/_app/recruiter/crm/segments'
+      path: '/segments'
+      fullPath: '/recruiter/crm/segments'
+      preLoaderRoute: typeof AppRecruiterCrmSegmentsRouteImport
+      parentRoute: typeof AppRecruiterCrmRoute
     }
     '/_app/recruiter/jobs/': {
       id: '/_app/recruiter/jobs/'
@@ -731,6 +912,34 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppSeekerJobsJobIdRouteImport
       parentRoute: typeof AppSeekerJobsRoute
     }
+    '/_app/recruiter/crm/campaigns/': {
+      id: '/_app/recruiter/crm/campaigns/'
+      path: '/'
+      fullPath: '/recruiter/crm/campaigns/'
+      preLoaderRoute: typeof AppRecruiterCrmCampaignsIndexRouteImport
+      parentRoute: typeof AppRecruiterCrmCampaignsRoute
+    }
+    '/_app/recruiter/crm/campaigns/$campaignId': {
+      id: '/_app/recruiter/crm/campaigns/$campaignId'
+      path: '/$campaignId'
+      fullPath: '/recruiter/crm/campaigns/$campaignId'
+      preLoaderRoute: typeof AppRecruiterCrmCampaignsCampaignIdRouteImport
+      parentRoute: typeof AppRecruiterCrmCampaignsRoute
+    }
+    '/_app/recruiter/crm/segments/': {
+      id: '/_app/recruiter/crm/segments/'
+      path: '/'
+      fullPath: '/recruiter/crm/segments/'
+      preLoaderRoute: typeof AppRecruiterCrmSegmentsIndexRouteImport
+      parentRoute: typeof AppRecruiterCrmSegmentsRoute
+    }
+    '/_app/recruiter/crm/segments/$segmentId': {
+      id: '/_app/recruiter/crm/segments/$segmentId'
+      path: '/$segmentId'
+      fullPath: '/recruiter/crm/segments/$segmentId'
+      preLoaderRoute: typeof AppRecruiterCrmSegmentsSegmentIdRouteImport
+      parentRoute: typeof AppRecruiterCrmSegmentsRoute
+    }
     '/_app/recruiter/jobs/$jobId/': {
       id: '/_app/recruiter/jobs/$jobId/'
       path: '/'
@@ -751,6 +960,7 @@ declare module '@tanstack/react-router' {
 interface AppAdminRouteChildren {
   AppAdminApplicationsRoute: typeof AppAdminApplicationsRoute
   AppAdminCompaniesRoute: typeof AppAdminCompaniesRoute
+  AppAdminJobCategoriesRoute: typeof AppAdminJobCategoriesRoute
   AppAdminJobRevisionsRoute: typeof AppAdminJobRevisionsRoute
   AppAdminJobsRoute: typeof AppAdminJobsRoute
   AppAdminProfileRoute: typeof AppAdminProfileRoute
@@ -762,6 +972,7 @@ interface AppAdminRouteChildren {
 const AppAdminRouteChildren: AppAdminRouteChildren = {
   AppAdminApplicationsRoute: AppAdminApplicationsRoute,
   AppAdminCompaniesRoute: AppAdminCompaniesRoute,
+  AppAdminJobCategoriesRoute: AppAdminJobCategoriesRoute,
   AppAdminJobRevisionsRoute: AppAdminJobRevisionsRoute,
   AppAdminJobsRoute: AppAdminJobsRoute,
   AppAdminProfileRoute: AppAdminProfileRoute,
@@ -772,6 +983,58 @@ const AppAdminRouteChildren: AppAdminRouteChildren = {
 
 const AppAdminRouteWithChildren = AppAdminRoute._addFileChildren(
   AppAdminRouteChildren,
+)
+
+interface AppRecruiterCrmCampaignsRouteChildren {
+  AppRecruiterCrmCampaignsCampaignIdRoute: typeof AppRecruiterCrmCampaignsCampaignIdRoute
+  AppRecruiterCrmCampaignsIndexRoute: typeof AppRecruiterCrmCampaignsIndexRoute
+}
+
+const AppRecruiterCrmCampaignsRouteChildren: AppRecruiterCrmCampaignsRouteChildren =
+  {
+    AppRecruiterCrmCampaignsCampaignIdRoute:
+      AppRecruiterCrmCampaignsCampaignIdRoute,
+    AppRecruiterCrmCampaignsIndexRoute: AppRecruiterCrmCampaignsIndexRoute,
+  }
+
+const AppRecruiterCrmCampaignsRouteWithChildren =
+  AppRecruiterCrmCampaignsRoute._addFileChildren(
+    AppRecruiterCrmCampaignsRouteChildren,
+  )
+
+interface AppRecruiterCrmSegmentsRouteChildren {
+  AppRecruiterCrmSegmentsSegmentIdRoute: typeof AppRecruiterCrmSegmentsSegmentIdRoute
+  AppRecruiterCrmSegmentsIndexRoute: typeof AppRecruiterCrmSegmentsIndexRoute
+}
+
+const AppRecruiterCrmSegmentsRouteChildren: AppRecruiterCrmSegmentsRouteChildren =
+  {
+    AppRecruiterCrmSegmentsSegmentIdRoute:
+      AppRecruiterCrmSegmentsSegmentIdRoute,
+    AppRecruiterCrmSegmentsIndexRoute: AppRecruiterCrmSegmentsIndexRoute,
+  }
+
+const AppRecruiterCrmSegmentsRouteWithChildren =
+  AppRecruiterCrmSegmentsRoute._addFileChildren(
+    AppRecruiterCrmSegmentsRouteChildren,
+  )
+
+interface AppRecruiterCrmRouteChildren {
+  AppRecruiterCrmCampaignsRoute: typeof AppRecruiterCrmCampaignsRouteWithChildren
+  AppRecruiterCrmContactsRoute: typeof AppRecruiterCrmContactsRoute
+  AppRecruiterCrmSegmentsRoute: typeof AppRecruiterCrmSegmentsRouteWithChildren
+  AppRecruiterCrmIndexRoute: typeof AppRecruiterCrmIndexRoute
+}
+
+const AppRecruiterCrmRouteChildren: AppRecruiterCrmRouteChildren = {
+  AppRecruiterCrmCampaignsRoute: AppRecruiterCrmCampaignsRouteWithChildren,
+  AppRecruiterCrmContactsRoute: AppRecruiterCrmContactsRoute,
+  AppRecruiterCrmSegmentsRoute: AppRecruiterCrmSegmentsRouteWithChildren,
+  AppRecruiterCrmIndexRoute: AppRecruiterCrmIndexRoute,
+}
+
+const AppRecruiterCrmRouteWithChildren = AppRecruiterCrmRoute._addFileChildren(
+  AppRecruiterCrmRouteChildren,
 )
 
 interface AppRecruiterJobsJobIdRouteChildren {
@@ -807,6 +1070,8 @@ const AppRecruiterJobsRouteWithChildren =
 interface AppRecruiterRouteChildren {
   AppRecruiterApplicantsRoute: typeof AppRecruiterApplicantsRoute
   AppRecruiterCompanyRoute: typeof AppRecruiterCompanyRoute
+  AppRecruiterCrmRoute: typeof AppRecruiterCrmRouteWithChildren
+  AppRecruiterJobCategoriesRoute: typeof AppRecruiterJobCategoriesRoute
   AppRecruiterJobsRoute: typeof AppRecruiterJobsRouteWithChildren
   AppRecruiterIndexRoute: typeof AppRecruiterIndexRoute
 }
@@ -814,6 +1079,8 @@ interface AppRecruiterRouteChildren {
 const AppRecruiterRouteChildren: AppRecruiterRouteChildren = {
   AppRecruiterApplicantsRoute: AppRecruiterApplicantsRoute,
   AppRecruiterCompanyRoute: AppRecruiterCompanyRoute,
+  AppRecruiterCrmRoute: AppRecruiterCrmRouteWithChildren,
+  AppRecruiterJobCategoriesRoute: AppRecruiterJobCategoriesRoute,
   AppRecruiterJobsRoute: AppRecruiterJobsRouteWithChildren,
   AppRecruiterIndexRoute: AppRecruiterIndexRoute,
 }

@@ -89,6 +89,7 @@ export async function submitJobRevision(input: {
   job_type: JobType;
   salary_range: string | null;
   application_deadline: string | null;
+  jobCategoryId: string;
 }) {
   const { data, error } = await rpc("submit_job_revision", {
     _job_id: input.jobId,
@@ -98,6 +99,7 @@ export async function submitJobRevision(input: {
     _job_type: input.job_type,
     _salary_range: input.salary_range,
     _application_deadline: input.application_deadline,
+    _job_category_id: input.jobCategoryId,
   });
   if (error) {
     if (isReviewSchemaUnavailable(error)) throw unavailableMessage("Job revision submit");

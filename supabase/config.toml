@@ -8,3 +8,7 @@ verify_jwt = true
 # or scheduled POSTs fail at the gateway before CRON_SECRET is checked.
 [functions.close-expired-jobs]
 verify_jwt = false
+
+# Resend/Svix inbound webhook
+[functions.resend-webhook]
+verify_jwt = false

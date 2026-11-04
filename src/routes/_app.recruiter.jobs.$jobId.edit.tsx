@@ -20,6 +20,13 @@ import {
 import { DeadlineDatePicker } from "@/components/jobs/DeadlineDatePicker";
 import { JOB_TYPE_LABEL, type JobType } from "@/lib/hirehub";
 import {
+  categoryNameById,
+  DEFAULT_JOB_CATEGORY_ID,
+  DEFAULT_JOB_CATEGORY_NAME,
+} from "@/lib/job-categories";
+import { fetchJobCategoryCatalog, JOB_CATEGORY_CATALOG_QUERY_KEY } from "@/lib/job-category-catalog";
+import { JobCategorySelect } from "@/components/jobs/JobCategorySelect";
+import {
   canSetApplicationDeadline,
   fmtDeadline,
   isApplicationDeadlinePassed,
@@ -39,6 +46,7 @@ const schema = z.object({
   location: z.string().trim().min(1, "Location is required"),
   salary_range: z.string().trim().optional(),
   job_type: z.enum(["full_time", "part_time", "contract"]),
+  job_category_id: z.string().uuid(),
   application_deadline: z.string().min(1, "Application deadline is required"),
 });
 
@@ -61,6 +69,11 @@ function EditJobPage() {
   const navigate = useNavigate();
   const qc = useQueryClient();
 
+  const categoryCatalog = useQuery({
+    queryKey: JOB_CATEGORY_CATALOG_QUERY_KEY,
+    queryFn: fetchJobCategoryCatalog,
+  });
+
   const job = useQuery({
     queryKey: ["recruiter-job", jobId, id],
     enabled: !!id && !!jobId,
@@ -68,7 +81,7 @@ function EditJobPage() {
       const primary = await supabase
         .from("jobs")
         .select(
-          "id,title,description,location,salary_range,job_type,status,company_id,application_deadline,rejection_reason,companies(name)",
+          "id,title,description,location,salary_range,job_type,job_category_id,status,company_id,application_deadline,rejection_reason,companies(name),job_categories(name)",
         )
         .eq("id", jobId)
         .eq("recruiter_id", id!)
@@ -84,7 +97,12 @@ function EditJobPage() {
           .maybeSingle();
         if (fallback.error) throw fallback.error;
         if (!fallback.data) throw new Error("Job not found");
-        return { ...fallback.data, rejection_reason: null as string | null };
+        return {
+          ...fallback.data,
+          job_category_id: DEFAULT_JOB_CATEGORY_ID,
+          job_categories: { name: DEFAULT_JOB_CATEGORY_NAME },
+          rejection_reason: null as string | null,
+        };
       }
       if (!primary.data) throw new Error("Job not found");
       return primary.data;
@@ -137,6 +155,7 @@ function EditJobPage() {
       location: "",
       salary_range: "",
       job_type: "full_time",
+      job_category_id: DEFAULT_JOB_CATEGORY_ID,
       application_deadline: "",
     },
   });
@@ -150,6 +169,8 @@ function EditJobPage() {
         location: job.data.location ?? "",
         salary_range: job.data.salary_range ?? "",
         job_type: job.data.job_type,
+        job_category_id:
+          (job.data as { job_category_id?: string }).job_category_id ?? DEFAULT_JOB_CATEGORY_ID,
         application_deadline: deadline ?? "",
       });
     }
@@ -178,6 +199,11 @@ function EditJobPage() {
         location: values.location.trim(),
         salary_range: values.salary_range?.trim() || null,
         job_type: values.job_type as JobType,
+        jobCategoryId: values.job_category_id,
+        categoryName: categoryNameById(
+          categoryCatalog.data?.rows ?? [],
+          values.job_category_id,
+        ),
         application_deadline: values.application_deadline,
       };
 
@@ -190,12 +216,21 @@ function EditJobPage() {
         });
         if (!gate.ok) throw new Error(gate.reason);
 
+        const jobCat = job.data as {
+          job_category_id?: string;
+          job_categories?: { name?: string | null } | { name?: string | null }[] | null;
+        };
+        const catEmbed = jobCat.job_categories;
+        const catRow = Array.isArray(catEmbed) ? catEmbed[0] : catEmbed;
+        const liveCategoryId = jobCat.job_category_id ?? DEFAULT_JOB_CATEGORY_ID;
         const live = {
           title: job.data.title,
           description: stripDeadlineMarker(job.data.description) || null,
           location: job.data.location,
           salary_range: job.data.salary_range,
           job_type: job.data.job_type,
+          jobCategoryId: liveCategoryId,
+          categoryName: catRow?.name?.trim() || DEFAULT_JOB_CATEGORY_NAME,
           application_deadline: previousDeadline,
         };
         if (!jobContentChanged(live, proposed)) {
@@ -210,6 +245,7 @@ function EditJobPage() {
           job_type: proposed.job_type,
           salary_range: proposed.salary_range,
           application_deadline: proposed.application_deadline,
+          jobCategoryId: proposed.jobCategoryId,
         });
         return { mode: "revision" as const };
       }
@@ -226,6 +262,7 @@ function EditJobPage() {
           location: proposed.location,
           salary_range: proposed.salary_range,
           job_type: proposed.job_type,
+          job_category_id: proposed.jobCategoryId,
           application_deadline: proposed.application_deadline,
         })
         .eq("id", jobId)
@@ -417,6 +454,18 @@ function EditJobPage() {
               </SelectContent>
             </Select>
           </div>
+          <div className="space-y-2">
+            <Label>Category</Label>
+            <JobCategorySelect
+              value={form.watch("job_category_id")}
+              disabled={locked}
+              catalog={categoryCatalog.data?.rows ?? []}
+              catalogUnavailable={categoryCatalog.data?.unavailable}
+              onValueChange={(v) => form.setValue("job_category_id", v, { shouldValidate: true })}
+            />
+          </div>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
             <Label htmlFor="application_deadline">Application deadline</Label>
             <DeadlineDatePicker

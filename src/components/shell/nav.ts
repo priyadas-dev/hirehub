@@ -1,4 +1,4 @@
-import { LayoutDashboard, Briefcase, FileText, Bookmark, Users, PlusSquare, ShieldCheck, Building2, UserCircle, BarChart3, ClipboardList, Settings, FileDiff, MessageSquareText, type LucideIcon } from "lucide-react";
+import { LayoutDashboard, Briefcase, FileText, Bookmark, Users, PlusSquare, ShieldCheck, Building2, UserCircle, BarChart3, ClipboardList, Settings, FileDiff, MessageSquareText, Megaphone, Tags, Globe2, type LucideIcon } from "lucide-react";
 import type { Role } from "@/lib/auth";
 
 export type AppNavPath =
@@ -12,7 +12,9 @@ export type AppNavPath =
   | "/recruiter/jobs"
   | "/recruiter/jobs/new"
   | "/recruiter/applicants"
+  | "/recruiter/crm"
   | "/recruiter/company"
+  | "/recruiter/job-categories"
   | "/admin"
   | "/admin/jobs"
   | "/admin/users"
@@ -20,6 +22,7 @@ export type AppNavPath =
   | "/admin/applications"
   | "/admin/reports"
   | "/admin/job-revisions"
+  | "/admin/job-categories"
   | "/admin/profile"
   | "/settings";
 
@@ -46,13 +49,16 @@ export const NAV: Record<Role, NavItem[]> = {
     { label: "Post a Job", icon: PlusSquare, to: "/recruiter/jobs/new" },
     { label: "My Job Posts", icon: Briefcase, to: "/recruiter/jobs" },
     { label: "Applicants", icon: Users, to: "/recruiter/applicants" },
+    { label: "CRM", icon: Megaphone, to: "/recruiter/crm" },
     { label: "Company Profile", icon: Building2, to: "/recruiter/company" },
+    { label: "My categories", icon: Tags, to: "/recruiter/job-categories" },
     { label: "Settings", icon: Settings, to: "/settings" },
   ],
   admin: [
     { label: "Admin Dashboard", icon: LayoutDashboard, to: "/admin" },
     { label: "Approve Jobs", icon: ShieldCheck, to: "/admin/jobs" },
     { label: "Job revisions", icon: FileDiff, to: "/admin/job-revisions" },
+    { label: "Job categories", icon: Globe2, to: "/admin/job-categories" },
     { label: "Manage Users", icon: Users, to: "/admin/users" },
     { label: "Manage Companies", icon: Building2, to: "/admin/companies" },
     { label: "All Applications", icon: ClipboardList, to: "/admin/applications" },
