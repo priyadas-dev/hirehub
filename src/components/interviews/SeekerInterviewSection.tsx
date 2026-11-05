@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
 import { CalendarClock, Video } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -7,14 +8,15 @@ import {
   formatInterviewResponseLabel,
   isDisplayableMeetLink,
 } from "@/lib/integrations/interview-display";
+import { loadSeekerScheduledInterview } from "@/lib/integrations/interview-schedule.server";
 import { probeInterviewScheduleSchemaReady } from "@/lib/integrations/interview-schema-probe";
-import { fetchSeekerScheduledInterview } from "@/lib/integrations/interview-schedules.client";
 
 type Props = {
   applicationId: string;
 };
 
 export function SeekerInterviewSection({ applicationId }: Props) {
+  const loadSeekerInterview = useServerFn(loadSeekerScheduledInterview);
   const schemaReady = useQuery({
     queryKey: ["interview-schema-ready"],
     queryFn: probeInterviewScheduleSchemaReady,
@@ -23,7 +25,7 @@ export function SeekerInterviewSection({ applicationId }: Props) {
   const interview = useQuery({
     queryKey: ["seeker-interview", applicationId],
     enabled: schemaReady.data === true,
-    queryFn: () => fetchSeekerScheduledInterview(applicationId),
+    queryFn: () => loadSeekerInterview({ data: { applicationId } }),
     refetchInterval: 60_000,
   });
 

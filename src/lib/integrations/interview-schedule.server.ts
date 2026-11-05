@@ -8,6 +8,11 @@ import { rejectInterviewIdentityFields } from "@/lib/integrations/interview-auth
 import { INTERVIEW_SCHEMA_PENDING_CODE } from "@/lib/integrations/interview-schedule-persistence";
 import { interviewScheduleUserMessage } from "@/lib/integrations/interview-schedule.service";
 import {
+  queryOpenInterviewScheduleForApplication,
+  querySeekerScheduledInterview,
+  type InterviewScheduleView,
+} from "@/lib/integrations/interview-schedule-queries";
+import {
   cancelInterviewById,
   createInterviewScheduleServiceFromAdmin,
   rescheduleInterviewById,
@@ -28,6 +33,8 @@ const scheduleSchema = z
   .strict();
 
 const scheduleIdSchema = z.object({ scheduleId: z.string().uuid() }).strict();
+
+const applicationIdSchema = z.object({ applicationId: z.string().uuid() }).strict();
 
 const rescheduleSchema = z
   .object({
@@ -349,4 +356,20 @@ export const cancelInterviewSchedule = createServerFn({ method: "POST" })
       context: loaded.context,
       deps,
     });
+  });
+
+/** SSR-safe read for recruiter interview panel (JWT + RLS via user Supabase client). */
+export const loadOpenInterviewScheduleForApplication = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .validator((data: unknown) => parseInterviewBody(applicationIdSchema, data))
+  .handler(async ({ data, context }): Promise<InterviewScheduleView | null> => {
+    return queryOpenInterviewScheduleForApplication(context.supabase, data.applicationId);
+  });
+
+/** SSR-safe read for seeker interview section (JWT + RLS via user Supabase client). */
+export const loadSeekerScheduledInterview = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .validator((data: unknown) => parseInterviewBody(applicationIdSchema, data))
+  .handler(async ({ data, context }): Promise<InterviewScheduleView | null> => {
+    return querySeekerScheduledInterview(context.supabase, data.applicationId);
   });

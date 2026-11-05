@@ -26,11 +26,11 @@ import {
 } from "@/lib/integrations/interview-schema-probe";
 import {
   cancelInterviewSchedule,
+  loadOpenInterviewScheduleForApplication,
   rescheduleInterview,
   retryInterviewSchedule,
   scheduleInterview,
 } from "@/lib/integrations/interview-schedule.server";
-import { fetchOpenInterviewScheduleForApplication } from "@/lib/integrations/interview-schedules.client";
 
 type Props = {
   applicationId: string;
@@ -49,6 +49,7 @@ export function RecruiterInterviewPanel({ applicationId, applicationStatus }: Pr
   const retryInterviewFn = useServerFn(retryInterviewSchedule);
   const rescheduleInterviewFn = useServerFn(rescheduleInterview);
   const cancelInterviewFn = useServerFn(cancelInterviewSchedule);
+  const loadScheduleFn = useServerFn(loadOpenInterviewScheduleForApplication);
   const schedulable = isSchedulableApplicationStatus(applicationStatus);
   const defaults = useMemo(() => defaultInterviewDatetimeLocalInputs(), []);
 
@@ -60,7 +61,7 @@ export function RecruiterInterviewPanel({ applicationId, applicationStatus }: Pr
   const schedule = useQuery({
     queryKey: ["interview-schedule", applicationId],
     enabled: schemaReady.data === true && schedulable,
-    queryFn: () => fetchOpenInterviewScheduleForApplication(applicationId),
+    queryFn: () => loadScheduleFn({ data: { applicationId } }),
     refetchInterval: (q) => (q.state.data?.status === "pending" ? 5000 : false),
   });
 
