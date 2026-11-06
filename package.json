@@ -17,7 +17,12 @@
     "rag:seed:dry": "node --import tsx scripts/rag/seed-job-corpus.mjs --dry-run --count=5000",
     "rag:embed": "node --import tsx scripts/rag/embed-job-corpus.mjs",
     "rag:reset-embeddings": "node --import tsx scripts/rag/reset-corpus-embeddings.mjs",
+    "rag:scale": "node --import tsx scripts/rag/scale-corpus-stages.mjs",
+    "rag:checkpoint": "node --import tsx scripts/rag/corpus-checkpoint.mjs",
     "rag:eval": "node --import tsx scripts/rag/eval-corpus-rag.mjs",
+    "rag:eval:agents": "node --import tsx scripts/rag/eval-agent-scenarios.mjs",
+    "rag:eval:frozen": "node --import tsx scripts/rag/eval-frozen-set.mjs",
+    "rag:eval:track4a": "node --import tsx scripts/rag/eval-track4a.mjs",
     "rag:classify": "node --import tsx scripts/rag/train-job-classifier.mjs",
     "rag:classify:original": "node --import tsx scripts/rag/eval-original-descriptions.mjs"
   },

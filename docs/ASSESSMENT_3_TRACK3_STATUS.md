@@ -1,0 +1,150 @@
+# Assessment 3 Track 3 — Status (done vs pending)
+
+**Track:** Multi-agent orchestration + guardrails (**20 pts**)  
+**Compared against:** Assessment 3 requirements brief (Track 3 + Hard Problems 1, 2, 3, 5)  
+**Codebase reviewed:** HireHub (Supervisor, Discovery, Application, Recruiter, guardrails, UIs, tests, docs)  
+**Date:** 2026-11-06  
+**Related human guide:** [`ASSESSMENT_3_TRACK3_MULTI_AGENT_GUIDE.md`](./ASSESSMENT_3_TRACK3_MULTI_AGENT_GUIDE.md)
+
+> Living note: update this file when Track 3 completion status changes (e.g. Task 3F finished, live resume JWT matrix recorded).
+
+---
+
+## Verdict
+
+Against the Assessment 3 brief and the current codebase, **Track 3 multi-agent + guardrails is largely done in product, code, and tests**.
+
+What’s left is mostly **proof polish** (browser E2E, live resume JWT matrix, durable memory)—**not** missing agents.
+
+| Estimate | Meaning |
+|---|---|
+| **~85–90%** | Track 3 **feature** work |
+| **~70–80%** | “Mentor-ready **proof**” if they insist on full live browser + live Storage denial demos |
+
+---
+
+## Brief requirement vs codebase
+
+| Brief requirement | Status | Notes |
+|---|---|---|
+| Supervisor / router | **Done** | Routes + guardrails first |
+| Discovery agent (recommend jobs, no invent) | **Done** | Live approved jobs + corpus |
+| Application agent (apply / save / status) | **Done** | Real JWT actions |
+| Recruiter agent (shortlist + draft outreach) | **Done** | + `/recruiter/agent` UI |
+| Shared memory | **Done for Track 3** (durability still optional) | Path A verified UI + unit; process-local only — see `ASSESSMENT_3_TRACK3_SHARED_MEMORY_PATH_A.md` |
+| Validation | **Done** | |
+| PII redaction | **Done** | |
+| Low-confidence refusal / clarify | **Done** (Task 3C) | |
+| Structured outputs | **Done enough** | Typed agent/supervisor payloads |
+| Fairness guardrail (Hard Problem 3) | **Done** | Refuse before rank + tests |
+| Application takes **real** actions (Hard Problem 5) | **Done** | Confirm → `applyToJob` |
+| Idempotent apply (Hard Problem 1) | **Done** | Live UNIQUE verified; concurrent unit test (mock race) |
+| Secure resume ACL (Hard Problem 2) | **Partial** | Private bucket + RLS + unit mirror; **live JWT denial matrix not recorded** |
+| Seeker UI through Supervisor | **Done** | `/seeker/assistant` |
+| Recruiter agent UI | **Done** | Task 3B |
+| Documented guardrails | **Done** | Track 3 MD guides |
+| Full live browser multi-agent E2E (Task 3F) | **Mode A done** / Mode B pending | Read-only report: [`ASSESSMENT_3_TRACK3_READONLY_BROWSER_VERIFICATION.md`](./ASSESSMENT_3_TRACK3_READONLY_BROWSER_VERIFICATION.md); mutating E2E still needs non-prod DB |
+
+---
+
+## Done — you can claim this for Track 3
+
+1. **Supervised multi-agent system** — Supervisor + Discovery + Application + Recruiter  
+2. **Guardrails** — validation, PII, fairness-before-rank, low-confidence refuse/clarify  
+3. **Confirm-to-apply** — propose = 0 inserts; confirm = real apply  
+4. **Recruiter ownership + draft-only outreach** — no auto-send from UI  
+5. **Seeker + Recruiter UIs** wired to Supervisor paths  
+6. **Idempotent applications** — DB `UNIQUE (job_id, seeker_id)` proven live; handler + tests  
+7. **Resume privacy design** — private `resumes` bucket + Storage policies + authorize-before-sign tests  
+8. **Unit/integration tests** — Phase 6/7, confidence, concurrency mock, resume ACL mirror  
+9. **Human docs** — multi-agent guide + guardrails / idempotent / resume docs  
+10. **Task 3F Mode A** — read-only multi-agent browser verification on prod-backed local app (no confirm/save/send)  
+
+That matches the brief’s “done looks like” for Track 3:
+
+> Clear supervisor + specialists, shared memory, guardrails including fairness, application agent can take real actions.
+
+---
+
+## Pending — honest gaps
+
+| Pending | Why it matters | Blocking Track 3 score? |
+|---|---|---|
+| **Task 3F — Mode B mutating browser E2E** (confirm apply / shortlist / save / send) | Strongest write-path demo evidence | Mode A read-only verification **done**; Mode B still optional / needs non-prod |
+| **Live resume denial** (other recruiter / anon get 403) | Hard Problem 2 “proof Amol wants” | Unit/policy mirror exists; live matrix still strengthens bonus/security story |
+| **Durable shared memory (Path B)** | Survives server restart / multi-instance | Optional only — Path A proved in-process sharing; needs schema approval |
+| **Optional UI “which agent ran” badge** | Easier mentor explanation | Not required by brief |
+
+### Not Track 3 pending (other tracks)
+
+HubSpot / Resend / Calendar depth, CRM campaign tracking UI, 20k RAG eval packaging, fine-tune, CI / Sentry packaging, DCT hand-in.
+
+---
+
+## Evidence scoreboard (implementation)
+
+| # | Item | Status |
+|---|---|---|
+| 1 | Supervisor | **Done** |
+| 2 | Discovery | **Done** |
+| 3 | Application | **Done** |
+| 4 | Recruiter | **Done** |
+| 5 | Shared memory | **Done** for brief (in-process; Path A verified; durability optional) |
+| 6 | Guardrails | **Done** |
+| 7 | Seeker UI → Supervisor | **Done** |
+| 8 | Recruiter UI | **Done** |
+| 9 | Idempotent apply | **Done** |
+| 10 | Resume ACL | **Partial** (policy + unit mirror; no live JWT matrix) |
+| 11 | Tests | **Done** |
+| 12 | Docs | **Done** |
+| — | Task 3F Mode A read-only browser | **Done** |
+| — | Task 3F Mode B mutating browser | **Paused** (prod-backed) |
+
+---
+
+## How to talk about it (mentor / DCT)
+
+- **For Track 3 (20 pts):** You have implemented the multi-agent system + guardrails + hard problems **1 / 3 / 5** in code, with strong unit evidence and live UNIQUE proof.  
+- **Still to finish for maximum confidence / bonus polish:** optional live resume denial; optional Mode B Task 3F when you accept write risk or use disposable/non-prod data. Mode A read-only browser verification is recorded.  
+- **Shared memory:** Say *“agents share conversation memory on the server today; it’s process-local, not a DB table yet.”*
+
+### Safe next step on current Supabase
+
+Follow **Mode A** in [`ASSESSMENT_3_TRACK3_MULTI_AGENT_GUIDE.md`](./ASSESSMENT_3_TRACK3_MULTI_AGENT_GUIDE.md) §11 (local UI, propose-only — no confirm apply/shortlist unless intentional).
+
+---
+
+## Shared memory — how to finish the “Partial” gap
+
+**Today:** `src/lib/ai/memory/server-memory.ts` — in-process `Map` keyed by `userId::conversationId`. Supervisor already writes turns / skills / preferences / recent jobs and Discovery/Application read bundles.  
+**Gap:** memory resets on server restart / multi-instance (not a DB table).
+
+### Path A — Prove & polish (no schema) — **COMPLETED 2026-11-06**
+
+Evidence: [`ASSESSMENT_3_TRACK3_SHARED_MEMORY_PATH_A.md`](./ASSESSMENT_3_TRACK3_SHARED_MEMORY_PATH_A.md), `scripts/path-a-shared-memory-ui-verify.mjs`, `docs/path-a-shared-memory-ui-results.json`.
+
+1. ~~UI same conversation skills → Discovery follow-up~~ **Pass**  
+2. ~~Application propose-only using conversation/recent-job context~~ **Pass** (Mode A)  
+3. ~~Restart limitation documented + unit “new instance empty”~~ **Pass**  
+4. No schema / no redesign  
+
+### Path B — Durable memory (needs your explicit schema approval)
+
+1. You approve a proposed `agent_sessions` (or similar) migration — **do not apply** until you say so.  
+2. Design RLS: only `auth.uid()` can read/write own rows; store redacted JSON only.  
+3. Implement store adapter: load/save behind same `createServerAgentMemory` API (in-memory cache optional).  
+4. Wire Supervisor to durable store; keep PII redaction.  
+5. Tests (mock client) + optional manual restart proof.  
+6. Update STATUS + MULTI_AGENT_GUIDE.
+
+**Do not start Path B code until you reply with approval for a proposed migration.**
+
+---
+
+## Changelog
+
+| Date | Change |
+|---|---|
+| 2026-11-06 | Initial Track 3 status snapshot vs Assessment 3 brief + codebase audit. |
+| 2026-11-06 | Added shared-memory Path A (prove) vs Path B (durable, needs schema approval). |
+| 2026-11-06 | **Path A completed** — UI verify + docs + restart-limitation unit test; memory marked done for Track 3 brief. |

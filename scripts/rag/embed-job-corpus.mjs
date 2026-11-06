@@ -21,6 +21,9 @@
  *            GEMINI_API_KEY only when --provider=gemini
  * Never prints secret values. Does not seed rows or apply SQL.
  */
+import { mkdirSync, writeFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { loadProjectEnv, getRagEnvStatus } from "../../src/lib/ai/rag-env.ts";
 import { createRagAdminClient, probeRagMigrations } from "../../src/lib/ai/rag-admin.ts";
 import {
@@ -34,6 +37,9 @@ import {
   embeddingModelLabel,
   resolveEmbeddingProvider,
 } from "../../src/lib/ai/embed-provider.ts";
+import { embeddingDimensions } from "../../src/lib/ai/embed-space.ts";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 function parseArgs(argv) {
   let limit = 200;
@@ -149,7 +155,37 @@ async function main() {
     embedded: result.embedded,
     skipped: result.skipped,
     failed: result.failed,
+    dimensions: embeddingDimensions(provider),
   });
+
+  const outDir = path.join(__dirname, "out");
+  mkdirSync(outDir, { recursive: true });
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const artifact = {
+    generatedAt: new Date().toISOString(),
+    provider: result.provider,
+    dimensions: embeddingDimensions(provider),
+    storageColumn: provider === "gte" ? "embedding_gte" : "embedding",
+    limit,
+    batchSize,
+    concurrency,
+    processed: result.processed,
+    embedded: result.embedded,
+    skipped: result.skipped,
+    failed: result.failed,
+    failures: result.failures.slice(0, 50).map((f) => ({
+      id: f.id,
+      message: f.message,
+      contentChars: f.contentChars ?? null,
+      httpStatus: f.diagnostic?.httpStatus ?? null,
+      category: f.diagnostic?.category ?? null,
+      retryable: f.diagnostic?.retryable ?? null,
+    })),
+  };
+  const outPath = path.join(outDir, `embed-run-${provider}-${stamp}.json`);
+  writeFileSync(outPath, JSON.stringify(artifact, null, 2), "utf8");
+  console.log(`[rag:embed] wrote ${outPath}`);
+
   if (result.failures.length) {
     console.log(
       "[rag:embed] Sample failures:",

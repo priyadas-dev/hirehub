@@ -17,6 +17,10 @@ import {
   X,
 } from "lucide-react";
 import { AssistantMarkdown } from "@/components/assistant/AssistantMarkdown";
+import {
+  ApplicationStatusOutcomeList,
+  SaveJobOutcomeChip,
+} from "@/components/assistant/AssistantToolOutcomes";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { askJobAssistant } from "@/lib/ai/ask-job-assistant";
@@ -129,7 +133,10 @@ function SeekerAssistantPage() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [turns, busy]);
 
-  async function submit(nextQuestion: string, options?: { retryTurnId?: string }) {
+  async function submit(
+    nextQuestion: string,
+    options?: { retryTurnId?: string; applyJobId?: string; confirmApply?: boolean },
+  ) {
     const trimmed = nextQuestion.trim();
     if (!trimmed || !userId || (busy && !options?.retryTurnId)) return;
 
@@ -145,6 +152,8 @@ function SeekerAssistantPage() {
       question: trimmed,
       attachmentMeta,
       attachmentBase64,
+      applyJobId: options?.applyJobId,
+      confirmApply: options?.confirmApply,
       retryTurnId: options?.retryTurnId,
       ask: async ({ data }) => ask({ data: data as AskJobAssistantInput }),
     });
@@ -367,7 +376,16 @@ function SeekerAssistantPage() {
                       ) : (
                         <AssistantMessage
                           result={turn.result}
+                          busy={busy}
                           onRetry={() => void submit(turn.question, { retryTurnId: turn.id })}
+                          onConfirmApply={(jobId) =>
+                            void runAssistantLiveAsk(userId, {
+                              question: `Please apply to job ${jobId}`,
+                              applyJobId: jobId,
+                              confirmApply: true,
+                              ask: async ({ data }) => ask({ data: data as AskJobAssistantInput }),
+                            })
+                          }
                         />
                       )}
                     </div>
@@ -471,9 +489,13 @@ function SeekerAssistantPage() {
 function AssistantMessage({
   result,
   onRetry,
+  onConfirmApply,
+  busy,
 }: {
   result: AskJobAssistantResult;
   onRetry: () => void;
+  onConfirmApply?: (jobId: string) => void;
+  busy?: boolean;
 }) {
   if (!result.ok) {
     return (
@@ -499,6 +521,42 @@ function AssistantMessage({
       <div className="rounded-2xl rounded-tl-md border bg-muted/30 px-4 py-3">
         <AssistantMarkdown text={result.answer} />
       </div>
+
+      {result.pendingApply && (
+        <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-signal/30 bg-signal/5 px-4 py-3">
+          <p className="text-sm text-foreground">
+            Confirm apply to <span className="font-medium">{result.pendingApply.title}</span>?
+          </p>
+          <Button
+            type="button"
+            size="sm"
+            variant="signal"
+            disabled={busy}
+            onClick={() => onConfirmApply?.(result.pendingApply!.jobId)}
+          >
+            Confirm apply
+          </Button>
+        </div>
+      )}
+
+      {result.applyOutcome && (
+        <div className="pt-1">
+          <Button variant="outline" size="sm" asChild>
+            <Link
+              to="/seeker/applications/$applicationId"
+              params={{ applicationId: result.applyOutcome.applicationId }}
+            >
+              View application
+            </Link>
+          </Button>
+        </div>
+      )}
+
+      {result.saveOutcome && <SaveJobOutcomeChip outcome={result.saveOutcome} />}
+
+      {result.applicationStatuses && (
+        <ApplicationStatusOutcomeList applications={result.applicationStatuses} />
+      )}
 
       {result.liveCitations.length > 0 && (
         <div className="space-y-2">

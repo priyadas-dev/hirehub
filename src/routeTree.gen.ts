@@ -29,6 +29,7 @@ import { Route as AppAdminProfileRouteImport } from './routes/_app.admin.profile
 import { Route as AppAdminReportsRouteImport } from './routes/_app.admin.reports'
 import { Route as AppAdminUsersRouteImport } from './routes/_app.admin.users'
 import { Route as AppRecruiterIndexRouteImport } from './routes/_app.recruiter.index'
+import { Route as AppRecruiterAgentRouteImport } from './routes/_app.recruiter.agent'
 import { Route as AppRecruiterApplicantsRouteImport } from './routes/_app.recruiter.applicants'
 import { Route as AppRecruiterCompanyRouteImport } from './routes/_app.recruiter.company'
 import { Route as AppRecruiterJobsRouteImport } from './routes/_app.recruiter.jobs'
@@ -147,6 +148,11 @@ const AppRecruiterIndexRoute = AppRecruiterIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AppRecruiterRoute,
 } as any)
+const AppRecruiterAgentRoute = AppRecruiterAgentRouteImport.update({
+  id: '/agent',
+  path: '/agent',
+  getParentRoute: () => AppRecruiterRoute,
+} as any)
 const AppRecruiterApplicantsRoute = AppRecruiterApplicantsRouteImport.update({
   id: '/applicants',
   path: '/applicants',
@@ -260,6 +266,7 @@ export interface FileRoutesByFullPath {
   '/admin/profile': typeof AppAdminProfileRoute
   '/admin/reports': typeof AppAdminReportsRoute
   '/admin/users': typeof AppAdminUsersRoute
+  '/recruiter/agent': typeof AppRecruiterAgentRoute
   '/recruiter/applicants': typeof AppRecruiterApplicantsRoute
   '/recruiter/company': typeof AppRecruiterCompanyRoute
   '/recruiter/jobs': typeof AppRecruiterJobsRouteWithChildren
@@ -296,6 +303,7 @@ export interface FileRoutesByTo {
   '/admin/profile': typeof AppAdminProfileRoute
   '/admin/reports': typeof AppAdminReportsRoute
   '/admin/users': typeof AppAdminUsersRoute
+  '/recruiter/agent': typeof AppRecruiterAgentRoute
   '/recruiter/applicants': typeof AppRecruiterApplicantsRoute
   '/recruiter/company': typeof AppRecruiterCompanyRoute
   '/seeker/assistant': typeof AppSeekerAssistantRoute
@@ -333,6 +341,7 @@ export interface FileRoutesById {
   '/_app/admin/profile': typeof AppAdminProfileRoute
   '/_app/admin/reports': typeof AppAdminReportsRoute
   '/_app/admin/users': typeof AppAdminUsersRoute
+  '/_app/recruiter/agent': typeof AppRecruiterAgentRoute
   '/_app/recruiter/applicants': typeof AppRecruiterApplicantsRoute
   '/_app/recruiter/company': typeof AppRecruiterCompanyRoute
   '/_app/recruiter/jobs': typeof AppRecruiterJobsRouteWithChildren
@@ -374,6 +383,7 @@ export interface FileRouteTypes {
     | '/admin/profile'
     | '/admin/reports'
     | '/admin/users'
+    | '/recruiter/agent'
     | '/recruiter/applicants'
     | '/recruiter/company'
     | '/recruiter/jobs'
@@ -410,6 +420,7 @@ export interface FileRouteTypes {
     | '/admin/profile'
     | '/admin/reports'
     | '/admin/users'
+    | '/recruiter/agent'
     | '/recruiter/applicants'
     | '/recruiter/company'
     | '/seeker/assistant'
@@ -446,6 +457,7 @@ export interface FileRouteTypes {
     | '/_app/admin/profile'
     | '/_app/admin/reports'
     | '/_app/admin/users'
+    | '/_app/recruiter/agent'
     | '/_app/recruiter/applicants'
     | '/_app/recruiter/company'
     | '/_app/recruiter/jobs'
@@ -617,6 +629,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/recruiter/'
       preLoaderRoute: typeof AppRecruiterIndexRouteImport
+      parentRoute: typeof AppRecruiterRoute
+    }
+    '/_app/recruiter/agent': {
+      id: '/_app/recruiter/agent'
+      path: '/agent'
+      fullPath: '/recruiter/agent'
+      preLoaderRoute: typeof AppRecruiterAgentRouteImport
       parentRoute: typeof AppRecruiterRoute
     }
     '/_app/recruiter/applicants': {
@@ -805,6 +824,7 @@ const AppRecruiterJobsRouteWithChildren =
   AppRecruiterJobsRoute._addFileChildren(AppRecruiterJobsRouteChildren)
 
 interface AppRecruiterRouteChildren {
+  AppRecruiterAgentRoute: typeof AppRecruiterAgentRoute
   AppRecruiterApplicantsRoute: typeof AppRecruiterApplicantsRoute
   AppRecruiterCompanyRoute: typeof AppRecruiterCompanyRoute
   AppRecruiterJobsRoute: typeof AppRecruiterJobsRouteWithChildren
@@ -812,6 +832,7 @@ interface AppRecruiterRouteChildren {
 }
 
 const AppRecruiterRouteChildren: AppRecruiterRouteChildren = {
+  AppRecruiterAgentRoute: AppRecruiterAgentRoute,
   AppRecruiterApplicantsRoute: AppRecruiterApplicantsRoute,
   AppRecruiterCompanyRoute: AppRecruiterCompanyRoute,
   AppRecruiterJobsRoute: AppRecruiterJobsRouteWithChildren,

@@ -27,6 +27,16 @@ import {
   skillsBasedAnswer,
   type SkillMatchedJob,
 } from "@/lib/ai/skill-match";
+import {
+  evaluateFairnessBeforeRank,
+  mustBlockJobRanking,
+  FAIRNESS_REFUSAL_MESSAGE,
+  redactPii,
+} from "@/lib/ai/guardrails";
+import type {
+  ApplicationAgentInput,
+  ApplicationAgentResult,
+} from "@/lib/ai/agents/application";
 
 /** Gemini text model for the Job Assistant (server-only). */
 export const GEMINI_ASSISTANT_MODEL = "gemini-3.8-flash" as const;
@@ -90,9 +100,44 @@ export const askJobAssistantInputSchema = z.object({
   recentJobs: z.array(recentJobSchema).max(8).optional(),
   /** Short prior Q&A text for follow-ups (no resume contents / secrets). */
   conversationContext: z.string().trim().max(1200).optional(),
+  /** Client conversation id for server shared-memory isolation (no secrets). */
+  conversationId: z.string().trim().min(4).max(80).optional(),
+  /** Phase 7: target job for confirm-to-apply. */
+  applyJobId: z.string().uuid().optional(),
+  /** Phase 7: must be true before application agent inserts a row. */
+  confirmApply: z.boolean().optional(),
 });
 
 export type AskJobAssistantInput = z.infer<typeof askJobAssistantInputSchema>;
+
+export type PendingApplyPayload = {
+  jobId: string;
+  title: string;
+  requiresConfirm: true;
+};
+
+export type ApplyOutcomePayload = {
+  status: "created" | "already_applied";
+  applicationId: string;
+  jobId: string;
+};
+
+export type SaveJobOutcomePayload = {
+  status: "saved" | "already_saved";
+  savedJobId: string;
+  jobId: string;
+  title: string;
+};
+
+export type ApplicationStatusItemPayload = {
+  id: string;
+  status: string;
+  createdAt: string;
+  jobId: string;
+  jobTitle: string;
+  companyName: string | null;
+  location: string | null;
+};
 
 export type AssistantCorpusCitation = {
   kind: "synthetic_corpus";
@@ -136,6 +181,14 @@ export type AskJobAssistantResult =
       resumeProcess?: ResumeProcessStatus;
       /** Skills for this session (no resume text). Safe to keep client-side for follow-ups. */
       sessionSkills?: string[];
+      /** Confirm chip before apply insert. */
+      pendingApply?: PendingApplyPayload;
+      /** Result after confirmed apply. */
+      applyOutcome?: ApplyOutcomePayload;
+      /** Result after Save Job tool. */
+      saveOutcome?: SaveJobOutcomePayload;
+      /** Result after Check Application Status tool (own applications only). */
+      applicationStatuses?: ApplicationStatusItemPayload[];
     }
   | {
       ok: false;
@@ -180,6 +233,10 @@ export type JobAssistantDeps = {
     base64: string;
     mime: string;
   }) => Promise<{ ok: true; text: string } | { ok: false; message: string }>;
+  /** Phase 7: confirm-to-apply specialist (JWT only). Wired via Supervisor in production. */
+  runApplicationAgent?: (
+    input: ApplicationAgentInput,
+  ) => Promise<ApplicationAgentResult>;
 };
 
 function resolveAttachmentKind(
@@ -386,7 +443,27 @@ export async function runJobAssistant(
     };
   }
 
-  const question = parsed.data.question;
+  const pii = redactPii(parsed.data.question);
+  let question = pii.text;
+
+  // Defense in depth: fairness BEFORE ranking / live job search / LLM (even outside Supervisor).
+  const fairnessEarly = evaluateFairnessBeforeRank(question);
+  if (mustBlockJobRanking(fairnessEarly)) {
+    return okResult({
+      answer: FAIRNESS_REFUSAL_MESSAGE,
+      model: "guardrail-fairness",
+      insufficientContext: false,
+      ragAvailable: true,
+      liveJobsAvailable: false,
+      soughtLiveJobs: false,
+      corpusCitations: [],
+      liveCitations: [],
+    });
+  }
+  if (fairnessEarly.ok && fairnessEarly.flagged) {
+    question = fairnessEarly.neutralizedQuestion;
+  }
+
   const attachmentMeta = parsed.data.attachmentMeta;
   const fileBase64 = parsed.data.attachmentBase64 ?? parsed.data.resumePdfBase64;
   const kind = resolveAttachmentKind(attachmentMeta);
