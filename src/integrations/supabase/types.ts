@@ -8,6 +8,41 @@ export type Database = {
   };
   public: {
     Tables: {
+      agent_sessions: {
+        Row: {
+          id: string;
+          user_id: string;
+          conversation_id: string;
+          memory: Json;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          conversation_id: string;
+          memory?: Json;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          conversation_id?: string;
+          memory?: Json;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "agent_sessions_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       applications: {
         Row: {
           cover_note: string | null;

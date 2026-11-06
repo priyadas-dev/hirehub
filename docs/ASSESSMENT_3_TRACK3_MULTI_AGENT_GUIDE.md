@@ -2,7 +2,7 @@
 
 **Who this is for:** You (Priya) — so you can explain the system to yourself, mentors, and demos without reading every source file.  
 **What this is:** Assessment 3 **Track 3** — Multi-Agent Orchestration + Guardrails (and the hard safety problems attached to it).  
-**Last updated:** 2026-11-06 (Task 3F Mode A read-only browser verification done)  
+**Last updated:** 2026-11-06 (Path B durable memory adapter; migration apply pending)  
 **Status board (done vs pending vs brief):** [`ASSESSMENT_3_TRACK3_STATUS.md`](./ASSESSMENT_3_TRACK3_STATUS.md)
 
 > **Living document rule**  
@@ -290,15 +290,15 @@ Deep dive: [`ASSESSMENT_3_TRACK3_GUARDRAILS.md`](./ASSESSMENT_3_TRACK3_GUARDRAIL
 
 ## 7. Shared memory — what it is and is not
 
-**Code:** `src/lib/ai/memory/server-memory.ts`
+**Code:** `src/lib/ai/memory/server-memory.ts` + Path B (`durable-agent-memory.ts`, proposed `agent_sessions`)
 
 | It is | It is not |
 |---|---|
-| A server Map keyed by `userId` + `conversationId` | A Postgres table (unless you later approve one) |
-| Short turn text + skills / hints for soft ranking | A vector database |
-| Helpful so “I like React” can influence the next search | Durable across server restarts or multiple server instances |
+| A server Map keyed by `userId` + `conversationId` (always) | A vector database |
+| Path B: optional JWT+RLS `agent_sessions` JSONB behind the same API | Auto-applied on production (needs your approval) |
+| Short turn text + skills / hints for soft ranking | Unlimited transcript / secrets storage |
 
-**Why remaining durability is optional:** Assessment allowed in-process memory first. A real `agent_sessions` table needs explicit schema approval (project protection rules).
+**Path A:** in-process only (verified). **Path B:** durable adapter is implemented; **live durability starts only after you approve applying** `PROPOSED_0027_agent_sessions.sql`. Until then the app falls back to Path A.
 
 ---
 
@@ -342,7 +342,7 @@ It means **proof, polish, or durability** work is still open.
 |---|---|---|
 | **Task 3F — Mode B mutating browser E2E** | Mode A **read-only** verification is done ([`ASSESSMENT_3_TRACK3_READONLY_BROWSER_VERIFICATION.md`](./ASSESSMENT_3_TRACK3_READONLY_BROWSER_VERIFICATION.md)). Confirm-apply / shortlist / save / send still write prod rows. | Non-prod DB (or isolated seed) + Mode B confirm/write checklist |
 | **Live Storage RLS JWT matrix** | 3E proved the **policy mirror** in Vitest, not three real JWTs against Storage | Manual steps in resume ACL doc on a safe env |
-| **Durable shared memory (Path B)** | Process-local Map by design; **Path A verified** sharing in-session | Optional approved migration for `agent_sessions` — see `ASSESSMENT_3_TRACK3_SHARED_MEMORY_PATH_A.md` |
+| **Durable shared memory (Path B) — apply SQL** | Adapter + proposed `agent_sessions` ready; hosted DB not updated until you approve | Apply `PROPOSED_0027` — see [`ASSESSMENT_3_TRACK3_SHARED_MEMORY_PATH_B.md`](./ASSESSMENT_3_TRACK3_SHARED_MEMORY_PATH_B.md) |
 | **Visible “routed to Discovery” badge in UI** | Product UX hides orchestration internals | Optional debug chip — not required for security |
 | **Flaky live Gemini / wording cases** | Seen in seeker Playwright audits; model/quota/routing edge cases | Prompt polish + monitoring; not “missing agents” |
 | **Track 5 fine-tune** | Different assessment track | Start only when assigned |
@@ -577,6 +577,8 @@ You need isolation only when you want **mutating E2E proof** with zero fear.
 | [`ASSESSMENT_3_TRACK3_GUARDRAILS.md`](./ASSESSMENT_3_TRACK3_GUARDRAILS.md) | Confidence / refuse / clarify math |
 | [`ASSESSMENT_3_TRACK3_IDEMPOTENT_APPLICATIONS.md`](./ASSESSMENT_3_TRACK3_IDEMPOTENT_APPLICATIONS.md) | UNIQUE + concurrency evidence |
 | [`ASSESSMENT_3_TRACK3_RESUME_ACCESS_CONTROL.md`](./ASSESSMENT_3_TRACK3_RESUME_ACCESS_CONTROL.md) | Resume bucket + policies |
+| [`ASSESSMENT_3_TRACK3_SHARED_MEMORY_PATH_A.md`](./ASSESSMENT_3_TRACK3_SHARED_MEMORY_PATH_A.md) | In-process shared memory proof |
+| [`ASSESSMENT_3_TRACK3_SHARED_MEMORY_PATH_B.md`](./ASSESSMENT_3_TRACK3_SHARED_MEMORY_PATH_B.md) | Durable `agent_sessions` Path B |
 | [`ASSESSMENT_3_TRACK3_READONLY_BROWSER_VERIFICATION.md`](./ASSESSMENT_3_TRACK3_READONLY_BROWSER_VERIFICATION.md) | Task 3F Mode A read-only browser proof |
 | [`SEEKER_ASSISTANT_PLAYWRIGHT_UI_REPORT.md`](./SEEKER_ASSISTANT_PLAYWRIGHT_UI_REPORT.md) | Live seeker UI audit notes |
 | [`RECRUITER_FULL_PLAYWRIGHT_UI_REPORT.md`](./RECRUITER_FULL_PLAYWRIGHT_UI_REPORT.md) | Recruiter shell UI audit |
@@ -593,5 +595,6 @@ You need isolation only when you want **mutating E2E proof** with zero fear.
 | 2026-11-06 | Linked **[`ASSESSMENT_3_TRACK3_STATUS.md`](./ASSESSMENT_3_TRACK3_STATUS.md)** — done vs pending vs Assessment 3 brief. |
 | 2026-11-06 | **Path A shared memory** verified (UI + unit); linked [`ASSESSMENT_3_TRACK3_SHARED_MEMORY_PATH_A.md`](./ASSESSMENT_3_TRACK3_SHARED_MEMORY_PATH_A.md). |
 | 2026-11-06 | **Task 3F Mode A** completed — read-only browser verification against production-backed Supabase; report [`ASSESSMENT_3_TRACK3_READONLY_BROWSER_VERIFICATION.md`](./ASSESSMENT_3_TRACK3_READONLY_BROWSER_VERIFICATION.md). Mode B mutating E2E still blocked without non-prod DB. |
+| 2026-11-06 | **Path B durable memory** — code + proposed `agent_sessions` migration; live apply still requires explicit approval ([`ASSESSMENT_3_TRACK3_SHARED_MEMORY_PATH_B.md`](./ASSESSMENT_3_TRACK3_SHARED_MEMORY_PATH_B.md)). |
 
 *(Append a row here whenever multi-agent behavior or Track 3 status changes.)*

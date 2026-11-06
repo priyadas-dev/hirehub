@@ -1,10 +1,17 @@
 /**
- * Server-side shared memory for multi-agent turns (Phase 6 / Task 3).
- * In-process only — no DB migration. Keyed by userId + conversationId.
- * Callers must pass PII-redacted text; appendTurn also re-redacts defensively.
+ * Server-side shared memory for multi-agent turns (Phase 6 / Task 3 / Path B).
+ * Process-local Map cache keyed by userId + conversationId.
+ * Path B persists via hydrate/persist helpers (JWT agent_sessions) — see
+ * `durable-agent-memory.ts`. Callers must pass PII-redacted text; appendTurn
+ * also re-redacts defensively.
  */
 
 import { redactPii } from "@/lib/ai/guardrails/pii";
+import {
+  conversationMemoryToPayload,
+  parseAgentSessionPayload,
+  type AgentSessionMemoryPayload,
+} from "@/lib/ai/memory/agent-session-payload";
 
 export type AgentMemoryTurn = {
   role: "user" | "assistant" | "system";
@@ -58,7 +65,15 @@ export type ApplicationMemoryBundle = {
   recentJobs: AgentMemoryRecentJob[];
 };
 
-const store = new Map<string, AgentConversationMemory>();
+type DurableMetaEntry = {
+  expectedUpdatedAt: string | null;
+  dirty: boolean;
+  durableEnabled: boolean;
+};
+
+/** Shared process cache (Path A default). Isolated factories use their own Maps. */
+const sharedStore = new Map<string, AgentConversationMemory>();
+const sharedDurableMeta = new Map<string, DurableMetaEntry>();
 
 const EMPTY_PREFS = (): AgentMemoryPreferences => ({
   locations: [],
@@ -136,8 +151,26 @@ function mergePreferenceRecords(
   };
 }
 
-export function createServerAgentMemory(options?: { maxTurns?: number }) {
+export function createServerAgentMemory(options?: {
+  maxTurns?: number;
+  /**
+   * When true, this factory owns private Maps (safe for Path B per-request hydrate/persist).
+   * Default false preserves Path A shared process Map across factories.
+   */
+  isolated?: boolean;
+}) {
   const maxTurns = options?.maxTurns ?? 24;
+  const isolated = Boolean(options?.isolated);
+  const store = isolated ? new Map<string, AgentConversationMemory>() : sharedStore;
+  const durableMeta = isolated ? new Map<string, DurableMetaEntry>() : sharedDurableMeta;
+
+  function markDirty(userId: string, conversationId: string) {
+    const key = memoryKey(userId, conversationId);
+    const meta = durableMeta.get(key);
+    if (meta?.durableEnabled) {
+      durableMeta.set(key, { ...meta, dirty: true });
+    }
+  }
 
   return {
     get(userId: string, conversationId: string): AgentConversationMemory | null {
@@ -197,6 +230,7 @@ export function createServerAgentMemory(options?: { maxTurns?: number }) {
       }
       mem.updatedAt = new Date().toISOString();
       store.set(memoryKey(userId, conversationId), mem);
+      markDirty(userId, conversationId);
       return { memory: mem, appended: true };
     },
 
@@ -206,6 +240,7 @@ export function createServerAgentMemory(options?: { maxTurns?: number }) {
       mem.skills = [...set].slice(0, 24);
       mem.updatedAt = new Date().toISOString();
       store.set(memoryKey(userId, conversationId), mem);
+      markDirty(userId, conversationId);
       return mem.skills;
     },
 
@@ -223,6 +258,7 @@ export function createServerAgentMemory(options?: { maxTurns?: number }) {
       mem.preferences = mergePreferenceRecords(mem.preferences ?? EMPTY_PREFS(), incoming);
       mem.updatedAt = new Date().toISOString();
       store.set(memoryKey(userId, conversationId), mem);
+      markDirty(userId, conversationId);
       return mem.preferences;
     },
 
@@ -252,6 +288,7 @@ export function createServerAgentMemory(options?: { maxTurns?: number }) {
       mem.recentJobs = [...byId.values()].slice(0, 8);
       mem.updatedAt = new Date().toISOString();
       store.set(memoryKey(userId, conversationId), mem);
+      markDirty(userId, conversationId);
       return mem.recentJobs;
     },
 
@@ -292,12 +329,74 @@ export function createServerAgentMemory(options?: { maxTurns?: number }) {
     },
 
     clear(userId: string, conversationId: string) {
-      store.delete(memoryKey(userId, conversationId));
+      const key = memoryKey(userId, conversationId);
+      store.delete(key);
+      durableMeta.delete(key);
     },
 
-    /** Test helper */
+    /** Replace in-process row from a validated Path B payload (hydrate). */
+    replaceFromPayload(
+      userId: string,
+      conversationId: string,
+      payload: AgentSessionMemoryPayload,
+      expectedUpdatedAt: string | null,
+    ): AgentConversationMemory {
+      const parsed = parseAgentSessionPayload(payload) ?? payload;
+      const created: AgentConversationMemory = {
+        userId,
+        conversationId,
+        updatedAt: expectedUpdatedAt ?? new Date().toISOString(),
+        turns: parsed.turns.slice(-maxTurns),
+        skills: parsed.skills.slice(0, 24),
+        preferences: parsed.preferences ?? EMPTY_PREFS(),
+        recentJobs: parsed.recentJobs.slice(0, 8),
+      };
+      const key = memoryKey(userId, conversationId);
+      store.set(key, created);
+      durableMeta.set(key, {
+        expectedUpdatedAt,
+        dirty: false,
+        durableEnabled: true,
+      });
+      return created;
+    },
+
+    /** Mark session as durable-backed even when DB row is empty. */
+    enableDurableTracking(userId: string, conversationId: string, expectedUpdatedAt: string | null) {
+      const key = memoryKey(userId, conversationId);
+      this.ensure(userId, conversationId);
+      durableMeta.set(key, {
+        expectedUpdatedAt,
+        dirty: durableMeta.get(key)?.dirty ?? false,
+        durableEnabled: true,
+      });
+    },
+
+    getDurableMeta(userId: string, conversationId: string) {
+      return durableMeta.get(memoryKey(userId, conversationId)) ?? null;
+    },
+
+    markPersisted(userId: string, conversationId: string, updatedAt: string) {
+      const key = memoryKey(userId, conversationId);
+      const mem = store.get(key);
+      if (mem) mem.updatedAt = updatedAt;
+      durableMeta.set(key, {
+        expectedUpdatedAt: updatedAt,
+        dirty: false,
+        durableEnabled: true,
+      });
+    },
+
+    toPayload(userId: string, conversationId: string): AgentSessionMemoryPayload | null {
+      const mem = this.get(userId, conversationId);
+      if (!mem) return null;
+      return conversationMemoryToPayload(mem);
+    },
+
+    /** Test helper — clears process cache (simulates restart). Does not touch DB. */
     _resetForTests() {
       store.clear();
+      durableMeta.clear();
     },
   };
 }

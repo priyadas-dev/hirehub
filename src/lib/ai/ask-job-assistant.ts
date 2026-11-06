@@ -31,6 +31,8 @@ import { createSupabaseSaveJobClient } from "@/lib/save-job-supabase";
 import { createSupabaseSeekerApplicationStatusClient } from "@/lib/seeker-application-status-supabase";
 import { isApplicationDeadlinePassed } from "@/lib/job-fields";
 import { storageFirstFolder, storagePathIsSafe } from "@/lib/hirehub-storage";
+import { createServerAgentMemory } from "@/lib/ai/memory/server-memory";
+import { withDurableAgentMemory } from "@/lib/ai/memory/durable-agent-memory";
 
 export type SeekerAssistantContext = {
   supabase: SupabaseClient;
@@ -155,43 +157,57 @@ export async function runSeekerAskJobAssistantViaSupervisor(
   const saveClient = createSupabaseSaveJobClient(ctx.supabase);
   const statusClient = createSupabaseSeekerApplicationStatusClient(ctx.supabase);
   const seekerId = ctx.userId;
+  const conversationId = data.conversationId?.trim() || "seeker-assistant";
+  // Isolated Map per request: avoids concurrent hydrate/persist races on the shared Path A cache.
+  const memory = createServerAgentMemory({ isolated: true });
 
-  return runSupervisor(data, {
-    role: deps.role,
+  // Path B: hydrate from agent_sessions (JWT + RLS); fall back to in-process Map if table missing.
+  const { result } = await withDurableAgentMemory({
+    memory,
     userId: seekerId,
-    conversationId: data.conversationId?.trim() || "seeker-assistant",
-    listLiveJobs: deps.listLiveJobs,
-    retrieveCorpus: deps.retrieveCorpus,
-    runApplicationAgent: (input) =>
-      runApplicationAgent(input, {
-        seekerId,
-        applyClient,
-        isDeadlinePassed: (job) => isApplicationDeadlinePassed(job.application_deadline),
-        assertResumeStoragePath: (path, id) => {
-          if (!storagePathIsSafe(path) || storageFirstFolder(path) !== id) {
-            throw new Error("Resume storage path must belong to the signed-in seeker.");
-          }
-        },
-        loadSeekerResume: async () => {
-          const { data: row } = await ctx.supabase
-            .from("profiles")
-            .select("resume_storage_path,resume_file_name,resume_url,portfolio_url")
-            .eq("id", seekerId)
-            .maybeSingle();
-          if (!row) return null;
-          return {
-            resumeStoragePath: (row as { resume_storage_path?: string | null }).resume_storage_path,
-            resumeFileName: (row as { resume_file_name?: string | null }).resume_file_name,
-            resumeUrl: (row as { resume_url?: string | null }).resume_url,
-            portfolioUrl: (row as { portfolio_url?: string | null }).portfolio_url,
-          };
-        },
+    conversationId,
+    supabase: ctx.supabase,
+    run: () =>
+      runSupervisor(data, {
+        role: deps.role,
+        userId: seekerId,
+        conversationId,
+        memory,
+        listLiveJobs: deps.listLiveJobs,
+        retrieveCorpus: deps.retrieveCorpus,
+        runApplicationAgent: (input) =>
+          runApplicationAgent(input, {
+            seekerId,
+            applyClient,
+            isDeadlinePassed: (job) => isApplicationDeadlinePassed(job.application_deadline),
+            assertResumeStoragePath: (path, id) => {
+              if (!storagePathIsSafe(path) || storageFirstFolder(path) !== id) {
+                throw new Error("Resume storage path must belong to the signed-in seeker.");
+              }
+            },
+            loadSeekerResume: async () => {
+              const { data: row } = await ctx.supabase
+                .from("profiles")
+                .select("resume_storage_path,resume_file_name,resume_url,portfolio_url")
+                .eq("id", seekerId)
+                .maybeSingle();
+              if (!row) return null;
+              return {
+                resumeStoragePath: (row as { resume_storage_path?: string | null }).resume_storage_path,
+                resumeFileName: (row as { resume_file_name?: string | null }).resume_file_name,
+                resumeUrl: (row as { resume_url?: string | null }).resume_url,
+                portfolioUrl: (row as { portfolio_url?: string | null }).portfolio_url,
+              };
+            },
+          }),
+        runSaveJobTool: (input) => runSaveJobTool(input, { seekerId, saveClient }),
+        runCheckApplicationStatusTool: (input) =>
+          runCheckApplicationStatusTool(input, { seekerId, statusClient }),
+        runLegacyPipeline: (input) => runJobAssistant(input, deps),
       }),
-    runSaveJobTool: (input) => runSaveJobTool(input, { seekerId, saveClient }),
-    runCheckApplicationStatusTool: (input) =>
-      runCheckApplicationStatusTool(input, { seekerId, statusClient }),
-    runLegacyPipeline: (input) => runJobAssistant(input, deps),
   });
+
+  return result;
 }
 
 /**

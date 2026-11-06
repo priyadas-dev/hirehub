@@ -31,7 +31,7 @@ What’s left is mostly **proof polish** (browser E2E, live resume JWT matrix, d
 | Discovery agent (recommend jobs, no invent) | **Done** | Live approved jobs + corpus |
 | Application agent (apply / save / status) | **Done** | Real JWT actions |
 | Recruiter agent (shortlist + draft outreach) | **Done** | + `/recruiter/agent` UI |
-| Shared memory | **Done for Track 3** (durability still optional) | Path A verified UI + unit; process-local only — see `ASSESSMENT_3_TRACK3_SHARED_MEMORY_PATH_A.md` |
+| Shared memory | **Done for Track 3** (Path B code ready; DB apply pending) | Path A verified; Path B adapter + proposed `agent_sessions` — see `ASSESSMENT_3_TRACK3_SHARED_MEMORY_PATH_B.md` |
 | Validation | **Done** | |
 | PII redaction | **Done** | |
 | Low-confidence refusal / clarify | **Done** (Task 3C) | |
@@ -72,7 +72,7 @@ That matches the brief’s “done looks like” for Track 3:
 |---|---|---|
 | **Task 3F — Mode B mutating browser E2E** (confirm apply / shortlist / save / send) | Strongest write-path demo evidence | Mode A read-only verification **done**; Mode B still optional / needs non-prod |
 | **Live resume denial** (other recruiter / anon get 403) | Hard Problem 2 “proof Amol wants” | Unit/policy mirror exists; live matrix still strengthens bonus/security story |
-| **Durable shared memory (Path B)** | Survives server restart / multi-instance | Optional only — Path A proved in-process sharing; needs schema approval |
+| **Durable shared memory (Path B) — apply migration** | Code + proposed SQL in repo; survives restart only after `agent_sessions` exists | Explicitly approve/apply `PROPOSED_0027_agent_sessions.sql` on Supabase |
 | **Optional UI “which agent ran” badge** | Easier mentor explanation | Not required by brief |
 
 ### Not Track 3 pending (other tracks)
@@ -89,7 +89,7 @@ HubSpot / Resend / Calendar depth, CRM campaign tracking UI, 20k RAG eval packag
 | 2 | Discovery | **Done** |
 | 3 | Application | **Done** |
 | 4 | Recruiter | **Done** |
-| 5 | Shared memory | **Done** for brief (in-process; Path A verified; durability optional) |
+| 5 | Shared memory | **Done** for brief (Path A verified; Path B adapter ready; migration apply pending approval) |
 | 6 | Guardrails | **Done** |
 | 7 | Seeker UI → Supervisor | **Done** |
 | 8 | Recruiter UI | **Done** |
@@ -128,16 +128,17 @@ Evidence: [`ASSESSMENT_3_TRACK3_SHARED_MEMORY_PATH_A.md`](./ASSESSMENT_3_TRACK3_
 3. ~~Restart limitation documented + unit “new instance empty”~~ **Pass**  
 4. No schema / no redesign  
 
-### Path B — Durable memory (needs your explicit schema approval)
+### Path B — Durable memory — **CODE COMPLETE; migration apply pending**
 
-1. You approve a proposed `agent_sessions` (or similar) migration — **do not apply** until you say so.  
-2. Design RLS: only `auth.uid()` can read/write own rows; store redacted JSON only.  
-3. Implement store adapter: load/save behind same `createServerAgentMemory` API (in-memory cache optional).  
-4. Wire Supervisor to durable store; keep PII redaction.  
-5. Tests (mock client) + optional manual restart proof.  
-6. Update STATUS + MULTI_AGENT_GUIDE.
+Evidence: [`ASSESSMENT_3_TRACK3_SHARED_MEMORY_PATH_B.md`](./ASSESSMENT_3_TRACK3_SHARED_MEMORY_PATH_B.md), `PROPOSED_0027_agent_sessions.sql`, `src/test/path-b-durable-memory.test.ts`.
 
-**Do not start Path B code until you reply with approval for a proposed migration.**
+1. ~~Proposed `agent_sessions` + RLS~~ **In repo** (not applied to hosted DB yet)  
+2. ~~JWT load/save adapter + optimistic concurrency~~ **Done**  
+3. ~~Seeker Supervisor hydrate/persist wiring~~ **Done** (falls back to Path A if table missing)  
+4. ~~Unit tests~~ **Done**  
+5. **You still must explicitly approve applying the migration** to staging/production before restart durability is live  
+
+**Until migration is applied:** shared memory behaves as Path A (in-process) with safe fallback.
 
 ---
 
@@ -148,3 +149,4 @@ Evidence: [`ASSESSMENT_3_TRACK3_SHARED_MEMORY_PATH_A.md`](./ASSESSMENT_3_TRACK3_
 | 2026-11-06 | Initial Track 3 status snapshot vs Assessment 3 brief + codebase audit. |
 | 2026-11-06 | Added shared-memory Path A (prove) vs Path B (durable, needs schema approval). |
 | 2026-11-06 | **Path A completed** — UI verify + docs + restart-limitation unit test; memory marked done for Track 3 brief. |
+| 2026-11-06 | **Path B code** — `agent_sessions` proposed SQL + durable adapter + seeker wiring + unit tests; **DB apply still needs your approval**. |
