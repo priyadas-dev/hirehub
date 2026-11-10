@@ -196,6 +196,7 @@ export type AskJobAssistantResult =
         | "validation"
         | "unauthorized"
         | "forbidden"
+        | "rate_limited"
         | "gemini_unavailable"
         | "generation_failed"
         | "resume_unreadable"

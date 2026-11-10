@@ -33,6 +33,11 @@ import { isApplicationDeadlinePassed } from "@/lib/job-fields";
 import { storageFirstFolder, storagePathIsSafe } from "@/lib/hirehub-storage";
 import { createServerAgentMemory } from "@/lib/ai/memory/server-memory";
 import { withDurableAgentMemory } from "@/lib/ai/memory/durable-agent-memory";
+import {
+  aiMatchGuard,
+  rateLimitedAssistantMessage,
+} from "@/lib/ai/ai-match-guard";
+import type { LiveApprovedJob } from "@/lib/ai/live-recommend";
 
 export type SeekerAssistantContext = {
   supabase: SupabaseClient;
@@ -104,6 +109,12 @@ export function buildSeekerJobAssistantDeps(ctx: SeekerAssistantContext): JobAss
       const skills = options?.skillTerms ?? [];
       const limit = options?.limit ?? 8;
       const filterQuery = buildLiveJobFilterQuery(question);
+      const cacheQuery = `${question.slice(0, 200)}|skills:${skills.join(",").slice(0, 80)}|limit:${limit}`;
+      const cached = aiMatchGuard.getCached<{ ok: true; jobs: LiveApprovedJob[] }>(
+        ctx.userId,
+        cacheQuery,
+      );
+      if (cached) return cached;
 
       const primary = await recommendApprovedLiveJobs(ctx.supabase as never, {
         query: question.slice(0, 200),
@@ -111,7 +122,11 @@ export function buildSeekerJobAssistantDeps(ctx: SeekerAssistantContext): JobAss
       });
       if (!primary.ok) return { ok: false, message: primary.message };
 
-      if (!skills.length) return { ok: true, jobs: primary.jobs };
+      if (!skills.length) {
+        const result = { ok: true as const, jobs: primary.jobs };
+        aiMatchGuard.setCached(ctx.userId, cacheQuery, result);
+        return result;
+      }
 
       const skillPass = await recommendApprovedLiveJobs(ctx.supabase as never, {
         query: `${question.slice(0, 120)} ${skills.join(" ")}`.slice(0, 200),
@@ -135,7 +150,9 @@ export function buildSeekerJobAssistantDeps(ctx: SeekerAssistantContext): JobAss
       }
 
       const merged = filterLiveJobsByQuery([...byId.values()], question);
-      return { ok: true, jobs: merged };
+      const result = { ok: true as const, jobs: merged };
+      aiMatchGuard.setCached(ctx.userId, cacheQuery, result);
+      return result;
     },
     generateAnswer: async (prompt) => {
       const generated = await fetchGeminiGeneratedText(prompt, readGeminiApiKey());
@@ -219,6 +236,15 @@ export const askJobAssistant = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((data: unknown) => askJobAssistantInputSchema.parse(data))
   .handler(async ({ data, context }): Promise<AskJobAssistantResult> => {
+    const rate = aiMatchGuard.checkRateLimit(context.userId);
+    if (!rate.allowed) {
+      return {
+        ok: false,
+        code: "rate_limited",
+        message: rateLimitedAssistantMessage(rate.retryAfterMs),
+      };
+    }
+
     const { data: profile, error: profileError } = await context.supabase
       .from("profiles")
       .select("role")

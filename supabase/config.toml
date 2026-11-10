@@ -8,3 +8,7 @@ verify_jwt = true
 # or scheduled POSTs fail at the gateway before CRON_SECRET is checked.
 [functions.close-expired-jobs]
 verify_jwt = false
+
+# Interview RSVP poller (Phase D2/D3). Same cron-secret pattern; no user JWT.
+[functions.sync-interview-rsvp]
+verify_jwt = false

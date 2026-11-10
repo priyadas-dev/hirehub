@@ -1,4 +1,4 @@
-# HireHub Assessment 3 — Phase 2 CI skeleton
+# HireHub Assessment 3 — Track 6 CI
 # Runs the Vitest unit suite without production secrets or live Supabase credentials.
 name: CI
 
@@ -8,6 +8,10 @@ on:
     branches:
       - main
       - master
+      - multi-agent
+      - assessment-3-integration
+      - feature/resend-crm-integration
+      - feature/hirehub-google-calendar-integration
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
