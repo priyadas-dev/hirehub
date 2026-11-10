@@ -1,0 +1,145 @@
+{
+  "generatedAt": "2026-11-09T11:15:23.425Z",
+  "baseURL": "http://127.0.0.1:8080",
+  "account": "mi***@gmail.com",
+  "mode": "A-safe-read-mostly (no Confirm shortlist / no email send)",
+  "checks": [
+    {
+      "id": "AUTH-01-unauthenticated-agent",
+      "status": "pass",
+      "notes": []
+    },
+    {
+      "id": "RA-01-page-load",
+      "status": "pass",
+      "notes": [
+        "Heading, context strip, chat panel present"
+      ]
+    },
+    {
+      "id": "RA-02-sidebar-nav",
+      "status": "pass",
+      "notes": [
+        "AI Recruiter Agent in sidebar"
+      ]
+    },
+    {
+      "id": "RA-03-history-chrome",
+      "status": "pass",
+      "notes": [
+        "Chat history + New present"
+      ]
+    },
+    {
+      "id": "RA-04-owned-jobs-context",
+      "status": "pass",
+      "notes": [
+        "Selected owned job that has applicants"
+      ]
+    },
+    {
+      "id": "RA-05-applicants-context",
+      "status": "pass",
+      "notes": [
+        "Selected an applicant"
+      ]
+    },
+    {
+      "id": "RA-06-starters",
+      "status": "pass",
+      "notes": [
+        "All 4 starter chips visible"
+      ]
+    },
+    {
+      "id": "MA-01-list-jobs-chat",
+      "status": "pass",
+      "notes": [
+        "via Supervisor markers: 1",
+        "Jobs listed in reply",
+        "New payloads: 0"
+      ]
+    },
+    {
+      "id": "MA-02-show-applicants",
+      "status": "pass",
+      "notes": [
+        "Applicants reply rendered"
+      ]
+    },
+    {
+      "id": "MA-03-propose-shortlist-no-confirm",
+      "status": "pass",
+      "notes": [
+        "Confirm shortlist bar shown (propose-only — NOT clicking Confirm)",
+        "Cancelled pending confirm (Mode A)",
+        "Payloads: []"
+      ]
+    },
+    {
+      "id": "MA-04-draft-outreach",
+      "status": "pass",
+      "notes": [
+        "Outreach draft UI shown (not sent)",
+        "Subject length: 27",
+        "No email-send control found (good)",
+        "Payloads: []"
+      ]
+    },
+    {
+      "id": "MA-05-supervised-nl-shortlist",
+      "status": "pass",
+      "notes": [
+        "NL shortlist hit confirm gate via Supervisor"
+      ]
+    },
+    {
+      "id": "RA-07-history-rename-delete",
+      "status": "pass",
+      "notes": [
+        "Rename + delete exercised"
+      ]
+    },
+    {
+      "id": "RA-08-new-clears-chat",
+      "status": "pass",
+      "notes": [
+        "New conversation clicked"
+      ]
+    },
+    {
+      "id": "RA-09-applicants-link",
+      "status": "pass",
+      "notes": [
+        "Applicants header link works"
+      ]
+    },
+    {
+      "id": "RA-10-mobile",
+      "status": "pass",
+      "notes": [
+        "Agent page loads at 390px"
+      ]
+    },
+    {
+      "id": "RA-11-copy-draft-if-present",
+      "status": "pass",
+      "notes": [
+        "Copy draft clicked"
+      ]
+    }
+  ],
+  "multiAgent": {
+    "verdict": "working-inferred-from-ui",
+    "notes": [
+      "UI shows via Supervisor (3) and/or specialist outcomes; routedTo=n/a."
+    ],
+    "routesSeen": [],
+    "payloads": [],
+    "viaSupervisorUiMarkers": 3,
+    "hasJobs": true,
+    "hasApplicants": true
+  },
+  "consoleErrors": [],
+  "pageErrors": []
+}

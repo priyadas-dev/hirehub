@@ -126,7 +126,7 @@ It means you can show:
 ### 3.4 Recruiter agent
 
 **Code:** `src/lib/ai/agents/recruiter.ts`, `recruiter-agent-runner.ts`, `ask-recruiter-agent.ts`  
-**UI:** `/recruiter/agent`  
+**UI:** `/recruiter/agent` (chat-first hybrid: owned-job/applicant search + chat + confirm chip + draft-only outreach)  
 
 **Job:**
 
@@ -345,7 +345,7 @@ It means **proof, polish, or durability** work is still open.
 | **Durable shared memory (Path B) — apply SQL** | Adapter + proposed `agent_sessions` ready; hosted DB not updated until you approve | Apply `PROPOSED_0027` — see [`ASSESSMENT_3_TRACK3_SHARED_MEMORY_PATH_B.md`](./ASSESSMENT_3_TRACK3_SHARED_MEMORY_PATH_B.md) |
 | **Visible “routed to Discovery” badge in UI** | Product UX hides orchestration internals | Optional debug chip — not required for security |
 | **Flaky live Gemini / wording cases** | Seen in seeker Playwright audits; model/quota/routing edge cases | Prompt polish + monitoring; not “missing agents” |
-| **Track 5 fine-tune** | Different assessment track | Start only when assigned |
+| **Track 5 fine-tune** | Different assessment track — **done** (dual-benchmark + preferred-band synthetic) | See [`ASSESSMENT_3_TRACK5_REPORT.md`](./ASSESSMENT_3_TRACK5_REPORT.md) — default **`v2-div-b`** (Macro F1 ≥ 0.85, acc ∈ (70%, 90%)); OOD `track5_ood_v1` reported separately |
 | **Auto-send recruiter email** | Explicitly out of scope (dangerous) | Keep draft-only unless product later adds a real confirm-send UI |
 
 ### Safer alternatives to “another Supabase” for 3F
@@ -579,7 +579,9 @@ You need isolation only when you want **mutating E2E proof** with zero fear.
 | [`ASSESSMENT_3_TRACK3_RESUME_ACCESS_CONTROL.md`](./ASSESSMENT_3_TRACK3_RESUME_ACCESS_CONTROL.md) | Resume bucket + policies |
 | [`ASSESSMENT_3_TRACK3_SHARED_MEMORY_PATH_A.md`](./ASSESSMENT_3_TRACK3_SHARED_MEMORY_PATH_A.md) | In-process shared memory proof |
 | [`ASSESSMENT_3_TRACK3_SHARED_MEMORY_PATH_B.md`](./ASSESSMENT_3_TRACK3_SHARED_MEMORY_PATH_B.md) | Durable `agent_sessions` Path B |
-| [`ASSESSMENT_3_TRACK3_READONLY_BROWSER_VERIFICATION.md`](./ASSESSMENT_3_TRACK3_READONLY_BROWSER_VERIFICATION.md) | Task 3F Mode A read-only browser proof |
+| [`ASSESSMENT_3_TRACK3_FINAL_REPORT.md`](./ASSESSMENT_3_TRACK3_FINAL_REPORT.md) | Task 3G final Track 3 evidence synthesis |
+| [`ASSESSMENT_3_TRACK3_BROWSER_VERIFICATION.md`](./ASSESSMENT_3_TRACK3_BROWSER_VERIFICATION.md) | Task 3F Mode A read-only browser proof (canonical) |
+| [`ASSESSMENT_3_TRACK3_READONLY_BROWSER_VERIFICATION.md`](./ASSESSMENT_3_TRACK3_READONLY_BROWSER_VERIFICATION.md) | Task 3F Mode A earlier notes (points to canonical) |
 | [`SEEKER_ASSISTANT_PLAYWRIGHT_UI_REPORT.md`](./SEEKER_ASSISTANT_PLAYWRIGHT_UI_REPORT.md) | Live seeker UI audit notes |
 | [`RECRUITER_FULL_PLAYWRIGHT_UI_REPORT.md`](./RECRUITER_FULL_PLAYWRIGHT_UI_REPORT.md) | Recruiter shell UI audit |
 
@@ -596,5 +598,10 @@ You need isolation only when you want **mutating E2E proof** with zero fear.
 | 2026-11-06 | **Path A shared memory** verified (UI + unit); linked [`ASSESSMENT_3_TRACK3_SHARED_MEMORY_PATH_A.md`](./ASSESSMENT_3_TRACK3_SHARED_MEMORY_PATH_A.md). |
 | 2026-11-06 | **Task 3F Mode A** completed — read-only browser verification against production-backed Supabase; report [`ASSESSMENT_3_TRACK3_READONLY_BROWSER_VERIFICATION.md`](./ASSESSMENT_3_TRACK3_READONLY_BROWSER_VERIFICATION.md). Mode B mutating E2E still blocked without non-prod DB. |
 | 2026-11-06 | **Path B durable memory** — code + proposed `agent_sessions` migration; live apply still requires explicit approval ([`ASSESSMENT_3_TRACK3_SHARED_MEMORY_PATH_B.md`](./ASSESSMENT_3_TRACK3_SHARED_MEMORY_PATH_B.md)). |
+| 2026-11-09 | **Task 3F re-verified** (Mode A) against production-backed Supabase; canonical report [`ASSESSMENT_3_TRACK3_BROWSER_VERIFICATION.md`](./ASSESSMENT_3_TRACK3_BROWSER_VERIFICATION.md) — 14 pass / 0 fail / 4 skipped. |
+| 2026-11-09 | **Task 3G** final Track 3 evidence report: [`ASSESSMENT_3_TRACK3_FINAL_REPORT.md`](./ASSESSMENT_3_TRACK3_FINAL_REPORT.md). |
+| 2026-11-09 | **Recruiter Agent UI** rebuilt as chat-first hybrid (search owned jobs/applicants → shortlist confirm → draft outreach; still Supervisor-only, no auto-send). |
+| 2026-11-09 | **P0 status sync:** §9 Track 5 fine-tune row updated to **done** (synthetic) with link to [`ASSESSMENT_3_TRACK5_REPORT.md`](./ASSESSMENT_3_TRACK5_REPORT.md). |
+| 2026-11-09 | **P0 status re-sync (post P4/P5):** §9 Track 5 row updated for default **`v2-div-b`** + separate OOD `track5_ood_v1` note. |
 
 *(Append a row here whenever multi-agent behavior or Track 3 status changes.)*

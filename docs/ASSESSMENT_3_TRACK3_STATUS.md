@@ -3,10 +3,11 @@
 **Track:** Multi-agent orchestration + guardrails (**20 pts**)  
 **Compared against:** Assessment 3 requirements brief (Track 3 + Hard Problems 1, 2, 3, 5)  
 **Codebase reviewed:** HireHub (Supervisor, Discovery, Application, Recruiter, guardrails, UIs, tests, docs)  
-**Date:** 2026-11-06  
-**Related human guide:** [`ASSESSMENT_3_TRACK3_MULTI_AGENT_GUIDE.md`](./ASSESSMENT_3_TRACK3_MULTI_AGENT_GUIDE.md)
+**Date:** 2026-11-09 (status refreshed for Task 3G; Track 5 cross-link updated)  
+**Related human guide:** [`ASSESSMENT_3_TRACK3_MULTI_AGENT_GUIDE.md`](./ASSESSMENT_3_TRACK3_MULTI_AGENT_GUIDE.md)  
+**Final evidence report:** [`ASSESSMENT_3_TRACK3_FINAL_REPORT.md`](./ASSESSMENT_3_TRACK3_FINAL_REPORT.md)
 
-> Living note: update this file when Track 3 completion status changes (e.g. Task 3F finished, live resume JWT matrix recorded).
+> Living note: update this file when Track 3 completion status changes (e.g. Mode B finished, live resume JWT matrix recorded). Do **not** mark Mode B / live Storage denial / Path B DB apply as done until evidence exists.
 
 ---
 
@@ -43,7 +44,7 @@ What’s left is mostly **proof polish** (browser E2E, live resume JWT matrix, d
 | Seeker UI through Supervisor | **Done** | `/seeker/assistant` |
 | Recruiter agent UI | **Done** | Task 3B |
 | Documented guardrails | **Done** | Track 3 MD guides |
-| Full live browser multi-agent E2E (Task 3F) | **Mode A done** / Mode B pending | Read-only report: [`ASSESSMENT_3_TRACK3_READONLY_BROWSER_VERIFICATION.md`](./ASSESSMENT_3_TRACK3_READONLY_BROWSER_VERIFICATION.md); mutating E2E still needs non-prod DB |
+| Full live browser multi-agent E2E (Task 3F) | **Mode A done** / Mode B pending | Canonical: [`ASSESSMENT_3_TRACK3_BROWSER_VERIFICATION.md`](./ASSESSMENT_3_TRACK3_BROWSER_VERIFICATION.md) (2026-11-09: 14 pass / 0 fail / 4 skip); mutating Mode B still needs non-prod DB |
 
 ---
 
@@ -77,7 +78,14 @@ That matches the brief’s “done looks like” for Track 3:
 
 ### Not Track 3 pending (other tracks)
 
-HubSpot / Resend / Calendar depth, CRM campaign tracking UI, 20k RAG eval packaging, fine-tune, CI / Sentry packaging, DCT hand-in.
+| Track / item | Status | Notes |
+|---|---|---|
+| **Track 5 — model improvement / fine-tune** | **Done** (dual-benchmark + preferred-band synthetic) | Final package: [`ASSESSMENT_3_TRACK5_REPORT.md`](./ASSESSMENT_3_TRACK5_REPORT.md) · exec: [`ASSESSMENT_3_TRACK5_EXEC_SUMMARY.md`](./ASSESSMENT_3_TRACK5_EXEC_SUMMARY.md). Default **`v2-div-b`** (Macro F1 **0.861**, acc **0.864** ∈ (70%, 90%)). Independent OOD `track5_ood_v1` n=215 under frozen **`v2-div-b`**: Macro F1 **0.218** / acc **0.247** (prior `enriched_v2` freeze ~0.21 preserved) — separate headline, not HireHub-production proof. |
+| HubSpot / Resend / Calendar depth | Pending (other track) | Not Track 3 |
+| CRM campaign tracking UI | Pending (other track) | Not Track 3 |
+| 20k RAG eval packaging | Pending / separate | Track 4 scale packaging |
+| CI / Sentry packaging | Pending (other track) | Not Track 3 |
+| DCT hand-in | Pending process | Not a code gap |
 
 ---
 
@@ -97,8 +105,9 @@ HubSpot / Resend / Calendar depth, CRM campaign tracking UI, 20k RAG eval packag
 | 10 | Resume ACL | **Partial** (policy + unit mirror; no live JWT matrix) |
 | 11 | Tests | **Done** |
 | 12 | Docs | **Done** |
-| — | Task 3F Mode A read-only browser | **Done** |
-| — | Task 3F Mode B mutating browser | **Paused** (prod-backed) |
+| — | Task 3F Mode A read-only browser | **Done** (re-verified 2026-11-09) |
+| — | Task 3F Mode B mutating browser | **Paused** (prod-backed; needs isolated DB) |
+| — | Task 3G final evidence report | **Done** — [`ASSESSMENT_3_TRACK3_FINAL_REPORT.md`](./ASSESSMENT_3_TRACK3_FINAL_REPORT.md) |
 
 ---
 
@@ -150,3 +159,7 @@ Evidence: [`ASSESSMENT_3_TRACK3_SHARED_MEMORY_PATH_B.md`](./ASSESSMENT_3_TRACK3_
 | 2026-11-06 | Added shared-memory Path A (prove) vs Path B (durable, needs schema approval). |
 | 2026-11-06 | **Path A completed** — UI verify + docs + restart-limitation unit test; memory marked done for Track 3 brief. |
 | 2026-11-06 | **Path B code** — `agent_sessions` proposed SQL + durable adapter + seeker wiring + unit tests; **DB apply still needs your approval**. |
+| 2026-11-09 | **Task 3F Mode A re-verified**; canonical browser doc updated. **Task 3G** final evidence report added. Status linked to final report; Mode B / live Storage / Path B apply remain incomplete. |
+| 2026-11-09 | Recruiter Agent UI → chat-first hybrid (owned job/applicant search + Supervisor chat shortlist/draft). |
+| 2026-11-09 | **P0 status sync:** Track 5 / fine-tune marked **Done** (synthetic evidence) with links to Track 5 report + exec summary; removed stale “fine-tune pending” wording from other-tracks list. |
+| 2026-11-09 | **P0 status re-sync (post P4/P5):** Track 5 row updated — default **`v2-div-b`** (joint band + Macro F1 ≥ 0.85); OOD `track5_ood_v1` noted as separate independentBenchmark; links unchanged. |

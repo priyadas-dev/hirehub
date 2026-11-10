@@ -147,7 +147,7 @@ export async function updateApplicationStatusWithNotification(input: {
   from: ApplicationStatus;
   status: ApplicationStatus;
 }): Promise<NotifyApplicationStatusResult> {
-  const allowed = nextApplicationStatuses(input.from);
+  const allowed = nextApplicationStatuses(input.from) ?? [];
   if (!allowed.includes(input.status)) {
     throw new Error(`Cannot move from ${input.from} to ${input.status}`);
   }

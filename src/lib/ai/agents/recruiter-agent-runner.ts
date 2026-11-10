@@ -81,7 +81,11 @@ export async function runRecruiterSpecialistFromSupervisor(
     if (plan.status === "needs_confirm") return plan;
 
     try {
-      await updateApplicationStatusWithNotification(applicationId, plan.plannedStatus);
+      await updateApplicationStatusWithNotification({
+        applicationId,
+        from: application.status,
+        status: plan.plannedStatus,
+      });
       return {
         ok: true,
         status: "updated",

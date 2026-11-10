@@ -255,10 +255,9 @@ const UUID_IN_TEXT_RE =
   /[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/i;
 
 export function looksLikeShortlistIntent(question: string): boolean {
-  return (
-    /\b(shortlist|shortlisted|mark\s+as\s+shortlist|move\s+to\s+interview|reject\s+applicant|hire\s+applicant)\b/i.test(
-      question,
-    ) && /\b(applicant|application|candidate)\b/i.test(question)
+  // Natural chat often says "short list from X" / typos without the word "applicant".
+  return /\b(short[\s-]?list(?:ed)?|mark\s+as\s+short[\s-]?list|move\s+to\s+interview|reject\s+applicant|hire\s+applicant)\b/i.test(
+    question,
   );
 }
 

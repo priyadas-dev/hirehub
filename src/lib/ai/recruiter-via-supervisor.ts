@@ -169,7 +169,7 @@ export async function invokeRecruiterAgentViaSupervisor(
       runLegacyPipeline: async () => ({
         ok: true,
         answer:
-          "I can shortlist applicants on jobs you own or draft outreach campaigns. Include an application or job id, or use the structured shortlist / draft_outreach actions.",
+          "I only act on jobs you own. Try: list my jobs · shortlist from <job title> · propose shortlist for the selected applicant · draft outreach for this job. Incomplete asks are OK — name a job or skill and I’ll browse your owned jobs first. Shortlist always needs confirm; emails are never sent from this page.",
         insufficientContext: false,
         ragAvailable: false,
         liveJobsAvailable: false,

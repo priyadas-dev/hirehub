@@ -1,5 +1,7 @@
 # Assessment 3 Track 3 — Task 3F Read-only Browser Verification
 
+> **Canonical latest report:** [`ASSESSMENT_3_TRACK3_BROWSER_VERIFICATION.md`](./ASSESSMENT_3_TRACK3_BROWSER_VERIFICATION.md) (re-run 2026-11-09). This file preserves the earlier 2026-11-06 Mode A notes.
+
 **Mode:** Mode A (safe, non-mutating)  
 **Date:** 2026-11-06  
 **Runner:** `scripts/task3f-readonly-browser-verify.mjs`  
