@@ -2,15 +2,20 @@ import {
   JOB_CORPUS_CATEGORIES,
   type JobCorpusCategory,
 } from "@/lib/ai/corpus";
+import { syntheticTemplateGroupId, type GeneratedCorpusDoc } from "@/lib/ai/corpus-generate";
 import {
-  generateSyntheticJobCorpus,
-  syntheticTemplateGroupId,
-  type GeneratedCorpusDoc,
-} from "@/lib/ai/corpus-generate";
+  CLASSIFIER_FORBIDDEN_SKILLS_LINE,
+  extractClassifierDutyProse,
+  generateClassifierLabeledExamples,
+  type ClassifierEnrichmentVariant,
+} from "@/lib/ai/job-classifier-dataset";
 
 export const CLASSIFIER_RANDOM_SEED = 42 as const;
 export const CLASSIFIER_TRAIN_FRACTION = 0.8 as const;
+/** Assessment 2 offline accuracy gate (kept for backward compatibility). */
 export const CLASSIFIER_TARGET_ACCURACY = 0.7 as const;
+/** Assessment 3 Track 5 required Macro F1 gate. */
+export const CLASSIFIER_TRACK5_TARGET_MACRO_F1 = 0.85 as const;
 
 export type LabeledJobExample = {
   id: string;
@@ -76,6 +81,15 @@ export type SyntheticSplitDiagnostics = {
   titleOnlyAccuracy: number;
   /** Held-out accuracy using description tokens only (category keywords masked). */
   descriptionOnlyAccuracy: number;
+  /**
+   * Held-out accuracy using only a legacy `Hands-on tools frequently used:` line.
+   * After Option A remediation this line is absent → near-chance / non-informative.
+   */
+  skillsOnlyAccuracy: number;
+  /** Whether any test description still contains the forbidden skills laundry list. */
+  skillsLinePresentInTest: boolean;
+  /** Held-out accuracy using duty prose only (location opener stripped). */
+  dutyOnlyAccuracy: number;
   /** Same as top-level accuracy (title + description, category keywords masked). */
   fullMaskedAccuracy: number;
   /**
@@ -85,6 +99,9 @@ export type SyntheticSplitDiagnostics = {
   nearDuplicateRate: number;
   nearDuplicateCount: number;
   nearDuplicateThreshold: number;
+  /** Same-class near-dup rate at Jaccard >= 0.5 (stricter honesty than 0.9 alone). */
+  nearDuplicateRateAt05: number;
+  nearDuplicateCountAt05: number;
   /** Template groups that appear in both train and test (must be 0 for group splits). */
   templateGroupOverlapCount: number;
   splitMode: "row" | "template_group";
@@ -101,16 +118,66 @@ export type ClassifierEvalReport = {
   categories: JobCorpusCategory[];
   /** Synthetic 80/20 score with category keywords masked. Not a real-world accuracy claim. */
   accuracy: number;
+  /**
+   * Assessment 2 compatibility: `accuracy >= CLASSIFIER_TARGET_ACCURACY` (0.70).
+   * Do **not** treat this alone as Track 5 success — use `meetsTrack5MacroF1`.
+   */
   meetsTarget: boolean;
   targetAccuracy: number;
   confusionMatrix: ConfusionMatrix;
   perClass: Record<JobCorpusCategory, ClassMetrics>;
   macroF1: number;
+  /** Support-weighted mean of per-class F1. */
+  weightedF1: number;
+  /** Assessment 3 Track 5: `macroF1 >= CLASSIFIER_TRACK5_TARGET_MACRO_F1` (0.85). */
+  meetsTrack5MacroF1: boolean;
+  targetMacroF1: number;
   notes: string[];
-  /** Ablation + near-dup diagnostics for honest reporting of synthetic 100% scores. */
+  /** Ablation + near-dup diagnostics for honest reporting of synthetic scores. */
   syntheticDiagnostics?: SyntheticSplitDiagnostics;
   /** Optional separate eval — never mixed into the Naive Bayes headline metrics. */
   originalDescriptions?: OriginalDescriptionEval;
+};
+
+/** Dual-benchmark envelope (Task 5B/5D). Synthetic never claimed as real-world. */
+export type Track5IndependentBenchmarkMetrics = {
+  accuracy: number;
+  macroF1: number;
+  weightedF1: number;
+  meetsTrack5MacroF1: boolean;
+  perClass: Record<JobCorpusCategory, ClassMetrics>;
+  confusionMatrix: ConfusionMatrix;
+};
+
+export type Track5IndependentBenchmark = {
+  kind: "independentBenchmark";
+  status: "unavailable" | "ready";
+  datasetId: string | null;
+  n: number;
+  provenance: string;
+  license?: string | null;
+  notes: string[];
+  /** Present only when status=ready; never blended into synthetic headline metrics. */
+  metrics?: Track5IndependentBenchmarkMetrics;
+};
+
+/** @deprecated Prefer Track5IndependentBenchmark */
+export type Track5IndependentBenchmarkPlaceholder = Track5IndependentBenchmark;
+
+export type Track5SyntheticBenchmark = {
+  kind: "syntheticBenchmark";
+  provenance: string;
+  stillSynthetic: true;
+  notRealWorld: true;
+  report: ClassifierEvalReport;
+};
+
+export type Track5EvalEnvelope = {
+  generatedAt: string;
+  track: "assessment3-track5";
+  featureRemediation: "option_a_no_category_skills_line";
+  syntheticBenchmark: Track5SyntheticBenchmark;
+  independentBenchmark: Track5IndependentBenchmark;
 };
 
 /** Seeded PRNG (Mulberry32) for reproducible splits. */
@@ -220,6 +287,13 @@ export function exampleToTokens(example: Pick<LabeledJobExample, "title" | "desc
   );
 }
 
+/**
+ * RAW generator rows (includes category-tied `skills_text` inside RAG-style descriptions).
+ *
+ * **Not** the official Track 5 / Assessment 3 classify path — that must use
+ * `generateClassifierLabeledExamples` (Option A remediated duties, no skills laundry list).
+ * Kept for legacy unit tests and leakage comparisons against generator text.
+ */
 export function corpusDocsToLabeledExamples(docs: GeneratedCorpusDoc[]): LabeledJobExample[] {
   return docs.map((doc) => ({
     id: doc.corpus_key,
@@ -500,6 +574,8 @@ export function evaluatePredictions(
   const accuracy = correct / test.length;
   const perClass = {} as Record<JobCorpusCategory, ClassMetrics>;
   let macroF1Sum = 0;
+  let weightedF1Sum = 0;
+  let supportSum = 0;
 
   for (const category of categories) {
     let tp = 0;
@@ -519,7 +595,12 @@ export function evaluatePredictions(
     const support = categories.reduce((sum, predicted) => sum + confusionMatrix[category][predicted], 0);
     perClass[category] = { precision, recall, f1, support };
     macroF1Sum += f1;
+    weightedF1Sum += f1 * support;
+    supportSum += support;
   }
+
+  const macroF1 = macroF1Sum / categories.length;
+  const weightedF1 = supportSum === 0 ? 0 : weightedF1Sum / supportSum;
 
   return {
     generatedAt: new Date().toISOString(),
@@ -534,15 +615,21 @@ export function evaluatePredictions(
     targetAccuracy: CLASSIFIER_TARGET_ACCURACY,
     confusionMatrix,
     perClass,
-    macroF1: macroF1Sum / categories.length,
+    macroF1,
+    weightedF1,
+    meetsTrack5MacroF1: macroF1 >= CLASSIFIER_TRACK5_TARGET_MACRO_F1,
+    targetMacroF1: CLASSIFIER_TRACK5_TARGET_MACRO_F1,
     notes: [
       ...(options?.notes ?? [
-        "Trained and evaluated offline on HireHub synthetic corpus labels (Track 1 generator).",
-        "Features: job title + description only. The gold category column is never used as a feature.",
+        "Trained and evaluated offline on HireHub synthetic corpus labels (Track 1 generator titles/labels).",
+        "Track 5 Option A features: title + location/duty prose only — no category-tied skills laundry list.",
+        "The gold category column is never used as a feature.",
         "Metrics are computed only on the held-out 20% test split (no train evaluation).",
         "Explicit category names/slugs are masked in both title and description; occupational stems such as engineer/designer/analyst are kept.",
-        "Synthetic skill-list lines and category-revealing boilerplate are stripped from classifier features only (punctuation-safe; corpus text and gold labels unchanged).",
+        "Synthetic skill-list lines and category-revealing boilerplate are stripped if present; Option A builder omits them.",
         "Separate from live job recommendations, auth, RLS, and the gte-small prototype evaluation.",
+        "Synthetic scores are not a real-world accuracy claim.",
+        "meetsTarget = accuracy≥0.70 (Assessment 2). meetsTrack5MacroF1 = macroF1≥0.85 (Assessment 3 Track 5).",
       ]),
     ],
   };
@@ -569,6 +656,7 @@ export function evaluateClassifier(
 
 /** Default Jaccard threshold for same-class train/test near-duplicate reporting. */
 export const SYNTHETIC_NEAR_DUPLICATE_JACCARD = 0.9 as const;
+export const SYNTHETIC_NEAR_DUPLICATE_JACCARD_RELAXED = 0.5 as const;
 
 export function tokenJaccard(left: readonly string[], right: readonly string[]): number {
   const a = new Set(left);
@@ -689,11 +777,24 @@ export function buildSyntheticSplitDiagnostics(
   fullMaskedAccuracy: number,
 ): SyntheticSplitDiagnostics {
   const near = measureSameClassNearDuplicateRate(split);
+  const near05 = measureSameClassNearDuplicateRate(split, {
+    threshold: SYNTHETIC_NEAR_DUPLICATE_JACCARD_RELAXED,
+  });
   const titleOnlyAccuracy = scoreHeldOutWithTokenizer(split, (example) =>
     exampleToTokens({ title: example.title, description: "" }),
   );
   const descriptionOnlyAccuracy = scoreHeldOutWithTokenizer(split, (example) =>
     exampleToTokens({ title: "", description: example.description }),
+  );
+  const skillsLinePresentInTest = split.test.some((example) =>
+    example.description.toLowerCase().includes(CLASSIFIER_FORBIDDEN_SKILLS_LINE.toLowerCase()),
+  );
+  const skillsOnlyAccuracy = scoreHeldOutWithTokenizer(split, (example) => {
+    const match = example.description.match(/Hands-on tools frequently used:\s*([^.]+)\./i);
+    return exampleToTokens({ title: "", description: match?.[1] ?? "" });
+  });
+  const dutyOnlyAccuracy = scoreHeldOutWithTokenizer(split, (example) =>
+    exampleToTokens({ title: "", description: extractClassifierDutyProse(example.description) }),
   );
   const templateGroupOverlapCount = countTemplateGroupOverlap(split);
   const splitMode = split.mode ?? "row";
@@ -701,25 +802,67 @@ export function buildSyntheticSplitDiagnostics(
   return {
     titleOnlyAccuracy,
     descriptionOnlyAccuracy,
+    skillsOnlyAccuracy,
+    skillsLinePresentInTest,
+    dutyOnlyAccuracy,
     fullMaskedAccuracy,
     nearDuplicateRate: near.rate,
     nearDuplicateCount: near.count,
     nearDuplicateThreshold: near.threshold,
+    nearDuplicateRateAt05: near05.rate,
+    nearDuplicateCountAt05: near05.count,
     templateGroupOverlapCount,
     splitMode,
     notes: [
       "Explicit category-slug masking and punctuation-safe synthetic skill/boilerplate stripping are applied to features only; gold labels are untouched.",
       "Offline evaluation uses template-group splits (category::baseTitle) so seniority/location variants of the same role do not appear on both sides.",
+      "Track 5 Option A omits category-tied skills laundry lists from classifier feature text; skillsOnly ablation is non-informative when the line is absent.",
       "A high synthetic score is still not a real-world accuracy claim; gte-small prototype evaluation remains a separate offline check.",
     ],
   };
 }
 
-/** End-to-end: generate labeled synthetic corpus → group split → train → held-out eval. */
+export function buildTrack5EvalEnvelope(
+  report: ClassifierEvalReport,
+  options?: { provenance?: string },
+): Track5EvalEnvelope {
+  return {
+    generatedAt: new Date().toISOString(),
+    track: "assessment3-track5",
+    featureRemediation: "option_a_no_category_skills_line",
+    syntheticBenchmark: {
+      kind: "syntheticBenchmark",
+      provenance:
+        options?.provenance ??
+        "hirehub-synthetic-classifier-features-remediated-option-a-v1",
+      stillSynthetic: true,
+      notRealWorld: true,
+      report,
+    },
+    independentBenchmark: {
+      kind: "independentBenchmark",
+      status: "unavailable",
+      datasetId: null,
+      n: 0,
+      provenance: "none-in-this-envelope",
+      notes: [
+        "Placeholder only — populate via npm run rag:classify:track5-ood (datasets/track5_ood_v1).",
+        "Do not treat syntheticBenchmark as real-world performance.",
+        "Never blend independentBenchmark into the synthetic headline score.",
+      ],
+    },
+  };
+}
+
+/**
+ * Official Track 5 end-to-end path: remediated/enriched classifier examples → group split → train → eval.
+ * Does not use raw generator descriptions (which embed category-tied skills).
+ */
 export function runJobClassifierPipeline(options?: {
   count?: number;
   seed?: number;
   trainFraction?: number;
+  enrichmentVariant?: ClassifierEnrichmentVariant;
 }): {
   split: ClassifierSplit;
   model: TrainedJobClassifier;
@@ -728,9 +871,9 @@ export function runJobClassifierPipeline(options?: {
   const count = options?.count ?? 5000;
   const seed = options?.seed ?? CLASSIFIER_RANDOM_SEED;
   const trainFraction = options?.trainFraction ?? CLASSIFIER_TRAIN_FRACTION;
+  const enrichmentVariant = options?.enrichmentVariant;
 
-  const docs = generateSyntheticJobCorpus(count);
-  const examples = corpusDocsToLabeledExamples(docs);
+  const examples = generateClassifierLabeledExamples(count, { variant: enrichmentVariant });
   const split = stratifiedGroupTrainTestSplit(examples, { seed, trainFraction });
   assertNoSplitLeakage(split);
   assertNoTemplateGroupLeakage(split);
@@ -748,13 +891,19 @@ export function runJobClassifierPipeline(options?: {
     notes: [
       ...base.notes,
       ...syntheticDiagnostics.notes,
+      `Enrichment variant=${enrichmentVariant ?? "default"}; Option A (no category-tied skills line).`,
       `Split mode=${syntheticDiagnostics.splitMode}; template-group overlap=${syntheticDiagnostics.templateGroupOverlapCount}.`,
-      `Ablation (masked+stripped): title-only accuracy=${(syntheticDiagnostics.titleOnlyAccuracy * 100).toFixed(2)}%; description-only=${(syntheticDiagnostics.descriptionOnlyAccuracy * 100).toFixed(2)}%.`,
-      `Same-class near-duplicate rate (Jaccard>=${syntheticDiagnostics.nearDuplicateThreshold}): ${(syntheticDiagnostics.nearDuplicateRate * 100).toFixed(2)}% (${syntheticDiagnostics.nearDuplicateCount}/${base.testSize} test rows).`,
+      `Ablations: title-only=${(syntheticDiagnostics.titleOnlyAccuracy * 100).toFixed(2)}%; description-only=${(syntheticDiagnostics.descriptionOnlyAccuracy * 100).toFixed(2)}%; skills-only=${(syntheticDiagnostics.skillsOnlyAccuracy * 100).toFixed(2)}% (skillsLinePresent=${syntheticDiagnostics.skillsLinePresentInTest}); duty-only=${(syntheticDiagnostics.dutyOnlyAccuracy * 100).toFixed(2)}%.`,
+      `Same-class near-duplicate rate (Jaccard>=${syntheticDiagnostics.nearDuplicateThreshold}): ${(syntheticDiagnostics.nearDuplicateRate * 100).toFixed(2)}% (${syntheticDiagnostics.nearDuplicateCount}/${base.testSize}); Jaccard>=0.5: ${(syntheticDiagnostics.nearDuplicateRateAt05 * 100).toFixed(2)}% (${syntheticDiagnostics.nearDuplicateCountAt05}/${base.testSize}).`,
+      `weightedF1=${reportWeightedF1(base)}.`,
     ],
   };
 
   return { split, model, report };
+}
+
+function reportWeightedF1(report: ClassifierEvalReport): string {
+  return report.weightedF1.toFixed(4);
 }
 
 function shuffleInPlace<T>(items: T[], rng: () => number): void {

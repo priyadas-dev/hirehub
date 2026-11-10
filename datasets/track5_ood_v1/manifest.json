@@ -1,0 +1,67 @@
+{
+  "datasetId": "track5_ood_v1",
+  "generatedAt": "2026-11-09T10:25:08.600Z",
+  "n": 215,
+  "categories": [
+    "engineering",
+    "data",
+    "design",
+    "product",
+    "marketing",
+    "sales",
+    "operations",
+    "finance",
+    "healthcare",
+    "education",
+    "customer_support",
+    "hr"
+  ],
+  "perClass": {
+    "engineering": 28,
+    "data": 13,
+    "design": 24,
+    "product": 14,
+    "marketing": 28,
+    "sales": 24,
+    "operations": 13,
+    "finance": 11,
+    "healthcare": 20,
+    "education": 22,
+    "customer_support": 14,
+    "hr": 4
+  },
+  "maxPerClass": 28,
+  "minDescriptionChars": 80,
+  "source": {
+    "huggingFaceId": "its-zion-18/Jobs-tabular-dataset",
+    "split": "original",
+    "license": "Apache-2.0",
+    "notes": [
+      "Original split only (scraped public postings).",
+      "Augmented/CTGAN split intentionally excluded.",
+      "Not HireHub live vacancies; not synthetic generator output."
+    ]
+  },
+  "hireHubExportAttempt": {
+    "attempted": true,
+    "totalJobs": 15,
+    "usableLabeledPreferred": false,
+    "reason": "HireHub public.jobs has only ~15 rows (many test/garbage descriptions, no category column). Insufficient for OOD; documented in PROVENANCE.md."
+  },
+  "dropReasons": {
+    "unmapped:Nonprofit Leadership": 2,
+    "synthetic_title_bank_collision": 15,
+    "out_of_taxonomy:Architecture": 11,
+    "out_of_taxonomy:Journalism": 18,
+    "unmapped:Consulting": 7,
+    "unmapped:Biotechnology": 1,
+    "short_desc": 1,
+    "empty_title": 1
+  },
+  "candidateCount": 335,
+  "protocol": {
+    "trainOn": "synthetic train only (enriched_v2)",
+    "tuneOnOod": false,
+    "reportAs": "independentBenchmark"
+  }
+}

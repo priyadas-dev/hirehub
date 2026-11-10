@@ -111,6 +111,14 @@ describe("compareClassifiersOnGroupedSplit", () => {
     expect(comparison.naiveBayes.testSize).toBe(comparison.tfidfLogReg.testSize);
     expect(comparison.naiveBayes.seed).toBe(CLASSIFIER_RANDOM_SEED);
     expect(comparison.tfidfLogReg.seed).toBe(CLASSIFIER_RANDOM_SEED);
+    expect(Number.isFinite(comparison.naiveBayes.weightedF1)).toBe(true);
+    expect(comparison.diagnostics.skillsLinePresentInTest).toBe(false);
+    expect(comparison.track5?.syntheticBenchmark.kind).toBe("syntheticBenchmark");
+    expect(comparison.track5?.syntheticBenchmark.notRealWorld).toBe(true);
+    expect(comparison.track5?.independentBenchmark.status).toBe("unavailable");
+    for (const example of split.test) {
+      expect(example.description.toLowerCase()).not.toContain("hands-on tools frequently used");
+    }
     },
     120_000,
   );
