@@ -178,6 +178,8 @@ export type AssistantAskPayload = {
   question: string;
   attachmentMeta?: AssistantHistoryAttachmentMeta & { kind?: "pdf" | "image" | "docx" };
   attachmentBase64?: string;
+  applyJobId?: string;
+  confirmApply?: boolean;
   ask: (args: { data: Record<string, unknown> }) => Promise<AskJobAssistantResult>;
   retryTurnId?: string;
 };
@@ -277,6 +279,9 @@ export function runAssistantLiveAsk(userId: string, payload: AssistantAskPayload
           ...(sessionSkills.length ? { sessionSkills } : {}),
           ...(recentJobs?.length ? { recentJobs } : {}),
           ...(conversationContext ? { conversationContext } : {}),
+          ...(conversationId ? { conversationId } : {}),
+          ...(payload.applyJobId ? { applyJobId: payload.applyJobId } : {}),
+          ...(payload.confirmApply ? { confirmApply: true } : {}),
         },
       });
 

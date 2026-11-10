@@ -1,9 +1,9 @@
 /**
- * Classifier-only synthetic example builder for Assessment 2 offline experiments.
+ * Classifier-only synthetic example builder (Assessment 2 / Track 5 offline).
  *
- * The Track-1 RAG generator keeps its original boilerplate descriptions. This module
- * replaces classifier feature text with occupational duties + toolkit language so
- * models have legitimate signal after category-slug masking and shortcut stripping.
+ * The Track-1 RAG generator keeps its original boilerplate + category skill pools.
+ * This module builds classifier feature text from location + title-keyed duty prose only
+ * (Option A / Task 5D): no category-tied tools laundry list, no gold-category lexicon dump.
  * Gold labels, titles, and template-group ids are unchanged.
  */
 import { JOB_CORPUS_CATEGORIES, type JobCorpusCategory } from "@/lib/ai/corpus";
@@ -13,9 +13,21 @@ import {
   syntheticTemplateGroupId,
   type GeneratedCorpusDoc,
 } from "@/lib/ai/corpus-generate";
+import {
+  DEFAULT_CLASSIFIER_ENRICHMENT_VARIANT,
+  assertEnrichmentCoverage,
+  buildEnrichedClassifierDescription,
+  type ClassifierEnrichmentVariant,
+} from "@/lib/ai/job-classifier-enrichment";
 import type { LabeledJobExample } from "@/lib/ai/job-classifier";
 
-/** Shared within-class occupational lexicon (never category slugs). */
+export type { ClassifierEnrichmentVariant } from "@/lib/ai/job-classifier-enrichment";
+export { DEFAULT_CLASSIFIER_ENRICHMENT_VARIANT, CLASSIFIER_ENRICHMENT_VARIANTS } from "@/lib/ai/job-classifier-enrichment";
+
+/**
+ * Coverage / documentation lexicon only — NEVER inject into classifier feature text
+ * (would recreate category-pure skill leakage).
+ */
 export const CLASSIFIER_CLASS_LEXICON: Record<JobCorpusCategory, readonly string[]> = {
   engineering: ["TypeScript", "React", "Node.js", "PostgreSQL", "CI/CD", "pull requests", "REST APIs"],
   data: ["SQL", "Python", "dbt", "Tableau", "ETL", "Pandas", "BigQuery"],
@@ -38,7 +50,10 @@ export const CLASSIFIER_CLASS_LEXICON: Record<JobCorpusCategory, readonly string
   hr: ["recruiting", "onboarding", "HRIS", "interviewing", "employee relations", "learning programs"],
 };
 
-/** Title-specific duty sentence — transfers via shared class lexicon, not identical fingerprints. */
+/** Forbidden substring for Track 5 classifier feature text (Option A). */
+export const CLASSIFIER_FORBIDDEN_SKILLS_LINE = "Hands-on tools frequently used" as const;
+
+/** Title-specific primary duty — keyed by base title, never by gold category enum. */
 export const CLASSIFIER_DUTY_BY_BASE_TITLE: Readonly<Record<string, string>> = {
   "Software Engineer": "Implement features, review pull requests, and keep automated tests green.",
   "Frontend Developer": "Ship accessible UI, collaborate on handoff, and tune client-side performance.",
@@ -56,8 +71,9 @@ export const CLASSIFIER_DUTY_BY_BASE_TITLE: Readonly<Record<string, string>> = {
   "Product Designer": "Shape flows, validate with prototypes, and protect accessibility in the interface.",
   "UI Designer": "Refine visual systems, polish components, and keep libraries coherent.",
   "UX Researcher": "Plan research studies, synthesize findings, and turn insights into priorities.",
-  "Brand Designer": "Extend brand systems across campaigns with content and growth partners.",
-  "Design Systems Designer": "Maintain tokenized libraries, document patterns, and support prototyping teams.",
+  // Avoid campaign/growth wording that overlaps marketing (Task 5D design↔marketing cleanup).
+  "Brand Designer": "Extend brand visual systems across print and digital surfaces with design partners.",
+  "Design Systems Designer": "Maintain tokenized libraries, document interface patterns, and support design teams.",
   "Product Manager": "Prioritize bets from interviews and keep stakeholder loops tight.",
   "Associate Product Manager": "Support discovery, draft acceptance criteria, and track funnels after launch.",
   "Technical Product Manager": "Translate technical constraints into tradeoffs and clarify experiment plans.",
@@ -98,47 +114,140 @@ export const CLASSIFIER_DUTY_BY_BASE_TITLE: Readonly<Record<string, string>> = {
 };
 
 /**
- * Build leakage-resistant occupational description for classifier features only.
- * Avoids category-slug openers and the stripped "Core skills for this document:" shortcut.
- * Does not inject label-selected lexicon (gold category is never used to pick feature text).
+ * Optional second title-keyed duty sentence (still not category→tools).
+ * Gives slightly richer occupational prose after skills-line removal.
+ */
+export const CLASSIFIER_SECONDARY_DUTY_BY_BASE_TITLE: Readonly<Record<string, string>> = {
+  "Software Engineer": "Clarify edge cases in code review and keep release notes honest.",
+  "Frontend Developer": "Partner with design on spacing, states, and responsive behavior.",
+  "Backend Engineer": "Document service contracts and watch error budgets.",
+  "Full Stack Developer": "Balance client and server tradeoffs when scope changes mid-sprint.",
+  "Mobile Engineer": "Coordinate store releases and watch crash-free sessions.",
+  "DevOps Engineer": "Tighten alerts so on-call pages stay actionable.",
+  "Platform Engineer": "Publish internal guides so feature teams self-serve safely.",
+  "QA Automation Engineer": "Prioritize flaky tests and share failure themes with authors.",
+  "Data Analyst": "Write short narratives so leaders trust the dashboard movements.",
+  "Data Engineer": "Coordinate schema changes before downstream jobs break.",
+  "Machine Learning Engineer": "Document assumptions when offline metrics disagree with live ones.",
+  "BI Developer": "Keep definitions aligned when two teams ask for the same metric.",
+  "Analytics Engineer": "Review pull requests on models before they reach dashboards.",
+  "Product Designer": "Capture rationale so later redesigns do not lose context.",
+  "UI Designer": "Check contrast and spacing against the shared visual rules.",
+  "UX Researcher": "Share findings in plain language with clear next questions.",
+  "Brand Designer": "Keep typography and color tokens consistent across assets.",
+  "Design Systems Designer": "Review contributions so components stay coherent.",
+  "Product Manager": "Write crisp problem statements before committing build time.",
+  "Associate Product Manager": "Log feedback themes and bring them to prioritization.",
+  "Technical Product Manager": "Surface sequencing risks early with engineering leads.",
+  "Product Owner": "Keep acceptance notes testable and visible to the delivery team.",
+  "Digital Marketing Specialist": "Compare channel quality beyond vanity click totals.",
+  "Content Marketer": "Align drafts with the offer and the audience stage.",
+  "SEO Specialist": "Prioritize fixes that unblock crawl and indexing health.",
+  "Growth Marketer": "Document experiment setup so results can be reproduced.",
+  "Brand Manager": "Align launch messaging with the product promise.",
+  "Account Executive": "Confirm next steps in writing after every discovery call.",
+  "Sales Development Representative": "Hand off qualified interest with clear context notes.",
+  "Customer Success Manager": "Spot churn risk early from usage and conversation themes.",
+  "Sales Manager": "Review forecast assumptions with the team each week.",
+  "Operations Coordinator": "Escalate blockers before they cascade across partners.",
+  "Supply Chain Analyst": "Flag lead-time risk with a short recommended action.",
+  "Office Manager": "Keep vendor renewals visible before they surprise the team.",
+  "Logistics Specialist": "Update checkpoints when exceptions change the plan.",
+  "Financial Analyst": "Call out drivers behind variance, not only the totals.",
+  "Accountant": "Document exceptions found during reconciliations.",
+  "FP&A Analyst": "Stress-test scenarios when inputs shift mid-cycle.",
+  "Payroll Specialist": "Escalate edge cases before pay day locks.",
+  "Clinical Coordinator": "Confirm handoffs so care teams share the same plan.",
+  "Health Informatics Analyst": "Validate workflow changes against documentation quality.",
+  "Medical Records Specialist": "Protect request turnaround without sacrificing accuracy.",
+  "Care Coordinator": "Follow up on open pathway items until they close.",
+  "Curriculum Designer": "Check that exercises match the stated learning goals.",
+  "Instructional Designer": "Revise modules when learner feedback repeats.",
+  "Education Program Coordinator": "Keep facilitators briefed before each cohort starts.",
+  "Tutor Lead": "Calibrate feedback so learners hear consistent standards.",
+  "Customer Support Specialist": "Close the loop when a fix lands for a recurring issue.",
+  "Technical Support Engineer": "Capture reproducible steps before escalating.",
+  "Support Team Lead": "Coach on tone and clarity using real ticket examples.",
+  "Helpdesk Analyst": "Improve macros when the same question appears often.",
+  "People Operations Specialist": "Keep arrival checklists current for each new hire.",
+  "Talent Acquisition Partner": "Give interviewers structured prompts and score notes.",
+  "HR Generalist": "Clarify policy questions with consistent written guidance.",
+  "L&D Coordinator": "Follow completion gaps and adjust workshop schedules.",
+};
+
+/**
+ * Build Option A classifier feature description: location + title-keyed duties only.
+ * Does not use gold category, skills_text, or CLASSIFIER_CLASS_LEXICON.
  */
 export function buildClassifierOrientedDescription(
-  doc: Pick<GeneratedCorpusDoc, "title" | "category" | "location" | "skills_text" | "corpus_key">,
+  doc: Pick<GeneratedCorpusDoc, "title" | "location"> & { corpus_key?: string },
+  options?: { variant?: ClassifierEnrichmentVariant },
 ): string {
-  const base = syntheticBaseTitle(doc.title);
-  const duty =
-    CLASSIFIER_DUTY_BY_BASE_TITLE[base] ??
-    "Collaborate with partners and document decisions clearly.";
-  return [
-    `Opening based in ${doc.location}.`,
-    duty,
-    // Instance-varying toolkit from the generator skill pool (not the stripped Core-skills phrase).
-    `Hands-on tools frequently used: ${doc.skills_text}.`,
-    "Expect written updates, stakeholder demos, and measurable outcomes each sprint.",
-  ].join(" ");
+  const variant = options?.variant ?? DEFAULT_CLASSIFIER_ENRICHMENT_VARIANT;
+  return buildEnrichedClassifierDescription(
+    {
+      title: doc.title,
+      location: doc.location,
+      diversityKey: doc.corpus_key ?? doc.title,
+    },
+    variant,
+    {
+      primary: CLASSIFIER_DUTY_BY_BASE_TITLE,
+      secondary: CLASSIFIER_SECONDARY_DUTY_BY_BASE_TITLE,
+    },
+  );
 }
 
-/** Map generator docs → labeled examples with classifier-oriented descriptions. */
-export function corpusDocsToClassifierExamples(docs: GeneratedCorpusDoc[]): LabeledJobExample[] {
+/** Duty sentences only (no location opener) — for dutyOnly ablations. */
+export function extractClassifierDutyProse(description: string): string {
+  return description.replace(/^Opening based in [^.]+\.\s*/i, "").trim();
+}
+
+/** True when legacy skills laundry list is present (must be false for Track 5 features). */
+export function classifierDescriptionHasForbiddenSkillsLine(description: string): boolean {
+  return description.toLowerCase().includes(CLASSIFIER_FORBIDDEN_SKILLS_LINE.toLowerCase());
+}
+
+/** Map generator docs → labeled examples with remediated/enriched classifier descriptions. */
+export function corpusDocsToClassifierExamples(
+  docs: GeneratedCorpusDoc[],
+  options?: { variant?: ClassifierEnrichmentVariant },
+): LabeledJobExample[] {
+  const variant = options?.variant ?? DEFAULT_CLASSIFIER_ENRICHMENT_VARIANT;
   return docs.map((doc) => ({
     id: doc.corpus_key,
     title: doc.title,
-    description: buildClassifierOrientedDescription(doc),
+    description: buildClassifierOrientedDescription(doc, { variant }),
     category: doc.category,
     templateGroupId: syntheticTemplateGroupId(doc.category, doc.title),
   }));
 }
 
-/** Generate offline classifier examples (titles/labels/groups from corpus; descriptions enriched). */
-export function generateClassifierLabeledExamples(count = 5000): LabeledJobExample[] {
-  return corpusDocsToClassifierExamples(generateSyntheticJobCorpus(count));
+/** Official Track 5 / compare-path synthetic examples (Option A + enrichment variant). */
+export function generateClassifierLabeledExamples(
+  count = 5000,
+  options?: { variant?: ClassifierEnrichmentVariant },
+): LabeledJobExample[] {
+  return corpusDocsToClassifierExamples(generateSyntheticJobCorpus(count), options);
 }
 
-/** Sanity: every configured category has lexicon entries and duty coverage for generator titles. */
+/** Sanity: lexicon + duty coverage for generator titles (lexicon not used as features). */
 export function assertClassifierDatasetCoverage(): void {
   for (const category of JOB_CORPUS_CATEGORIES) {
     if (!CLASSIFIER_CLASS_LEXICON[category]?.length) {
       throw new Error(`Missing classifier lexicon for ${category}`);
     }
   }
+  const titles = new Set(
+    generateSyntheticJobCorpus(240).map((doc) => syntheticBaseTitle(doc.title)),
+  );
+  for (const title of titles) {
+    if (!CLASSIFIER_DUTY_BY_BASE_TITLE[title]) {
+      throw new Error(`Missing post5d primary duty for ${title}`);
+    }
+    if (!CLASSIFIER_SECONDARY_DUTY_BY_BASE_TITLE[title]) {
+      throw new Error(`Missing post5d secondary duty for ${title}`);
+    }
+  }
+  assertEnrichmentCoverage(titles);
 }

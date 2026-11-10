@@ -1,0 +1,182 @@
+{
+  "id": "a3_v1",
+  "title": "HireHub Assessment 3 frozen RAG eval set",
+  "frozenAt": "2026-11-05",
+  "protocol": "Use unchanged at 5k / 10k / 20k checkpoints. Authored separately from corpus-generate.ts.",
+  "metrics": {
+    "retrieval": ["hitAtK", "precisionAtK", "recallAtK", "mrr", "ndcgAtK", "categoryHit@k_legacy"],
+    "answer": ["faithfulness_heuristic", "answer_relevance_heuristic"]
+  },
+  "k": 5,
+  "notes": [
+    "Document relevance uses relevantCategories (grade 2) when corpus_key gold is unknown offline.",
+    "Optional relevantCorpusKeys enable graded Precision@k when keys exist in the live corpus.",
+    "no_hit cases expect empty or off-category tops; categoryHit should be false.",
+    "If primary hit-rate > 0.90, run leakage checklist before accepting."
+  ],
+  "cases": [
+    {
+      "id": "a3-para-spa-hooks",
+      "kind": "paraphrase",
+      "query": "Looking for a builder of interactive web apps who uses component hooks and typed JavaScript near the Bangladesh capital",
+      "relevantCategories": ["engineering"],
+      "relevantCorpusKeys": [],
+      "expectCategory": "engineering"
+    },
+    {
+      "id": "a3-para-warehouse-sql",
+      "kind": "paraphrase",
+      "query": "Need help modeling fact tables and writing analytical SQL for a cloud warehouse team",
+      "relevantCategories": ["data"],
+      "relevantCorpusKeys": [],
+      "expectCategory": "data"
+    },
+    {
+      "id": "a3-para-figma-flows",
+      "kind": "paraphrase",
+      "query": "Who sketches product screens and clickable prototypes before engineering builds them?",
+      "relevantCategories": ["design"],
+      "relevantCorpusKeys": [],
+      "expectCategory": "design"
+    },
+    {
+      "id": "a3-para-roadmap-prioritize",
+      "kind": "paraphrase",
+      "query": "Someone who decides which features ship next quarter based on user research and business goals",
+      "relevantCategories": ["product"],
+      "relevantCorpusKeys": [],
+      "expectCategory": "product"
+    },
+    {
+      "id": "a3-para-campaign-metrics",
+      "kind": "paraphrase",
+      "query": "Grow signups with email funnels and paid social while tracking conversion rates",
+      "relevantCategories": ["marketing"],
+      "relevantCorpusKeys": [],
+      "expectCategory": "marketing"
+    },
+    {
+      "id": "a3-para-pipeline-outbound",
+      "kind": "paraphrase",
+      "query": "Book discovery calls with new accounts and keep a CRM pipeline healthy",
+      "relevantCategories": ["sales"],
+      "relevantCorpusKeys": [],
+      "expectCategory": "sales"
+    },
+    {
+      "id": "a3-para-vendor-sla",
+      "kind": "paraphrase",
+      "query": "Coordinate suppliers, SLAs, and warehouse throughput for day-to-day delivery",
+      "relevantCategories": ["operations"],
+      "relevantCorpusKeys": [],
+      "expectCategory": "operations"
+    },
+    {
+      "id": "a3-para-budget-forecast",
+      "kind": "paraphrase",
+      "query": "Build monthly forecasts, reconcile ledgers, and explain variance to leadership",
+      "relevantCategories": ["finance"],
+      "relevantCorpusKeys": [],
+      "expectCategory": "finance"
+    },
+    {
+      "id": "a3-para-clinic-care",
+      "kind": "paraphrase",
+      "query": "Patient-facing clinical coordination and care documentation in a hospital setting",
+      "relevantCategories": ["healthcare"],
+      "relevantCorpusKeys": [],
+      "expectCategory": "healthcare"
+    },
+    {
+      "id": "a3-para-lesson-plans",
+      "kind": "paraphrase",
+      "query": "Design lesson plans and assess student progress for an adult learning program",
+      "relevantCategories": ["education"],
+      "relevantCorpusKeys": [],
+      "expectCategory": "education"
+    },
+    {
+      "id": "a3-para-ticket-queue",
+      "kind": "paraphrase",
+      "query": "Answer product tickets politely and escalate bugs with clear reproduction steps",
+      "relevantCategories": ["customer_support"],
+      "relevantCorpusKeys": [],
+      "expectCategory": "customer_support"
+    },
+    {
+      "id": "a3-para-hiring-loop",
+      "kind": "paraphrase",
+      "query": "Run interviews, write scorecards, and keep an inclusive hiring loop moving",
+      "relevantCategories": ["hr"],
+      "relevantCorpusKeys": [],
+      "expectCategory": "hr"
+    },
+    {
+      "id": "a3-noisy-react-typos",
+      "kind": "noisy",
+      "query": "Reakt + TypScript engneer for Dhkaa frntend role",
+      "relevantCategories": ["engineering"],
+      "relevantCorpusKeys": [],
+      "expectCategory": "engineering"
+    },
+    {
+      "id": "a3-noisy-data-typos",
+      "kind": "noisy",
+      "query": "dat enginer sparkk + airflw pipelnes",
+      "relevantCategories": ["data"],
+      "relevantCorpusKeys": [],
+      "expectCategory": "data"
+    },
+    {
+      "id": "a3-multi-skill-ml-product",
+      "kind": "hard_multi",
+      "query": "Ship an ML-assisted recommendation feature with experimentation and stakeholder updates",
+      "relevantCategories": ["data", "product", "engineering"],
+      "relevantCorpusKeys": [],
+      "expectCategory": "data"
+    },
+    {
+      "id": "a3-ambiguous-growth",
+      "kind": "ambiguous",
+      "query": "We need a growth person for the next quarter",
+      "relevantCategories": ["marketing", "product", "sales"],
+      "relevantCorpusKeys": [],
+      "expectCategory": null
+    },
+    {
+      "id": "a3-nohit-underwater-welding",
+      "kind": "no_hit",
+      "query": "Certified commercial underwater welder for offshore oil platforms in the North Sea",
+      "relevantCategories": [],
+      "relevantCorpusKeys": [],
+      "expectCategory": null,
+      "notes": "Corpus has no maritime welding track — prefer miss / off-domain."
+    },
+    {
+      "id": "a3-nohit-quantum-cryo",
+      "kind": "no_hit",
+      "query": "Cryogenic quantum hardware technician for dilution refrigerators",
+      "relevantCategories": [],
+      "relevantCorpusKeys": [],
+      "expectCategory": null
+    },
+    {
+      "id": "a3-edge-emptyish",
+      "kind": "edge",
+      "query": "jobs",
+      "relevantCategories": [],
+      "relevantCorpusKeys": [],
+      "expectCategory": null,
+      "notes": "Under-specified; category-hit not required."
+    },
+    {
+      "id": "a3-answer-faith-eng",
+      "kind": "answer",
+      "query": "What skills show up for synthetic frontend engineering practice docs?",
+      "relevantCategories": ["engineering"],
+      "relevantCorpusKeys": [],
+      "expectCategory": "engineering",
+      "answerProbe": true
+    }
+  ]
+}

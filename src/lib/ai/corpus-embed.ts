@@ -470,13 +470,25 @@ export async function batchEmbedJobCorpus(
     provider === "gte"
       ? "id,content,embedding,embedding_gte,corpus_key,job_id,title,location,category,skills_text,source,is_synthetic"
       : "id,content,embedding,corpus_key,job_id,title,location,category,skills_text,source,is_synthetic";
-  const pending = await client
-    .from("job_corpus")
-    .select(selectCols)
-    .is(storageColumn, null)
-    .range(0, Math.max(0, limit - 1));
 
-  if (pending.error) throw new Error(pending.error.message);
+  // Page pending rows — PostgREST often caps a single range response at ~1000.
+  const pageSize = 1000;
+  const pendingRows: JobCorpusRow[] = [];
+  let from = 0;
+  while (pendingRows.length < limit) {
+    const take = Math.min(pageSize, limit - pendingRows.length);
+    const pending = await client
+      .from("job_corpus")
+      .select(selectCols)
+      .is(storageColumn, null)
+      .range(from, from + take - 1);
+    if (pending.error) throw new Error(pending.error.message);
+    const page = pending.data ?? [];
+    if (!page.length) break;
+    pendingRows.push(...page);
+    if (page.length < take) break;
+    from += page.length;
+  }
 
   const result: BatchEmbedResult = {
     processed: 0,
@@ -488,7 +500,7 @@ export async function batchEmbedJobCorpus(
   };
 
   const work: PendingRow[] = [];
-  for (const row of pending.data ?? []) {
+  for (const row of pendingRows) {
     const stored =
       provider === "gte" ? (row.embedding_gte ?? null) : row.embedding;
     if (hasValidEmbedding(stored, dims)) {

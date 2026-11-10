@@ -6,6 +6,7 @@ import {
   assertNoSplitLeakage,
   assertNoTemplateGroupLeakage,
   buildSyntheticSplitDiagnostics,
+  buildTrack5EvalEnvelope,
   CLASSIFIER_RANDOM_SEED,
   CLASSIFIER_TRAIN_FRACTION,
   evaluateClassifier,
@@ -14,9 +15,13 @@ import {
   type ClassifierEvalReport,
   type ClassifierSplit,
   type SyntheticSplitDiagnostics,
+  type Track5EvalEnvelope,
   type TrainedJobClassifier,
 } from "@/lib/ai/job-classifier";
-import { generateClassifierLabeledExamples } from "@/lib/ai/job-classifier-dataset";
+import {
+  generateClassifierLabeledExamples,
+  type ClassifierEnrichmentVariant,
+} from "@/lib/ai/job-classifier-dataset";
 import {
   evaluateTfidfLogRegOnSplit,
   type TfidfLogRegModel,
@@ -46,6 +51,8 @@ export type ClassifierComparisonReport = {
   tfidfLogReg: ClassifierEvalReport;
   tfidfTuning?: TfidfTuneResult;
   historicalReference?: typeof CLASSIFIER_HISTORICAL_REFERENCE;
+  /** Dual-benchmark envelope (synthetic vs independent placeholder). */
+  track5?: Track5EvalEnvelope;
   notes: string[];
 };
 
@@ -53,6 +60,7 @@ export function compareClassifiersOnGroupedSplit(options?: {
   count?: number;
   seed?: number;
   trainFraction?: number;
+  enrichmentVariant?: ClassifierEnrichmentVariant;
   /** Override holdout grid (tests may pass a single candidate for speed). */
   tfidfTuneCandidates?: TfidfLogRegHyperparams[];
 }): {
@@ -65,7 +73,9 @@ export function compareClassifiersOnGroupedSplit(options?: {
   const seed = options?.seed ?? CLASSIFIER_RANDOM_SEED;
   const trainFraction = options?.trainFraction ?? CLASSIFIER_TRAIN_FRACTION;
 
-  const examples = generateClassifierLabeledExamples(count);
+  const examples = generateClassifierLabeledExamples(count, {
+    variant: options?.enrichmentVariant,
+  });
   const split = stratifiedGroupTrainTestSplit(examples, { seed, trainFraction });
   assertNoSplitLeakage(split);
   assertNoTemplateGroupLeakage(split);
@@ -83,7 +93,7 @@ export function compareClassifiersOnGroupedSplit(options?: {
     notes: [
       ...naiveBayes.notes,
       ...diagnostics.notes,
-      "Baseline multinomial Naive Bayes under leakage-resistant template-group evaluation.",
+      "Baseline multinomial Naive Bayes under leakage-resistant template-group evaluation (Option A remediated features).",
     ],
   };
 
@@ -105,6 +115,8 @@ export function compareClassifiersOnGroupedSplit(options?: {
     ],
   };
 
+  const track5 = buildTrack5EvalEnvelope(naiveBayesReport);
+
   return {
     split,
     naiveBayesModel,
@@ -118,15 +130,17 @@ export function compareClassifiersOnGroupedSplit(options?: {
       diagnostics,
       naiveBayes: naiveBayesReport,
       tfidfLogReg: tfidfReport,
+      track5,
       notes: [
         "Both models share preprocess, gold labels, template-group split, and seed.",
-        "Examples use classifier-oriented descriptions (duties + tools); Track-1 RAG corpus text is unchanged.",
+        "Examples use Track 5 Option A classifier features (location + title-keyed duties; no category-tied skills line). Track-1 RAG corpus text is unchanged.",
         tuned.selectionMethod === "group_holdout"
           ? "TF-IDF hyperparameters were chosen by train-only template-group holdout."
           : "TF-IDF uses a documented fixed preset — train-only holdout could not discriminate candidates.",
         "TF-IDF vocabulary/IDF and logistic weights were fit on the training split only.",
         "Near-duplicate and template-group overlap diagnostics are shared across both reports.",
         "Do not treat either synthetic score as a real-world accuracy claim without further validation.",
+        "track5.syntheticBenchmark holds the official NB remediated metrics; track5.independentBenchmark stays unavailable until a real labeled set is sourced.",
       ],
       tfidfTuning: tuned,
       historicalReference: CLASSIFIER_HISTORICAL_REFERENCE,

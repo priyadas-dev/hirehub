@@ -4,12 +4,19 @@ import { Briefcase, Users } from "lucide-react";
 import { toast } from "sonner";
 import { z } from "zod";
 import { ResumeOpenLink } from "@/components/applications/ResumeOpenLink";
+import { RecruiterInterviewPanel } from "@/components/interviews/RecruiterInterviewPanel";
 import { CardSkeleton, EmptyState, ErrorState, PageHeader } from "@/components/feedback/States";
 import { StatusBadge } from "@/components/status/StatusBadge";
 import { StatusTracker } from "@/components/status/StatusTracker";
 import { STATUS_META, type ApplicationStatus } from "@/components/status/status";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { nextApplicationStatuses, STATUS_ACTION_LABEL } from "@/lib/hirehub";
 import { isMissingSchemaError } from "@/lib/hirehub-storage";
 import { updateApplicationStatusWithNotification } from "@/lib/notify-application-status";
@@ -29,7 +36,10 @@ export const Route = createFileRoute("/_app/recruiter/applicants")({
   head: () => ({
     meta: [
       { title: "Applicants — HireHub" },
-      { name: "description", content: "Review applicants and move them through the hiring pipeline." },
+      {
+        name: "description",
+        content: "Review applicants and move them through the hiring pipeline.",
+      },
     ],
   }),
   component: ApplicantsPage,
@@ -143,6 +153,8 @@ function ApplicantsPage() {
       await qc.invalidateQueries({ queryKey: ["admin-applications"] });
       await qc.invalidateQueries({ queryKey: ["admin-reports"] });
       await qc.invalidateQueries({ queryKey: ["notifications"] });
+      await qc.invalidateQueries({ queryKey: ["interview-schedule"] });
+      await qc.invalidateQueries({ queryKey: ["seeker-interview"] });
     },
     onError: async (e: Error) => {
       // Status may already be persisted; refresh lists even when notification failed.
@@ -305,7 +317,9 @@ function ApplicantsPage() {
                     className={`flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors ${
                       active ? "bg-signal-soft/70" : "hover:bg-signal-soft/40"
                     }`}
-                    onClick={() => void navigate({ search: (prev) => ({ ...prev, applicationId: a.id }) })}
+                    onClick={() =>
+                      void navigate({ search: (prev) => ({ ...prev, applicationId: a.id }) })
+                    }
                   >
                     <div className="min-w-0">
                       <p className="truncate text-sm font-medium">{name}</p>
@@ -364,6 +378,10 @@ function ApplicantsPage() {
                   </a>
                 </div>
               )}
+              <RecruiterInterviewPanel
+                applicationId={selected.id}
+                applicationStatus={selected.status as ApplicationStatus}
+              />
               <div className="space-y-2">
                 <p className="text-sm font-medium">Pipeline actions</p>
                 <div className="flex flex-wrap gap-2">
@@ -385,7 +403,9 @@ function ApplicantsPage() {
                     </Button>
                   ))}
                   {nextApplicationStatuses(selected.status as ApplicationStatus).length === 0 && (
-                    <p className="text-sm text-muted-foreground">This application is in a final status.</p>
+                    <p className="text-sm text-muted-foreground">
+                      This application is in a final status.
+                    </p>
                   )}
                 </div>
               </div>

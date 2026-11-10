@@ -1,0 +1,174 @@
+{
+  "generatedAt": "2026-11-06T07:59:42.583Z",
+  "baseURL": "http://127.0.0.1:8080",
+  "account": "pr***@gmail.com",
+  "checks": [
+    {
+      "id": "AUTH-01-unauthenticated-assistant",
+      "status": "pass",
+      "notes": []
+    },
+    {
+      "id": "A-01-page-load",
+      "status": "pass",
+      "notes": [
+        "Heading + empty state or composer visible"
+      ]
+    },
+    {
+      "id": "A-02-shell-chrome",
+      "status": "pass",
+      "notes": [
+        "History, New, Browse jobs, attach, composer present"
+      ]
+    },
+    {
+      "id": "A-03-starters-visible",
+      "status": "pass",
+      "notes": [
+        "All 4 starter chips visible on empty conversation"
+      ]
+    },
+    {
+      "id": "A-04-send-disabled-short",
+      "status": "pass",
+      "notes": [
+        "Send disabled for <3 character questions"
+      ]
+    },
+    {
+      "id": "MA-01-legacy-general-knowledge",
+      "status": "pass",
+      "notes": [
+        "General knowledge answer rendered",
+        "Payloads: []",
+        "General Q answered without vacancy spam"
+      ]
+    },
+    {
+      "id": "MA-02-discovery-job-search",
+      "status": "fail",
+      "notes": [],
+      "error": "locator.click: Timeout 30000ms exceeded.\nCall log:\n  - waiting for getByRole('button', { name: /^New$/i })\n    - locator resolved to <button disabled type=\"button\" data-tsd-source=\"/src/routes/_app.seeker.assistant.tsx:239:11\" class=\"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg font-medium cursor-pointer transition-all duration-200 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border bo…>…</button>\n  - attempting click action\n    2 × waiting for element to be visible, enabled and stable\n      - element is not enabled\n    - retrying click action\n    - waiting 20ms\n    2 × waiting for element to be visible, enabled and stable\n      - element is not enabled\n    - retrying click action\n      - waiting 100ms\n    56 × waiting for element to be visible, enabled and stable\n       - element is not enabled\n     - retrying click action\n       - waiting 500ms\n"
+    },
+    {
+      "id": "MA-03-discovery-remote",
+      "status": "fail",
+      "notes": [],
+      "error": "locator.click: Timeout 30000ms exceeded.\nCall log:\n  - waiting for getByRole('button', { name: /^New$/i })\n    - locator resolved to <button disabled type=\"button\" data-tsd-source=\"/src/routes/_app.seeker.assistant.tsx:239:11\" class=\"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg font-medium cursor-pointer transition-all duration-200 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border bo…>…</button>\n  - attempting click action\n    2 × waiting for element to be visible, enabled and stable\n      - element is not enabled\n    - retrying click action\n    - waiting 20ms\n    2 × waiting for element to be visible, enabled and stable\n      - element is not enabled\n    - retrying click action\n      - waiting 100ms\n    56 × waiting for element to be visible, enabled and stable\n       - element is not enabled\n     - retrying click action\n       - waiting 500ms\n"
+    },
+    {
+      "id": "MA-04-application-status",
+      "status": "fail",
+      "notes": [],
+      "error": "locator.click: Timeout 30000ms exceeded.\nCall log:\n  - waiting for getByRole('button', { name: /^New$/i })\n    - locator resolved to <button disabled type=\"button\" data-tsd-source=\"/src/routes/_app.seeker.assistant.tsx:239:11\" class=\"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg font-medium cursor-pointer transition-all duration-200 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border bo…>…</button>\n  - attempting click action\n    2 × waiting for element to be visible, enabled and stable\n      - element is not enabled\n    - retrying click action\n    - waiting 20ms\n    2 × waiting for element to be visible, enabled and stable\n      - element is not enabled\n    - retrying click action\n      - waiting 100ms\n    56 × waiting for element to be visible, enabled and stable\n       - element is not enabled\n     - retrying click action\n       - waiting 500ms\n"
+    },
+    {
+      "id": "MA-05-application-save-intent",
+      "status": "fail",
+      "notes": [],
+      "error": "locator.click: Timeout 30000ms exceeded.\nCall log:\n  - waiting for getByRole('button', { name: /^New$/i })\n    - locator resolved to <button disabled type=\"button\" data-tsd-source=\"/src/routes/_app.seeker.assistant.tsx:239:11\" class=\"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg font-medium cursor-pointer transition-all duration-200 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border bo…>…</button>\n  - attempting click action\n    2 × waiting for element to be visible, enabled and stable\n      - element is not enabled\n    - retrying click action\n    - waiting 20ms\n    2 × waiting for element to be visible, enabled and stable\n      - element is not enabled\n    - retrying click action\n      - waiting 100ms\n    55 × waiting for element to be visible, enabled and stable\n       - element is not enabled\n     - retrying click action\n       - waiting 500ms\n"
+    },
+    {
+      "id": "MA-06-fairness-refuse",
+      "status": "fail",
+      "notes": [],
+      "error": "locator.click: Timeout 30000ms exceeded.\nCall log:\n  - waiting for getByRole('button', { name: /^New$/i })\n    - locator resolved to <button disabled type=\"button\" data-tsd-source=\"/src/routes/_app.seeker.assistant.tsx:239:11\" class=\"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg font-medium cursor-pointer transition-all duration-200 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border bo…>…</button>\n  - attempting click action\n    2 × waiting for element to be visible, enabled and stable\n      - element is not enabled\n    - retrying click action\n    - waiting 20ms\n    2 × waiting for element to be visible, enabled and stable\n      - element is not enabled\n    - retrying click action\n      - waiting 100ms\n    56 × waiting for element to be visible, enabled and stable\n       - element is not enabled\n     - retrying click action\n       - waiting 500ms\n"
+    },
+    {
+      "id": "MA-07-starter-chip-click",
+      "status": "fail",
+      "notes": [],
+      "error": "locator.click: Timeout 30000ms exceeded.\nCall log:\n  - waiting for getByRole('button', { name: /^New$/i })\n    - locator resolved to <button disabled type=\"button\" data-tsd-source=\"/src/routes/_app.seeker.assistant.tsx:239:11\" class=\"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg font-medium cursor-pointer transition-all duration-200 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border bo…>…</button>\n  - attempting click action\n    2 × waiting for element to be visible, enabled and stable\n      - element is not enabled\n    - retrying click action\n    - waiting 20ms\n    2 × waiting for element to be visible, enabled and stable\n      - element is not enabled\n    - retrying click action\n      - waiting 100ms\n    56 × waiting for element to be visible, enabled and stable\n       - element is not enabled\n     - retrying click action\n       - waiting 500ms\n"
+    },
+    {
+      "id": "A-05-history-persist",
+      "status": "pass",
+      "notes": [
+        "History entries visible: 4"
+      ]
+    },
+    {
+      "id": "A-06-history-open-rename-delete",
+      "status": "pass",
+      "notes": [
+        "Rename OK",
+        "Opened a history conversation",
+        "Delete dialog accepted"
+      ]
+    },
+    {
+      "id": "A-07-new-conversation",
+      "status": "pass",
+      "notes": [
+        "New clears to empty state"
+      ]
+    },
+    {
+      "id": "A-08-attachment-reject-txt",
+      "status": "pass",
+      "notes": [
+        "Rejected: Supported attachments: PDF, JPG, PNG, WEBP, or DOCX (max 2 MB)."
+      ]
+    },
+    {
+      "id": "A-09-attachment-accept-png",
+      "status": "pass",
+      "notes": [
+        "PNG attachment accepted"
+      ]
+    },
+    {
+      "id": "A-10-navigate-away-and-back",
+      "status": "pass",
+      "notes": [
+        "Returned to assistant after mid-ask navigation (live store continuity)"
+      ]
+    },
+    {
+      "id": "A-11-mobile-layout",
+      "status": "pass",
+      "notes": [
+        "Assistant usable at 390px"
+      ]
+    },
+    {
+      "id": "A-12-recruiter-blocked",
+      "status": "pass",
+      "notes": [
+        "Skipped opposite-role login — covered by auth-smoke; assistant is seeker-gated server-side"
+      ]
+    }
+  ],
+  "multiAgent": {
+    "tracesCaptured": [],
+    "routesSeen": [
+      "legacy"
+    ],
+    "verdict": "inconclusive",
+    "notes": [
+      "Could not confirm specialist routing from history or network.",
+      "ISSUE: Some turns failed with Gemini unavailable (legacy / general knowledge path)."
+    ],
+    "historyEvidence": [
+      {
+        "title": "Briefly explain what a REST API is.",
+        "question": "Briefly explain what a REST API is.",
+        "ok": false,
+        "routedTo": "legacy",
+        "fairnessAction": "skipped",
+        "soughtLiveJobs": null,
+        "liveCount": 0,
+        "hasStatuses": false,
+        "statusCount": 0,
+        "saveOutcome": false,
+        "pendingApply": false,
+        "code": "generation_failed",
+        "answerPreview": "Gemini is temporarily unavailable (high demand). Please retry shortly."
+      }
+    ],
+    "askPayloads": []
+  },
+  "consoleErrors": [],
+  "pageErrors": []
+}

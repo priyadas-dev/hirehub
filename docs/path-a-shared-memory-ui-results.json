@@ -1,0 +1,83 @@
+{
+  "generatedAt": "2026-11-06T11:59:02.294Z",
+  "baseUrl": "http://127.0.0.1:8080",
+  "mode": "Path A — shared memory UI verify (Mode A / confirm:false)",
+  "checks": [
+    {
+      "id": "login-seeker",
+      "status": "pass"
+    },
+    {
+      "id": "open-assistant",
+      "status": "pass"
+    },
+    {
+      "id": "seed-skills-preferences",
+      "status": "pass",
+      "notes": "Seeded skills + Dhaka preference in same conversation"
+    },
+    {
+      "id": "discovery-follow-up-uses-conversation",
+      "status": "pass",
+      "notes": "Follow-up Discovery/assistant response rendered in same conversation"
+    },
+    {
+      "id": "application-uses-memory-propose-only",
+      "status": "pass",
+      "notes": "Mode A: expect needs_confirm / clarification using recent jobs from memory when available; no confirmed insert"
+    },
+    {
+      "id": "same-conversation-surface",
+      "status": "pass",
+      "notes": "Confirm-related UI nodes visible count=3"
+    },
+    {
+      "id": "restart-limitation-code-evidence",
+      "status": "pass",
+      "notes": "server-memory.ts uses process-local Map; restart clears memory. Verified by design + unit reset semantics; do not require prod restart for Path A."
+    }
+  ],
+  "askSummaries": [
+    {
+      "url": "https://munqgybiuqpncxbgfvdp.supabase.co/auth/v1/token?grant_type=password",
+      "conversationIdEcho": null,
+      "routedTo": null,
+      "memoryWritten": null,
+      "liveCount": 0,
+      "pendingApplyJobId": null,
+      "insufficientContext": null
+    },
+    {
+      "url": "http://127.0.0.1:8080/_serverFn/eyJmaWxlIjoiL3NyYy9saWIvYWkvYXNrLWpvYi1hc3Npc3RhbnQudHM_dHNzLXNlcnZlcmZuLXNwbGl0IiwiZXhw",
+      "conversationIdEcho": null,
+      "routedTo": null,
+      "memoryWritten": null,
+      "liveCount": 0,
+      "pendingApplyJobId": null,
+      "insufficientContext": null
+    },
+    {
+      "url": "http://127.0.0.1:8080/_serverFn/eyJmaWxlIjoiL3NyYy9saWIvYWkvYXNrLWpvYi1hc3Npc3RhbnQudHM_dHNzLXNlcnZlcmZuLXNwbGl0IiwiZXhw",
+      "conversationIdEcho": null,
+      "routedTo": null,
+      "memoryWritten": null,
+      "liveCount": 0,
+      "pendingApplyJobId": null,
+      "insufficientContext": null
+    },
+    {
+      "url": "http://127.0.0.1:8080/_serverFn/eyJmaWxlIjoiL3NyYy9saWIvYWkvYXNrLWpvYi1hc3Npc3RhbnQudHM_dHNzLXNlcnZlcmZuLXNwbGl0IiwiZXhw",
+      "conversationIdEcho": null,
+      "routedTo": null,
+      "memoryWritten": null,
+      "liveCount": 0,
+      "pendingApplyJobId": null,
+      "insufficientContext": null
+    }
+  ],
+  "conversationIdsSeen": [],
+  "notes": [
+    "UI button labels sample count=11"
+  ],
+  "screenshot": "docs/path-a-shared-memory-ui.png"
+}

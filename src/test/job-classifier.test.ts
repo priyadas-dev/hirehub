@@ -10,6 +10,7 @@ import {
   assertNoTemplateGroupLeakage,
   CLASSIFIER_RANDOM_SEED,
   CLASSIFIER_TARGET_ACCURACY,
+  CLASSIFIER_TRACK5_TARGET_MACRO_F1,
   CLASSIFIER_TRAIN_FRACTION,
   corpusDocsToLabeledExamples,
   countTemplateGroupOverlap,
@@ -387,11 +388,17 @@ describe("runJobClassifierPipeline", () => {
     expect(report.accuracy).toBeGreaterThanOrEqual(0);
     expect(report.accuracy).toBeLessThanOrEqual(1);
     expect(report.meetsTarget).toBe(report.accuracy >= CLASSIFIER_TARGET_ACCURACY);
+    expect(report.targetAccuracy).toBe(CLASSIFIER_TARGET_ACCURACY);
+    expect(report.meetsTrack5MacroF1).toBe(report.macroF1 >= CLASSIFIER_TRACK5_TARGET_MACRO_F1);
+    expect(report.targetMacroF1).toBe(CLASSIFIER_TRACK5_TARGET_MACRO_F1);
     expect(report.testSize).toBe(split.test.length);
     expect(report.notes.some((n) => /live job recommendations/i.test(n))).toBe(true);
-    expect(report.notes.some((n) => /skill-list/i.test(n))).toBe(true);
+    expect(report.notes.some((n) => /option a|skills laundry|skill-list/i.test(n))).toBe(true);
     expect(report.notes.some((n) => /gte-small prototype/i.test(n))).toBe(true);
     expect(report.originalDescriptions).toBeUndefined();
+    expect(Number.isFinite(report.weightedF1)).toBe(true);
+    expect(report.weightedF1).toBeGreaterThanOrEqual(0);
+    expect(report.weightedF1).toBeLessThanOrEqual(1);
 
     expect(report.syntheticDiagnostics).toBeTruthy();
     const diag = report.syntheticDiagnostics!;
@@ -400,6 +407,13 @@ describe("runJobClassifierPipeline", () => {
     expect(diag.fullMaskedAccuracy).toBe(report.accuracy);
     expect(diag.nearDuplicateThreshold).toBe(SYNTHETIC_NEAR_DUPLICATE_JACCARD);
     expect(diag.nearDuplicateRate).toBeCloseTo(diag.nearDuplicateCount / report.testSize, 5);
+    expect(diag.skillsLinePresentInTest).toBe(false);
+    expect(Number.isFinite(diag.skillsOnlyAccuracy)).toBe(true);
+    expect(Number.isFinite(diag.dutyOnlyAccuracy)).toBe(true);
+    expect(Number.isFinite(diag.nearDuplicateRateAt05)).toBe(true);
+    for (const example of split.test) {
+      expect(example.description.toLowerCase()).not.toContain("hands-on tools frequently used");
+    }
 
     for (const category of JOB_CORPUS_CATEGORIES) {
       const metrics = report.perClass[category];
