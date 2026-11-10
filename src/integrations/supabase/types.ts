@@ -8,6 +8,165 @@ export type Database = {
   };
   public: {
     Tables: {
+      agent_sessions: {
+        Row: {
+          id: string;
+          user_id: string;
+          conversation_id: string;
+          memory: Json;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          conversation_id: string;
+          memory?: Json;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          conversation_id?: string;
+          memory?: Json;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "agent_sessions_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      /** PROPOSED_0025 — live-generated shape from project munqgybiuqpncxbgfvdp (surgical patch; full gen was too large vs curated types). */
+      interview_schedules: {
+        Row: {
+          application_id: string;
+          conference_attempt: number;
+          conference_status: string;
+          created_at: string;
+          end_at: string;
+          etag: string | null;
+          failure_reason: string | null;
+          google_calendar_id: string | null;
+          google_event_id: string | null;
+          html_link: string | null;
+          id: string;
+          invited_at: string | null;
+          job_id: string;
+          last_synced_at: string | null;
+          lease_until: string | null;
+          meet_link: string | null;
+          recruiter_id: string;
+          recruiter_response: string;
+          reschedule_count: number;
+          scheduled_by: string | null;
+          seeker_id: string;
+          seeker_response: string;
+          start_at: string;
+          status: string;
+          timezone: string;
+          updated_at: string;
+        };
+        Insert: {
+          application_id: string;
+          conference_attempt?: number;
+          conference_status?: string;
+          created_at?: string;
+          end_at: string;
+          etag?: string | null;
+          failure_reason?: string | null;
+          google_calendar_id?: string | null;
+          google_event_id?: string | null;
+          html_link?: string | null;
+          id?: string;
+          invited_at?: string | null;
+          job_id: string;
+          last_synced_at?: string | null;
+          lease_until?: string | null;
+          meet_link?: string | null;
+          recruiter_id: string;
+          recruiter_response?: string;
+          reschedule_count?: number;
+          scheduled_by?: string | null;
+          seeker_id: string;
+          seeker_response?: string;
+          start_at: string;
+          status?: string;
+          timezone?: string;
+          updated_at?: string;
+        };
+        Update: {
+          application_id?: string;
+          conference_attempt?: number;
+          conference_status?: string;
+          created_at?: string;
+          end_at?: string;
+          etag?: string | null;
+          failure_reason?: string | null;
+          google_calendar_id?: string | null;
+          google_event_id?: string | null;
+          html_link?: string | null;
+          id?: string;
+          invited_at?: string | null;
+          job_id?: string;
+          last_synced_at?: string | null;
+          lease_until?: string | null;
+          meet_link?: string | null;
+          recruiter_id?: string;
+          recruiter_response?: string;
+          reschedule_count?: number;
+          scheduled_by?: string | null;
+          seeker_id?: string;
+          seeker_response?: string;
+          start_at?: string;
+          status?: string;
+          timezone?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "interview_schedules_application_id_fkey";
+            columns: ["application_id"];
+            isOneToOne: false;
+            referencedRelation: "applications";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "interview_schedules_job_id_fkey";
+            columns: ["job_id"];
+            isOneToOne: false;
+            referencedRelation: "jobs";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "interview_schedules_recruiter_id_fkey";
+            columns: ["recruiter_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "interview_schedules_scheduled_by_fkey";
+            columns: ["scheduled_by"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "interview_schedules_seeker_id_fkey";
+            columns: ["seeker_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       applications: {
         Row: {
           cover_note: string | null;

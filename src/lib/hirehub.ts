@@ -21,6 +21,8 @@ export function nextApplicationStatuses(current: ApplicationStatus): Application
     case "hired":
     case "rejected":
       return [];
+    default:
+      return [];
   }
 }
 

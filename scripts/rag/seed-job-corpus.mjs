@@ -1,9 +1,10 @@
 /**
- * Track 1 — seed synthetic job corpus into public.job_corpus only.
- * Never inserts into public.jobs.
+ * Track 1 / Track 4B — seed synthetic job corpus into public.job_corpus only.
+ * Never inserts into public.jobs. Resumable: skips existing corpus_key rows.
+ * Never writes embedding / embedding_gte (preserves vectors on re-run).
  *
  * Usage:
- *   node --import tsx scripts/rag/seed-job-corpus.mjs [--count=5000] [--dry-run]
+ *   node --import tsx scripts/rag/seed-job-corpus.mjs [--count=5000|10000|20000] [--dry-run]
  *
  * Requires (after manual migration apply):
  *   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
@@ -20,7 +21,27 @@ function parseArgs(argv) {
     const m = arg.match(/^--count=(\d+)$/);
     if (m) count = Number(m[1]);
   }
+  if (![5000, 10000, 20000].includes(count) && count < 1) {
+    throw new Error(`Invalid --count=${count}`);
+  }
   return { count, dryRun };
+}
+
+async function fetchExistingKeySet(client, keys) {
+  const existing = new Set();
+  const batchSize = 200;
+  for (let i = 0; i < keys.length; i += batchSize) {
+    const batch = keys.slice(i, i + batchSize);
+    const { data, error } = await client
+      .from("job_corpus")
+      .select("corpus_key")
+      .in("corpus_key", batch);
+    if (error) throw new Error(error.message);
+    for (const row of data ?? []) {
+      if (row.corpus_key) existing.add(row.corpus_key);
+    }
+  }
+  return existing;
 }
 
 async function main() {
@@ -34,6 +55,7 @@ async function main() {
 
   if (dryRun) {
     console.log("[rag:seed] Dry run — sample keys:", docs.slice(0, 3).map((d) => d.corpus_key));
+    console.log("[rag:seed] Last key:", docs.at(-1)?.corpus_key);
     console.log("[rag:seed] No database writes performed.");
     return;
   }
@@ -58,10 +80,20 @@ async function main() {
     return;
   }
 
+  const existing = await fetchExistingKeySet(
+    client,
+    docs.map((d) => d.corpus_key),
+  );
+  const missing = docs.filter((d) => !existing.has(d.corpus_key));
+  const skippedExisting = docs.length - missing.length;
+  console.log(
+    `[rag:seed] Existing keys in range: ${skippedExisting}. Missing to upsert: ${missing.length}.`,
+  );
+
   const batchSize = 200;
   let upserted = 0;
-  for (let i = 0; i < docs.length; i += batchSize) {
-    const slice = docs.slice(i, i + batchSize).map((doc) => ({
+  for (let i = 0; i < missing.length; i += batchSize) {
+    const slice = missing.slice(i, i + batchSize).map((doc) => ({
       corpus_key: doc.corpus_key,
       job_id: null,
       title: doc.title,
@@ -71,8 +103,7 @@ async function main() {
       source: doc.source,
       is_synthetic: true,
       content: doc.content,
-      // Do not set embedding here — leave null on insert; omit on upsert so
-      // re-seeding never wipes vectors already filled by the embed pipeline.
+      // Omit embedding / embedding_gte — never wipe vectors on seed/reseed.
       updated_at: new Date().toISOString(),
     }));
 
@@ -86,11 +117,11 @@ async function main() {
       return;
     }
     upserted += slice.length;
-    console.log(`[rag:seed] Upserted ${upserted}/${docs.length}`);
+    console.log(`[rag:seed] Upserted missing ${upserted}/${missing.length}`);
   }
 
   console.log(
-    `[rag:seed] Done. Inserted/updated ${upserted} rows in public.job_corpus only. public.jobs untouched.`,
+    `[rag:seed] Done. upserted=${upserted} skippedExisting=${skippedExisting}. public.jobs untouched. Embeddings unchanged.`,
   );
 }
 

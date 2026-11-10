@@ -32,6 +32,7 @@ describe("App routing", () => {
     "/recruiter/crm/segments",
     "/recruiter/crm/segments/f5b3f02a-793d-4dd7-91c5-f94f00b76603",
     "/recruiter/crm/campaigns",
+    "/recruiter/agent",
     "/recruiter/company",
     "/recruiter/jobs",
     "/recruiter/jobs/new",

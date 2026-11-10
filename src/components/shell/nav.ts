@@ -1,4 +1,4 @@
-import { LayoutDashboard, Briefcase, FileText, Bookmark, Users, PlusSquare, ShieldCheck, Building2, UserCircle, BarChart3, ClipboardList, Settings, FileDiff, MessageSquareText, Megaphone, Tags, Globe2, type LucideIcon } from "lucide-react";
+import { LayoutDashboard, Briefcase, FileText, Bookmark, Users, PlusSquare, ShieldCheck, Building2, UserCircle, BarChart3, ClipboardList, Settings, FileDiff, MessageSquareText, Megaphone, Tags, Globe2, Bot, type LucideIcon } from "lucide-react";
 import type { Role } from "@/lib/auth";
 
 export type AppNavPath =
@@ -13,6 +13,7 @@ export type AppNavPath =
   | "/recruiter/jobs/new"
   | "/recruiter/applicants"
   | "/recruiter/crm"
+  | "/recruiter/agent"
   | "/recruiter/company"
   | "/recruiter/job-categories"
   | "/admin"
@@ -50,6 +51,7 @@ export const NAV: Record<Role, NavItem[]> = {
     { label: "My Job Posts", icon: Briefcase, to: "/recruiter/jobs" },
     { label: "Applicants", icon: Users, to: "/recruiter/applicants" },
     { label: "CRM", icon: Megaphone, to: "/recruiter/crm" },
+    { label: "AI Recruiter Agent", icon: Bot, to: "/recruiter/agent" },
     { label: "Company Profile", icon: Building2, to: "/recruiter/company" },
     { label: "My categories", icon: Tags, to: "/recruiter/job-categories" },
     { label: "Settings", icon: Settings, to: "/settings" },

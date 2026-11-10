@@ -1,0 +1,178 @@
+{
+  "generatedAt": "2026-11-09T05:01:51.457Z",
+  "task": "3F-readonly",
+  "baseUrl": "http://127.0.0.1:8080",
+  "supabase": {
+    "looksHostedSupabase": true,
+    "matchesKnownProdProject": true
+  },
+  "productionBacked": true,
+  "readOnlyPolicy": [
+    "No Confirm apply",
+    "No Confirm shortlist",
+    "No Save Job",
+    "No email send",
+    "Propose shortlist confirm:false only",
+    "Outreach draft confirmSend:false (in-memory campaign object only)"
+  ],
+  "scenarios": [
+    {
+      "id": "env-seeker-login",
+      "status": "pass",
+      "notes": [
+        "Signed in as seeker; JWT session for real backend reads"
+      ],
+      "writes": "none-intended",
+      "backend": "real"
+    },
+    {
+      "id": "seeker-open-assistant",
+      "status": "pass",
+      "notes": [],
+      "writes": "none-intended",
+      "backend": "real"
+    },
+    {
+      "id": "discovery-specific-role-skill",
+      "status": "pass",
+      "notes": [
+        "Specific role+skill+location query returned grounded/honest response"
+      ],
+      "writes": "none-intended",
+      "backend": "real"
+    },
+    {
+      "id": "discovery-vague-clarification",
+      "status": "pass",
+      "notes": [],
+      "writes": "none-intended",
+      "backend": "real"
+    },
+    {
+      "id": "discovery-empty-no-invent",
+      "status": "pass",
+      "notes": [
+        "No fabricated vacancy cards required; honest empty/refuse path"
+      ],
+      "writes": "none-intended",
+      "backend": "real"
+    },
+    {
+      "id": "guardrail-fairness-refuse",
+      "status": "pass",
+      "notes": [],
+      "writes": "none-intended",
+      "backend": "real"
+    },
+    {
+      "id": "application-status-readonly",
+      "status": "pass",
+      "notes": [],
+      "writes": "none (status SELECT via JWT)",
+      "backend": "real"
+    },
+    {
+      "id": "application-propose-no-confirm",
+      "status": "pass",
+      "notes": [
+        "Stopped at propose/confirm UI; Confirm NOT clicked"
+      ],
+      "writes": "none (confirm:false path)",
+      "backend": "real"
+    },
+    {
+      "id": "application-save-job",
+      "status": "skipped",
+      "notes": [
+        "Save Job is a DB write (saved_jobs insert) — skipped for read-only Task 3F"
+      ],
+      "writes": "avoided"
+    },
+    {
+      "id": "seeker-sign-out",
+      "status": "pass",
+      "notes": [],
+      "writes": "none-intended"
+    },
+    {
+      "id": "env-recruiter-login",
+      "status": "pass",
+      "notes": [],
+      "writes": "none-intended",
+      "backend": "real"
+    },
+    {
+      "id": "recruiter-open-agent-page",
+      "status": "pass",
+      "notes": [
+        "Route /recruiter/agent loads under recruiter shell"
+      ],
+      "writes": "none-intended",
+      "backend": "real"
+    },
+    {
+      "id": "recruiter-select-owned-job-and-list-applicants",
+      "status": "pass",
+      "notes": [
+        "Job select + applicants panel are JWT SELECTs (read-only)"
+      ],
+      "writes": "none (SELECT)",
+      "backend": "real"
+    },
+    {
+      "id": "recruiter-propose-shortlist-only",
+      "status": "skipped",
+      "notes": [
+        "No applicant row to propose shortlist — skipped (no write)"
+      ],
+      "writes": "avoided"
+    },
+    {
+      "id": "recruiter-confirm-shortlist",
+      "status": "skipped",
+      "notes": [
+        "Confirm shortlist persists application status — skipped for read-only Task 3F"
+      ],
+      "writes": "avoided"
+    },
+    {
+      "id": "recruiter-outreach-draft-only",
+      "status": "pass",
+      "notes": [
+        "createCampaignRecord is in-memory only; confirmSend:false; no email send; job row SELECT only"
+      ],
+      "writes": "none (no CRM insert/send)",
+      "backend": "real-read + in-memory draft"
+    },
+    {
+      "id": "recruiter-send-email",
+      "status": "skipped",
+      "notes": [
+        "Email send forbidden in read-only Task 3F"
+      ],
+      "writes": "avoided"
+    },
+    {
+      "id": "recruiter-nav-shows-agent",
+      "status": "pass",
+      "notes": [
+        "AI Recruiter Agent nav item present"
+      ],
+      "writes": "none-intended"
+    }
+  ],
+  "screenshots": [
+    "docs/task3f-readonly-seeker-assistant.png",
+    "docs/task3f-readonly-recruiter-agent.png"
+  ],
+  "notes": [
+    "CONFIRMED: local app env points at known hosted production Supabase project. Read-only Mode A only."
+  ],
+  "summary": {
+    "passed": 14,
+    "failed": 0,
+    "skipped": 4,
+    "partial": 0,
+    "total": 18
+  }
+}

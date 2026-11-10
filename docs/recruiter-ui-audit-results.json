@@ -1,0 +1,174 @@
+{
+  "generatedAt": "2026-11-05T11:03:35.335Z",
+  "baseURL": "http://127.0.0.1:8080",
+  "account": "mi***@gmail.com",
+  "checks": [
+    {
+      "id": "AUTH-01-unauthenticated-recruiter",
+      "status": "pass",
+      "notes": []
+    },
+    {
+      "id": "R-01-dashboard",
+      "status": "pass",
+      "notes": [
+        "Welcome, stat shortcuts, recent sections"
+      ]
+    },
+    {
+      "id": "R-02-sidebar",
+      "status": "pass",
+      "notes": [
+        "Navigated via Recruiter Dashboard",
+        "Navigated via Post a Job",
+        "Navigated via My Job Posts",
+        "Navigated via Applicants",
+        "Navigated via Company Profile",
+        "Navigated via Settings"
+      ]
+    },
+    {
+      "id": "R-03-jobs-list-filters",
+      "status": "pass",
+      "notes": [
+        "Title + status filters used"
+      ]
+    },
+    {
+      "id": "R-04-jobs-list-loaded",
+      "status": "pass",
+      "notes": [
+        "At least one job row/card visible"
+      ]
+    },
+    {
+      "id": "R-05-post-job-form",
+      "status": "pass",
+      "notes": [
+        "Client validation on empty submit (no job created)"
+      ]
+    },
+    {
+      "id": "R-06-job-detail-placeholder",
+      "status": "fail",
+      "notes": [],
+      "error": "locator.waitFor: Timeout 25000ms exceeded.\nCall log:\n  - waiting for getByRole('navigation', { name: 'Main' }) to be visible\n"
+    },
+    {
+      "id": "R-07-job-edit-route",
+      "status": "pass",
+      "notes": [
+        "Edit route registered"
+      ]
+    },
+    {
+      "id": "R-08-applicants-filters",
+      "status": "pass",
+      "notes": [
+        "Applicants page + job filter"
+      ]
+    },
+    {
+      "id": "R-09-applicants-status-url",
+      "status": "pass",
+      "notes": [
+        "Deep link ?status=shortlisted loads"
+      ]
+    },
+    {
+      "id": "R-10-company-profile",
+      "status": "pass",
+      "notes": [
+        "Page title is \"Profile\" (not \"Company profile\")"
+      ]
+    },
+    {
+      "id": "R-11-settings",
+      "status": "pass",
+      "notes": [
+        "Settings reachable while signed in as recruiter"
+      ]
+    },
+    {
+      "id": "R-12-header-search",
+      "status": "pass",
+      "notes": [
+        "Header search updates jobs list query"
+      ]
+    },
+    {
+      "id": "R-ROUTE-/recruiter/crm",
+      "status": "fail",
+      "notes": [
+        "Returns site 404 — route not in src/routeTree.gen.ts on this branch"
+      ],
+      "error": "Route not registered (404)"
+    },
+    {
+      "id": "R-ROUTE-/recruiter/crm/contacts",
+      "status": "fail",
+      "notes": [
+        "Returns site 404 — route not in src/routeTree.gen.ts on this branch"
+      ],
+      "error": "Route not registered (404)"
+    },
+    {
+      "id": "R-ROUTE-/recruiter/crm/segments",
+      "status": "fail",
+      "notes": [
+        "Returns site 404 — route not in src/routeTree.gen.ts on this branch"
+      ],
+      "error": "Route not registered (404)"
+    },
+    {
+      "id": "R-ROUTE-/recruiter/crm/campaigns",
+      "status": "fail",
+      "notes": [
+        "Returns site 404 — route not in src/routeTree.gen.ts on this branch"
+      ],
+      "error": "Route not registered (404)"
+    },
+    {
+      "id": "R-ROUTE-/recruiter/job-categories",
+      "status": "fail",
+      "notes": [
+        "Returns site 404 — route not in src/routeTree.gen.ts on this branch"
+      ],
+      "error": "Route not registered (404)"
+    },
+    {
+      "id": "R-16-real-job-from-list",
+      "status": "pass",
+      "notes": [
+        "Opened /recruiter/jobs/new"
+      ]
+    },
+    {
+      "id": "R-13-mobile-viewport",
+      "status": "pass",
+      "notes": [
+        "Mobile sheet nav opens"
+      ]
+    },
+    {
+      "id": "R-14-profile-menu",
+      "status": "pass",
+      "notes": [
+        "Profile menu items visible"
+      ]
+    },
+    {
+      "id": "R-15-role-guard-seeker",
+      "status": "pass",
+      "notes": [
+        "Skipped live seeker login — covered by e2e/auth-smoke.spec.ts"
+      ]
+    }
+  ],
+  "consoleErrors": [
+    "TypeError: Cannot read properties of undefined (reading 'status')\n    at RecruiterJobDetailsPage (http://127.0.0.1:8080/src/routes/_app.recruiter.jobs.$jobId.index.tsx?tsr-split=component:163:19)\n    at Object.react_stack_bottom_frame (http://127.0.0.1:8080/node_modules/.vite/deps/react-dom_client.js?v=b0fb1caf:14140:12)\n    at renderWithHooks (http://127.0.0.1:8080/node_modules/.vite/deps/react-dom_client.js?v=b0fb1caf:4398:19)\n    at updateFunctionComponent (http://127.0.0.1:8080/node_modules/.vite/deps/react-dom_client.js?v=b0fb1caf:5773:16)\n    at beginWork (http://127.0.0.1:8080/node_modules/.vite/deps/react-dom_client.js?v=b0fb1caf:6389:20)\n    at runWithFiberInDEV (http://127.0.0.1:8080/node_modules/.vite/deps/react-dom_client.js?v=b0fb1caf:943:66)\n    at performUnitOfWork (http://127.0.0.1:8080/node_modules/.vite/deps/react-dom_client.js?v=b0fb1caf:9146:92)\n    at workLoopSync (http://127.0.0.1:8080/node_modules/.vite/deps/react-dom_client.js?v=b0fb1caf:9042:37)\n    at renderRootSync (http://127.0.0.1:8080/node_modules/.vite/deps/react-dom_client.js?v=b0fb1caf:9026:6)\n    at performWorkOnRoot (http://127.0.0.1:8080/node_modules/.vite/deps/react-dom_client.js?v=b0fb1caf:8676:181)",
+    "TypeError: Cannot read properties of undefined (reading 'status')\n    at RecruiterJobDetailsPage (http://127.0.0.1:8080/src/routes/_app.recruiter.jobs.$jobId.index.tsx?tsr-split=component:163:19)\n    at Object.react_stack_bottom_frame (http://127.0.0.1:8080/node_modules/.vite/deps/react-dom_client.js?v=b0fb1caf:14140:12)\n    at renderWithHooks (http://127.0.0.1:8080/node_modules/.vite/deps/react-dom_client.js?v=b0fb1caf:4398:19)\n    at updateFunctionComponent (http://127.0.0.1:8080/node_modules/.vite/deps/react-dom_client.js?v=b0fb1caf:5773:16)\n    at beginWork (http://127.0.0.1:8080/node_modules/.vite/deps/react-dom_client.js?v=b0fb1caf:6389:20)\n    at runWithFiberInDEV (http://127.0.0.1:8080/node_modules/.vite/deps/react-dom_client.js?v=b0fb1caf:943:66)\n    at performUnitOfWork (http://127.0.0.1:8080/node_modules/.vite/deps/react-dom_client.js?v=b0fb1caf:9146:92)\n    at workLoopSync (http://127.0.0.1:8080/node_modules/.vite/deps/react-dom_client.js?v=b0fb1caf:9042:37)\n    at renderRootSync (http://127.0.0.1:8080/node_modules/.vite/deps/react-dom_client.js?v=b0fb1caf:9026:6)\n    at performWorkOnRoot (http://127.0.0.1:8080/node_modules/.vite/deps/react-dom_client.js?v=b0fb1caf:8713:27)",
+    "%o\n\n%s\n\n%s\n TypeError: Cannot read properties of undefined (reading 'status')\n    at RecruiterJobDetailsPage (http://127.0.0.1:8080/src/routes/_app.recruiter.jobs.$jobId.index.tsx?tsr-split=component:163:19)\n    at Object.react_stack_bottom_frame (http://127.0.0.1:8080/node_modules/.vite/deps/react-dom_client.js?v=b0fb1caf:14140:12)\n    at renderWithHooks (http://127.0.0.1:8080/node_modules/.vite/deps/react-dom_client.js?v=b0fb1caf:4398:19)\n    at updateFunctionComponent (http://127.0.0.1:8080/node_modules/.vite/deps/react-dom_client.js?v=b0fb1caf:5773:16)\n    at beginWork (http://127.0.0.1:8080/node_modules/.vite/deps/react-dom_client.js?v=b0fb1caf:6389:20)\n    at runWithFiberInDEV (http://127.0.0.1:8080/node_modules/.vite/deps/react-dom_client.js?v=b0fb1caf:943:66)\n    at performUnitOfWork (http://127.0.0.1:8080/node_modules/.vite/deps/react-dom_client.js?v=b0fb1caf:9146:92)\n    at workLoopSync (http://127.0.0.1:8080/node_modules/.vite/deps/react-dom_client.js?v=b0fb1caf:9042:37)\n    at renderRootSync (http://127.0.0.1:8080/node_modules/.vite/deps/react-dom_client.js?v=b0fb1caf:9026:6)\n    at performWorkOnRoot (http://127.0.0.1:8080/node_modules/.vite/deps/react-dom_client.js?v=b0fb1caf:8713:27) The above error occurred in the <RecruiterJobDetailsPage> component. React will try to recreate this component tree from scratch using the error boundary you provided, CatchBoundary.",
+    "Failed to load resource: the server responded with a status of 404 ()"
+  ]
+}

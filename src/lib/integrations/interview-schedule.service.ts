@@ -77,6 +77,8 @@ export function interviewScheduleUserMessage(code: string): string {
       return "An interview is already scheduled for this application.";
     case "google_not_configured":
       return "Google Calendar is not configured on the server.";
+    case "interview_event_id_check_invalid":
+      return "Interview storage rejected the Google event id. Apply the PROPOSED_0026 CHECK fix (Postgres quantifier limit), then retry.";
     case "service_role_not_configured":
       return "Interview scheduling is not available on this server.";
     case "in_progress":
@@ -278,8 +280,16 @@ export async function scheduleInterviewForApplication(input: {
   }
 
   const orchRow = rowContext(dbRow, ctx, input.notes);
-  const advanced = await advanceInterview(orchRow, orchestratorDeps(input.deps));
-  return okAdvance(advanced);
+  try {
+    const advanced = await advanceInterview(orchRow, orchestratorDeps(input.deps));
+    return okAdvance(advanced);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "";
+    if (msg === "interview_event_id_check_invalid") {
+      return fail("interview_event_id_check_invalid", false, dbRow.id);
+    }
+    throw e;
+  }
 }
 
 export async function retryInterviewScheduleById(input: {
@@ -320,8 +330,16 @@ export async function retryInterviewScheduleById(input: {
   });
 
   const intent = dbRow.status === "failed" ? "retry_meet" : "advance";
-  const advanced = await advanceInterview(orchRow, orchestratorDeps(input.deps), { intent });
-  return okAdvance(advanced);
+  try {
+    const advanced = await advanceInterview(orchRow, orchestratorDeps(input.deps), { intent });
+    return okAdvance(advanced);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "";
+    if (msg === "interview_event_id_check_invalid") {
+      return fail("interview_event_id_check_invalid", false, dbRow.id);
+    }
+    throw e;
+  }
 }
 
 export async function rescheduleInterviewById(input: {

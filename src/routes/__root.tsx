@@ -12,6 +12,7 @@ import { useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
+import { captureDescribedError, initBrowserSentry } from "@/lib/observability/sentry";
 import { AuthProvider } from "@/lib/auth";
 import { Toaster } from "@/components/ui/sonner";
 
@@ -42,6 +43,7 @@ function ErrorComponent({ error, reset }: ErrorComponentProps) {
   const router = useRouter();
   useEffect(() => {
     reportLovableError(error, { boundary: "tanstack_root_error_component" });
+    captureDescribedError(error, { boundary: "tanstack_root_error_component" });
   }, [error]);
 
   return (
@@ -120,6 +122,10 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+
+  useEffect(() => {
+    void initBrowserSentry();
+  }, []);
 
   return (
     <QueryClientProvider client={queryClient}>
