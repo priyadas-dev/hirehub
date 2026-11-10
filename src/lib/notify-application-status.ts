@@ -104,10 +104,52 @@ export function buildDeliveredNotificationResult(notification: {
   };
 }
 
+async function defaultApplicationStatusIntegrationsRunner(
+  applicationId: string,
+  status: ApplicationStatus,
+): Promise<void> {
+  try {
+    const { deliverApplicationIntegrationsAfterNotify } = await import(
+      "@/lib/integrations/deliver-application-integrations.server"
+    );
+    await deliverApplicationIntegrationsAfterNotify({ data: { applicationId, status } });
+  } catch {
+    /* soft-fail — keep in-app notify success */
+  }
+  try {
+    const { syncCrmContactFromApplication } = await import("@/lib/crm/sync-from-application.server");
+    await syncCrmContactFromApplication({ data: { applicationId } });
+  } catch {
+    /* soft-fail — CRM sync must not break status notify */
+  }
+}
+
+const applicationStatusIntegrationsRunner: {
+  run: (applicationId: string, status: ApplicationStatus) => Promise<void>;
+} = {
+  run: defaultApplicationStatusIntegrationsRunner,
+};
+
+/** Soft outbound Resend/HubSpot after in-app notify. Failures never affect in-app result. */
+export async function runApplicationStatusIntegrationsAfterNotify(
+  applicationId: string,
+  status: ApplicationStatus,
+): Promise<void> {
+  await applicationStatusIntegrationsRunner.run(applicationId, status);
+}
+
+/** Test helper — stub or restore soft integration runner. */
+export function setApplicationStatusIntegrationsRunnerForTests(
+  run: ((applicationId: string, status: ApplicationStatus) => Promise<void>) | null,
+) {
+  applicationStatusIntegrationsRunner.run = run ?? defaultApplicationStatusIntegrationsRunner;
+}
+
 /**
  * Invoke deployed notify-application-status after a successful status UPDATE.
  * Throws when the Edge Function invoke fails or delivery is not confirmed —
  * callers must not toast success in that case.
+ * After a successful in-app notify, best-effort Resend + HubSpot run soft-fail.
  */
 export async function requestApplicationStatusNotification(
   applicationId: string,
@@ -134,6 +176,8 @@ export async function requestApplicationStatusNotification(
       result?.reason || "Could not create the seeker notification",
     );
   }
+
+  await runApplicationStatusIntegrationsAfterNotify(applicationId, status);
 
   return result;
 }

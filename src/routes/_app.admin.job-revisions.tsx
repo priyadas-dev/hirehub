@@ -47,8 +47,20 @@ type RevisionRow = {
   baseline_job_type: keyof typeof JOB_TYPE_LABEL;
   baseline_salary_range: string | null;
   baseline_application_deadline: string | null;
+  job_category_id: string;
+  baseline_job_category_id: string;
+  proposed_category: { name: string } | { name: string }[] | null;
+  baseline_category: { name: string } | { name: string }[] | null;
   jobs: { title: string; companies: { name: string } | null } | null;
 };
+
+function embedCategoryName(
+  embed: { name: string } | { name: string }[] | null | undefined,
+): string {
+  if (!embed) return "—";
+  const row = Array.isArray(embed) ? embed[0] : embed;
+  return row?.name?.trim() || "—";
+}
 
 function AdminJobRevisionsPage() {
   const { user } = useAuth();
@@ -65,7 +77,7 @@ function AdminJobRevisionsPage() {
       const { data, error } = await supabase
         .from("job_revisions")
         .select(
-          "id,job_id,status,created_at,rejection_reason,title,description,location,job_type,salary_range,application_deadline,baseline_title,baseline_description,baseline_location,baseline_job_type,baseline_salary_range,baseline_application_deadline,jobs(title,companies(name))",
+          "id,job_id,status,created_at,rejection_reason,title,description,location,job_type,salary_range,application_deadline,baseline_title,baseline_description,baseline_location,baseline_job_type,baseline_salary_range,baseline_application_deadline,job_category_id,baseline_job_category_id,proposed_category:job_categories!job_revisions_job_category_id_fkey(name),baseline_category:job_categories!job_revisions_baseline_job_category_id_fkey(name),jobs(title,companies(name))",
         )
         .order("created_at", { ascending: false });
       if (error) {
@@ -108,6 +120,8 @@ function AdminJobRevisionsPage() {
       salary_range: selected.baseline_salary_range,
       job_type: selected.baseline_job_type,
       application_deadline: selected.baseline_application_deadline,
+      jobCategoryId: selected.baseline_job_category_id,
+      categoryName: embedCategoryName(selected.baseline_category),
     };
     const proposed: JobContentFields = {
       title: selected.title,
@@ -116,6 +130,8 @@ function AdminJobRevisionsPage() {
       salary_range: selected.salary_range,
       job_type: selected.job_type,
       application_deadline: selected.application_deadline,
+      jobCategoryId: selected.job_category_id,
+      categoryName: embedCategoryName(selected.proposed_category),
     };
     return diffJobContent(baseline, proposed);
   }, [selected]);

@@ -14,6 +14,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DeadlineDatePicker } from "@/components/jobs/DeadlineDatePicker";
 import { JOB_TYPE_LABEL, type JobType } from "@/lib/hirehub";
+import { DEFAULT_JOB_CATEGORY_ID } from "@/lib/job-categories";
+import { fetchJobCategoryCatalog, JOB_CATEGORY_CATALOG_QUERY_KEY } from "@/lib/job-category-catalog";
+import { JobCategorySelect } from "@/components/jobs/JobCategorySelect";
 import { isDeadlineOnOrAfterToday, stripDeadlineMarker } from "@/lib/job-fields";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/components/dashboard/parts";
@@ -25,6 +28,7 @@ const schema = z.object({
   location: z.string().trim().min(1, "Location is required"),
   salary_range: z.string().trim().optional(),
   job_type: z.enum(["full_time", "part_time", "contract"]),
+  job_category_id: z.string().uuid(),
   application_deadline: z
     .string()
     .min(1, "Application deadline is required")
@@ -49,6 +53,11 @@ function PostJobPage() {
   const navigate = useNavigate();
   const qc = useQueryClient();
 
+  const categoryCatalog = useQuery({
+    queryKey: JOB_CATEGORY_CATALOG_QUERY_KEY,
+    queryFn: fetchJobCategoryCatalog,
+  });
+
   const companies = useQuery({
     queryKey: ["recruiter-companies", id],
     enabled: !!id,
@@ -72,6 +81,7 @@ function PostJobPage() {
       location: "",
       salary_range: "",
       job_type: "full_time",
+      job_category_id: DEFAULT_JOB_CATEGORY_ID,
       application_deadline: "",
     },
   });
@@ -93,6 +103,7 @@ function PostJobPage() {
           location: values.location.trim(),
           salary_range: values.salary_range?.trim() || null,
           job_type: values.job_type as JobType,
+          job_category_id: values.job_category_id,
           application_deadline: values.application_deadline,
           company_id: values.company_id,
           recruiter_id: id,
@@ -227,6 +238,25 @@ function PostJobPage() {
               </SelectContent>
             </Select>
           </div>
+          <div className="space-y-2">
+            <Label>Category</Label>
+            <JobCategorySelect
+              value={form.watch("job_category_id")}
+              catalog={categoryCatalog.data?.rows ?? []}
+              catalogUnavailable={categoryCatalog.data?.unavailable}
+              onValueChange={(v) => form.setValue("job_category_id", v, { shouldValidate: true })}
+            />
+            {form.formState.errors.job_category_id && (
+              <p className="text-xs text-destructive">{form.formState.errors.job_category_id.message}</p>
+            )}
+            <p className="text-xs text-muted-foreground">
+              <Link to="/recruiter/job-categories" className="underline underline-offset-2">
+                Manage my categories
+              </Link>
+            </p>
+          </div>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
             <Label htmlFor="application_deadline">Application deadline</Label>
             <DeadlineDatePicker

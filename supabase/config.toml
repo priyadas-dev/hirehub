@@ -9,6 +9,11 @@ verify_jwt = true
 [functions.close-expired-jobs]
 verify_jwt = false
 
+# Resend/Svix inbound webhook. Auth is Svix signature (RESEND_WEBHOOK_SECRET)
+# inside the function — not a user JWT.
+[functions.resend-webhook]
+verify_jwt = false
+
 # Interview RSVP poller (Phase D2/D3). Same cron-secret pattern; no user JWT.
 [functions.sync-interview-rsvp]
 verify_jwt = false

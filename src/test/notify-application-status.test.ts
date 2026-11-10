@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { invoke, select, eqStatus, eqId, update, from } = vi.hoisted(() => ({
   invoke: vi.fn(),
@@ -23,8 +23,18 @@ import {
   NotifyApplicationStatusError,
   parseNotifyApplicationStatusBody,
   requestApplicationStatusNotification,
+  setApplicationStatusIntegrationsRunnerForTests,
   updateApplicationStatusWithNotification,
 } from "@/lib/notify-application-status";
+
+beforeEach(() => {
+  // Soft Resend/HubSpot side effect must not affect in-app notify unit tests.
+  setApplicationStatusIntegrationsRunnerForTests(vi.fn().mockResolvedValue(undefined));
+});
+
+afterEach(() => {
+  setApplicationStatusIntegrationsRunnerForTests(null);
+});
 
 describe("parseNotifyApplicationStatusBody", () => {
   const applicationId = "11111111-1111-4111-8111-111111111111";

@@ -7,6 +7,8 @@ export type JobContentFields = {
   salary_range: string | null;
   job_type: JobType;
   application_deadline: string | null;
+  jobCategoryId: string;
+  categoryName: string;
 };
 
 export type JobFieldKey = keyof JobContentFields;
@@ -18,6 +20,8 @@ export const JOB_CONTENT_FIELD_LABELS: Record<JobFieldKey, string> = {
   salary_range: "Salary",
   job_type: "Job type",
   application_deadline: "Application deadline",
+  jobCategoryId: "Category",
+  categoryName: "Category",
 };
 
 export type FieldDiff = {
@@ -40,6 +44,8 @@ export function normalizeJobContent(input: JobContentFields): JobContentFields {
     salary_range: input.salary_range?.trim() || null,
     job_type: input.job_type,
     application_deadline: input.application_deadline?.trim() || null,
+    jobCategoryId: input.jobCategoryId,
+    categoryName: input.categoryName,
   };
 }
 
@@ -47,7 +53,10 @@ export function normalizeJobContent(input: JobContentFields): JobContentFields {
 export function jobContentChanged(live: JobContentFields, proposed: JobContentFields): boolean {
   const a = normalizeJobContent(live);
   const b = normalizeJobContent(proposed);
-  return (Object.keys(a) as JobFieldKey[]).some((k) => a[k] !== b[k]);
+  return (Object.keys(a) as JobFieldKey[]).some((k) => {
+    if (k === "categoryName") return false;
+    return a[k] !== b[k];
+  });
 }
 
 /** Before/after rows for admin comparison UI. */
@@ -56,6 +65,17 @@ export function diffJobContent(baseline: JobContentFields, proposed: JobContentF
   const after = normalizeJobContent(proposed);
   const diffs: FieldDiff[] = [];
   for (const field of Object.keys(before) as JobFieldKey[]) {
+    if (field === "categoryName") continue;
+    if (field === "jobCategoryId") {
+      if (before.jobCategoryId === after.jobCategoryId) continue;
+      diffs.push({
+        field,
+        label: JOB_CONTENT_FIELD_LABELS[field],
+        before: display(before.categoryName),
+        after: display(after.categoryName),
+      });
+      continue;
+    }
     if (before[field] === after[field]) continue;
     diffs.push({
       field,
