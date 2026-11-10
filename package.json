@@ -24,6 +24,11 @@
     "rag:eval:frozen": "node --import tsx scripts/rag/eval-frozen-set.mjs",
     "rag:eval:track4a": "node --import tsx scripts/rag/eval-track4a.mjs",
     "rag:classify": "node --import tsx scripts/rag/train-job-classifier.mjs",
+    "rag:classify:track5": "node --import tsx scripts/rag/train-job-classifier.mjs --nb-only",
+    "rag:classify:track5-enrich": "node --import tsx scripts/rag/track5-enrichment-experiments.mjs",
+    "rag:classify:track5-ood": "node --import tsx scripts/rag/eval-track5-ood.mjs",
+    "rag:classify:track5-ood-build": "node --import tsx scripts/rag/build-track5-ood-v1.mjs",
+    "rag:classify:track5-p5": "node --import tsx scripts/rag/track5-p5-diversify-experiments.mjs",
     "rag:classify:original": "node --import tsx scripts/rag/eval-original-descriptions.mjs"
   },
   "overrides": {
@@ -58,6 +63,8 @@
     "@radix-ui/react-toggle": "^1.1.10",
     "@radix-ui/react-toggle-group": "^1.1.11",
     "@radix-ui/react-tooltip": "^1.2.8",
+    "@sentry/node": "^11.11.0",
+    "@sentry/react": "^11.11.0",
     "@supabase/supabase-js": "^2.117.2",
     "@tailwindcss/vite": "^4.2.1",
     "@tanstack/react-query": "^5.101.1",

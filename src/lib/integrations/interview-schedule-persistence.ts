@@ -37,6 +37,7 @@ export type InterviewScheduleDbRow = {
   seeker_response: InterviewResponse;
   reschedule_count: number;
   failure_reason: string | null;
+  last_synced_at: string | null;
 };
 
 type AdminClient = {
@@ -112,6 +113,7 @@ export function mapInterviewScheduleRow(raw: Record<string, unknown>): Interview
     seeker_response: (str(raw["seeker_response"]) || "needsAction") as InterviewResponse,
     reschedule_count: num(raw["reschedule_count"], 0),
     failure_reason: raw["failure_reason"] ? str(raw["failure_reason"]) : null,
+    last_synced_at: raw["last_synced_at"] ? str(raw["last_synced_at"]) : null,
   };
 }
 
@@ -163,6 +165,7 @@ function writeToDb(patch: InterviewRowWrite): Record<string, unknown> {
   if (patch.recruiterResponse !== undefined) out["recruiter_response"] = patch.recruiterResponse;
   if (patch.seekerResponse !== undefined) out["seeker_response"] = patch.seekerResponse;
   if (patch.failureReason !== undefined) out["failure_reason"] = patch.failureReason;
+  if (patch.lastSyncedAt !== undefined) out["last_synced_at"] = patch.lastSyncedAt;
   return out;
 }
 
@@ -182,6 +185,12 @@ export type InterviewScheduleRepository = InterviewOrchestratorStore & {
   probeReady(): Promise<boolean>;
   findOpenByApplicationId(applicationId: string): Promise<InterviewScheduleDbRow | null>;
   loadById(scheduleId: string): Promise<InterviewScheduleDbRow | null>;
+  /** RSVP poller: scheduled + invited + google_event_id, least-recently-synced first. */
+  listScheduledForRsvpSync(limit: number): Promise<InterviewScheduleDbRow[]>;
+  loadAttendeeEmailsForSync(
+    recruiterId: string,
+    seekerId: string,
+  ): Promise<{ recruiterEmail: string; seekerEmail: string } | null>;
   insertPending(input: {
     applicationId: string;
     jobId: string;
@@ -223,6 +232,67 @@ export function createInterviewScheduleRepository(admin: AdminClient): Interview
         .maybeSingle();
       if (error) throw new Error(error.message);
       return data ? mapInterviewScheduleRow(data) : null;
+    },
+
+    async listScheduledForRsvpSync(limit) {
+      const capped = Math.min(50, Math.max(1, Math.floor(limit)));
+      // Untyped chain: PostgREST order/nullsFirst not on the narrow AdminClient surface.
+      type ListClient = {
+        from: (table: string) => {
+          select: (cols: string) => {
+            eq: (col: string, val: string) => {
+              not: (col: string, op: string, val: null) => {
+                not: (col: string, op: string, val: null) => {
+                  order: (
+                    col: string,
+                    opts: { ascending: boolean; nullsFirst: boolean },
+                  ) => {
+                    limit: (n: number) => Promise<{
+                      data: Record<string, unknown>[] | null;
+                      error: { message: string } | null;
+                    }>;
+                  };
+                };
+              };
+            };
+          };
+        };
+      };
+      const { data, error } = await (admin as unknown as ListClient)
+        .from("interview_schedules")
+        .select("*")
+        .eq("status", "scheduled")
+        .not("invited_at", "is", null)
+        .not("google_event_id", "is", null)
+        .order("last_synced_at", { ascending: true, nullsFirst: true })
+        .limit(capped);
+      if (error) throw new Error(error.message);
+      return (data ?? []).map((row) => mapInterviewScheduleRow(row));
+    },
+
+    async loadAttendeeEmailsForSync(recruiterId, seekerId) {
+      type ProfileSelect = {
+        from: (t: string) => {
+          select: (cols: string) => {
+            eq: (col: string, val: string) => {
+              maybeSingle: () => Promise<{
+                data: { email?: string | null } | null;
+                error: { message: string } | null;
+              }>;
+            };
+          };
+        };
+      };
+      const profiles = admin as unknown as ProfileSelect;
+      const [recruiter, seeker] = await Promise.all([
+        profiles.from("profiles").select("email").eq("id", recruiterId).maybeSingle(),
+        profiles.from("profiles").select("email").eq("id", seekerId).maybeSingle(),
+      ]);
+      if (recruiter.error || seeker.error) return null;
+      const recruiterEmail = (recruiter.data?.email ?? "").trim();
+      const seekerEmail = (seeker.data?.email ?? "").trim();
+      if (!recruiterEmail || !seekerEmail) return null;
+      return { recruiterEmail, seekerEmail };
     },
 
     async insertPending(input) {
@@ -275,7 +345,14 @@ export function createInterviewScheduleRepository(admin: AdminClient): Interview
       const row = writeToDb(patch);
       if (Object.keys(row).length === 0) return;
       const { error } = await admin.from("interview_schedules").update(row).eq("id", id);
-      if (error) throw new Error(error.message);
+      if (error) {
+        // PROPOSED_0025 used `~ '^[a-v0-9]{5,1024}$'`; Postgres caps quantifiers at 255,
+        // so any google_event_id write fails with this message until the CHECK is fixed.
+        if (/invalid regular expression|invalid repetition count/i.test(error.message)) {
+          throw new Error("interview_event_id_check_invalid");
+        }
+        throw new Error(error.message);
+      }
     },
 
     async updateTimes(scheduleId, input) {

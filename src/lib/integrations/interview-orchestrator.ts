@@ -69,6 +69,8 @@ export type InterviewRowWrite = {
   recruiterResponse?: InterviewResponse;
   seekerResponse?: InterviewResponse;
   failureReason?: string | null;
+  /** ISO timestamp written to `last_synced_at` by RSVP poller. */
+  lastSyncedAt?: string | null;
 };
 
 export type InterviewOrchestratorStore = {
