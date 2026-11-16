@@ -32,23 +32,56 @@ export type ApplyToJobClient = {
   insertApplication: (
     row: ApplyToJobRow,
   ) => Promise<{ data: { id: string } | null; error: { code?: string; message: string } | null }>;
+  /** Optional: sync seeker identity onto profiles before insert (own row via JWT RLS). */
+  updateSeekerProfile?: (input: {
+    seekerId: string;
+    fullName: string;
+    email: string;
+  }) => Promise<{ error: { message: string } | null }>;
 };
 
 export type ApplyToJobInput = {
   jobId: string;
   seekerId: string;
+  /** Required applicant identity shown to recruiters. */
+  fullName: string;
+  /** Required contact email (stored on profiles; not Auth email change). */
+  email: string;
   /** When true, require storage path or legacy URL and prefer storage columns. */
   canPersistStorage: boolean;
   resumeStoragePath?: string | null;
   resumeFileName?: string | null;
   resumeUrl?: string | null;
   portfolioUrl?: string | null;
-  coverNote?: string | null;
+  /** Required "About you" text; persisted as applications.cover_note. */
+  coverNote: string;
   /** Injected deadline check so routes keep using job-fields helpers. */
   isDeadlinePassed: (job: ApplyJobSnapshot) => boolean;
   /** Optional path safety (storage). */
   assertResumeStoragePath?: (path: string, seekerId: string) => void;
 };
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+export function validateApplicantBasics(input: {
+  fullName?: string | null;
+  email?: string | null;
+  aboutYou?: string | null;
+}): { ok: true; fullName: string; email: string; aboutYou: string } | { ok: false; message: string } {
+  const fullName = input.fullName?.trim() ?? "";
+  const email = input.email?.trim() ?? "";
+  const aboutYou = input.aboutYou?.trim() ?? "";
+  if (fullName.length < 2) {
+    return { ok: false, message: "Enter your name (at least 2 characters)." };
+  }
+  if (!EMAIL_RE.test(email)) {
+    return { ok: false, message: "Enter a valid email address." };
+  }
+  if (aboutYou.length < 10) {
+    return { ok: false, message: "About you must be at least 10 characters." };
+  }
+  return { ok: true, fullName, email, aboutYou };
+}
 
 export type ApplyToJobResult =
   | { ok: true; status: "created" | "already_applied"; applicationId: string }
@@ -93,11 +126,31 @@ export async function applyToJob(
     return { ok: true, status: "already_applied", applicationId: existing.data.id };
   }
 
+  const basics = validateApplicantBasics({
+    fullName: input.fullName,
+    email: input.email,
+    aboutYou: input.coverNote,
+  });
+  if (!basics.ok) {
+    return { ok: false, code: "validation", message: basics.message };
+  }
+
+  if (client.updateSeekerProfile) {
+    const profileUpdate = await client.updateSeekerProfile({
+      seekerId,
+      fullName: basics.fullName,
+      email: basics.email,
+    });
+    if (profileUpdate.error) {
+      return { ok: false, code: "db", message: profileUpdate.error.message };
+    }
+  }
+
   const storagePath = input.resumeStoragePath?.trim() || null;
   const legacyResume = input.resumeUrl?.trim() || null;
   const fileName = input.resumeFileName?.trim() || null;
   const portfolioUrl = input.portfolioUrl?.trim() || null;
-  const coverNote = input.coverNote?.trim() || null;
+  const coverNote = basics.aboutYou;
 
   let row: ApplyToJobRow;
 

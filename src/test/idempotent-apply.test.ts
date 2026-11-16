@@ -2,9 +2,25 @@ import { describe, expect, it } from "vitest";
 import {
   applyToJob,
   isUniqueViolation,
+  validateApplicantBasics,
   type ApplyToJobClient,
   type ApplyToJobRow,
 } from "@/lib/apply-to-job";
+
+describe("validateApplicantBasics", () => {
+  it("requires name, email, and about-you text", () => {
+    expect(validateApplicantBasics({ fullName: "A", email: "a@b.com", aboutYou: "short" }).ok).toBe(
+      false,
+    );
+    expect(
+      validateApplicantBasics({
+        fullName: "Priya Das",
+        email: "priya@example.com",
+        aboutYou: "I build web apps with React.",
+      }).ok,
+    ).toBe(true);
+  });
+});
 
 const JOB_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const SEEKER_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
@@ -13,6 +29,9 @@ function baseInput(overrides: Partial<Parameters<typeof applyToJob>[1]> = {}) {
   return {
     jobId: JOB_ID,
     seekerId: SEEKER_ID,
+    fullName: "Priya Das",
+    email: "priya@example.com",
+    coverNote: "I build web apps with React and TypeScript.",
     canPersistStorage: false,
     resumeUrl: "https://example.com/resume.pdf",
     isDeadlinePassed: () => false,

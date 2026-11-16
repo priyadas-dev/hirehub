@@ -134,12 +134,19 @@ describe("Phase 7 application agent — confirm gate", () => {
     const withResume = {
       ...deps,
       loadSeekerResume: async () => ({
+        fullName: "Priya Das",
+        email: "priya@example.com",
         resumeUrl: "https://example.com/resume.pdf",
       }),
     };
 
     const first = await runApplicationAgent(
-      { jobId: JOB_ID, jobTitle: "React Engineer", confirm: true },
+      {
+        jobId: JOB_ID,
+        jobTitle: "React Engineer",
+        confirm: true,
+        coverNote: "I build web apps with React and TypeScript.",
+      },
       withResume,
     );
     expect(first.ok).toBe(true);
@@ -150,7 +157,12 @@ describe("Phase 7 application agent — confirm gate", () => {
     expect(store.rowCount).toBe(1);
 
     const second = await runApplicationAgent(
-      { jobId: JOB_ID, jobTitle: "React Engineer", confirm: true },
+      {
+        jobId: JOB_ID,
+        jobTitle: "React Engineer",
+        confirm: true,
+        coverNote: "I build web apps with React and TypeScript.",
+      },
       withResume,
     );
     expect(second.ok).toBe(true);
@@ -164,12 +176,18 @@ describe("Phase 7 application agent — confirm gate", () => {
   it("rejects resume storage path outside seeker folder", async () => {
     const store = createUniqueStore();
     const result = await runApplicationAgent(
-      { jobId: JOB_ID, confirm: true },
+      {
+        jobId: JOB_ID,
+        confirm: true,
+        coverNote: "I build web apps with React and TypeScript.",
+      },
       {
         seekerId: SEEKER_ID,
         applyClient: store.client,
         isDeadlinePassed: () => false,
         loadSeekerResume: async () => ({
+          fullName: "Priya Das",
+          email: "priya@example.com",
           resumeStoragePath: `${OTHER_ID}/resume.pdf`,
         }),
         assertResumeStoragePath: (path, seekerId) => {

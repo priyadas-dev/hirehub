@@ -121,6 +121,9 @@ function baseInput(
   overrides: Partial<ApplyToJobInput> & Pick<ApplyToJobInput, "jobId" | "seekerId">,
 ): ApplyToJobInput {
   return {
+    fullName: "Priya Das",
+    email: "priya@example.com",
+    coverNote: "I build web apps with React and TypeScript.",
     canPersistStorage: false,
     resumeUrl: "https://example.com/resume.pdf",
     isDeadlinePassed: () => false,

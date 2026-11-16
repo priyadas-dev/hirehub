@@ -13,7 +13,9 @@ import {
   type AccountDeleteStorage,
 } from "@/lib/delete-account-storage";
 import {
+  canAdminDeleteTargetRole,
   canDeleteOwnAccount,
+  performAdminDeleteUser,
   performDeleteOwnAccount,
   type DeleteAccountAdminClient,
 } from "@/lib/delete-own-account";
@@ -25,6 +27,14 @@ describe("canDeleteOwnAccount", () => {
     expect(canDeleteOwnAccount("admin")).toBe(false);
     expect(canDeleteOwnAccount(null)).toBe(false);
     expect(canDeleteOwnAccount(undefined)).toBe(false);
+  });
+});
+
+describe("canAdminDeleteTargetRole", () => {
+  it("mirrors seeker/recruiter-only targets", () => {
+    expect(canAdminDeleteTargetRole("job_seeker")).toBe(true);
+    expect(canAdminDeleteTargetRole("recruiter")).toBe(true);
+    expect(canAdminDeleteTargetRole("admin")).toBe(false);
   });
 });
 
@@ -343,5 +353,66 @@ describe("performDeleteOwnAccount", () => {
     });
     const result = await performDeleteOwnAccount(admin, seekerId);
     expect(result).toEqual({ ok: false, message: "cannot delete" });
+  });
+});
+
+describe("performAdminDeleteUser", () => {
+  const adminId = "dddddddd-dddd-dddd-dddd-dddddddddddd";
+  const seekerId = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+  const otherAdminId = "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee";
+
+  it("lets an admin delete a seeker", async () => {
+    const { admin, deleteUser } = createMockAdmin({
+      profile: { id: seekerId, role: "job_seeker" },
+    });
+    const result = await performAdminDeleteUser(admin, {
+      callerId: adminId,
+      callerRole: "admin",
+      targetUserId: seekerId,
+    });
+    expect(result).toEqual({ ok: true });
+    expect(deleteUser).toHaveBeenCalledWith(seekerId);
+  });
+
+  it("rejects non-admin callers", async () => {
+    const { admin, deleteUser } = createMockAdmin({
+      profile: { id: seekerId, role: "job_seeker" },
+    });
+    const result = await performAdminDeleteUser(admin, {
+      callerId: seekerId,
+      callerRole: "job_seeker",
+      targetUserId: seekerId,
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.message).toMatch(/Only admins/i);
+    expect(deleteUser).not.toHaveBeenCalled();
+  });
+
+  it("rejects deleting self", async () => {
+    const { admin, deleteUser } = createMockAdmin({
+      profile: { id: adminId, role: "admin" },
+    });
+    const result = await performAdminDeleteUser(admin, {
+      callerId: adminId,
+      callerRole: "admin",
+      targetUserId: adminId,
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.message).toMatch(/your own account/i);
+    expect(deleteUser).not.toHaveBeenCalled();
+  });
+
+  it("rejects deleting another admin", async () => {
+    const { admin, deleteUser } = createMockAdmin({
+      profile: { id: otherAdminId, role: "admin" },
+    });
+    const result = await performAdminDeleteUser(admin, {
+      callerId: adminId,
+      callerRole: "admin",
+      targetUserId: otherAdminId,
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.message).toMatch(/Admin accounts cannot be deleted/i);
+    expect(deleteUser).not.toHaveBeenCalled();
   });
 });

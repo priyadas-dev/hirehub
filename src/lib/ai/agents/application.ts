@@ -26,8 +26,10 @@ export type ApplicationAgentDeps = {
   applyClient: ApplyToJobClient;
   isDeadlinePassed: (job: { id: string; status: string; application_deadline?: string | null }) => boolean;
   assertResumeStoragePath?: (path: string, seekerId: string) => void;
-  /** Optional: load seeker resume metadata from profile (JWT-scoped). */
+  /** Optional: load seeker resume + identity from profile (JWT-scoped). */
   loadSeekerResume?: () => Promise<{
+    fullName?: string | null;
+    email?: string | null;
     resumeStoragePath?: string | null;
     resumeFileName?: string | null;
     resumeUrl?: string | null;
@@ -365,6 +367,19 @@ export async function runApplicationAgent(
   }
 
   const resume = (await deps.loadSeekerResume?.()) ?? {};
+  const fullName = resume.fullName?.trim() || "";
+  const email = resume.email?.trim() || "";
+  const aboutYou = input.coverNote?.trim() || "";
+  if (!fullName || !email || aboutYou.length < 10) {
+    return {
+      ok: false,
+      code: "validation",
+      message:
+        "To apply here, your profile needs a name and email, and you must include an About you note (at least 10 characters). Or open the job page and use the Apply form.",
+      insertsAttempted: 0,
+    };
+  }
+
   const storagePath = resume.resumeStoragePath?.trim() || null;
   if (storagePath && deps.assertResumeStoragePath) {
     try {
@@ -382,12 +397,14 @@ export async function runApplicationAgent(
   const result: ApplyToJobResult = await applyToJob(deps.applyClient, {
     jobId,
     seekerId,
+    fullName,
+    email,
     canPersistStorage: Boolean(storagePath),
     resumeStoragePath: storagePath,
     resumeFileName: resume.resumeFileName ?? null,
     resumeUrl: storagePath ? null : resume.resumeUrl ?? null,
     portfolioUrl: resume.portfolioUrl ?? null,
-    coverNote: input.coverNote ?? null,
+    coverNote: aboutYou,
     isDeadlinePassed: deps.isDeadlinePassed,
     assertResumeStoragePath: deps.assertResumeStoragePath,
   });
