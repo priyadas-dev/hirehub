@@ -1,7 +1,8 @@
 /**
  * Inbound Google Calendar RSVP sync (Assessment 3 Track 1 — Phase D1).
  *
- * Polling only — no events.watch / push. Service-role writes via injectable store.
+ * Used by the poller and by the Calendar push webhook (events.watch).
+ * Service-role writes via injectable store.
  * First ship scope: status='scheduled' AND invited_at set AND google_event_id set.
  * Pending Meet rows are intentionally out of scope for v1 RSVP batches.
  *
@@ -61,6 +62,8 @@ export type RsvpSyncGoogleClient = {
 
 export type RsvpSyncStore = {
   listScheduledForRsvpSync: (limit: number) => Promise<RsvpSyncRow[]>;
+  /** Optional: inbound push lookup by Google event id. */
+  findScheduledByGoogleEventId?: (googleEventId: string) => Promise<RsvpSyncRow | null>;
   tryAcquireLease: (id: string, untilIso: string) => Promise<boolean>;
   releaseLease: (id: string) => Promise<void>;
   save: (id: string, patch: InterviewRowWrite) => Promise<void>;
@@ -256,4 +259,39 @@ export async function runInterviewRsvpSyncBatch(
   }
 
   return summary;
+}
+
+/**
+ * Sync a single scheduled interview by Google event id (inbound push path).
+ * Falls back to a small batch when the event id is unknown / not HireHub-owned.
+ */
+export async function syncInterviewScheduleByGoogleEventId(
+  deps: RsvpSyncDeps,
+  googleEventId: string,
+): Promise<RsvpSyncBatchResult> {
+  const id = googleEventId.trim().toLowerCase();
+  if (!id || !deps.store.findScheduledByGoogleEventId) {
+    return runInterviewRsvpSyncBatch({ ...deps, batchSize: Math.min(10, INTERVIEW_RSVP_SYNC_DEFAULT_BATCH) });
+  }
+
+  let row: RsvpSyncRow | null;
+  try {
+    row = await deps.store.findScheduledByGoogleEventId(id);
+  } catch {
+    return { ok: false, scanned: 0, updated: 0, cancelled: 0, unchanged: 0, errors: 1, code: "lookup_failed" };
+  }
+
+  if (!row) {
+    // Not one of our interview events — still rotate a tiny batch so RSVPs converge.
+    return runInterviewRsvpSyncBatch({ ...deps, batchSize: Math.min(10, INTERVIEW_RSVP_SYNC_DEFAULT_BATCH) });
+  }
+
+  return runInterviewRsvpSyncBatch({
+    ...deps,
+    batchSize: 1,
+    store: {
+      ...deps.store,
+      listScheduledForRsvpSync: async () => [row!],
+    },
+  });
 }

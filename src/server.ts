@@ -52,13 +52,25 @@ function isH3SwallowedErrorBody(body: string): boolean {
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
     try {
-      // Cron server-delegate for interview RSVP sync (Phase D1/D2) — before TanStack router.
+      // Integration server-delegates — before TanStack router.
       const url = new URL(request.url);
       if (url.pathname === "/api/cron/sync-interview-rsvp") {
         const { handleInterviewRsvpCronRequest } = await import(
           "./lib/integrations/interview-rsvp-sync.run"
         );
         return handleInterviewRsvpCronRequest(request);
+      }
+      if (url.pathname === "/api/cron/renew-google-calendar-watch") {
+        const { handleGoogleCalendarWatchRenewRequest } = await import(
+          "./lib/integrations/google-calendar-watch-renew"
+        );
+        return handleGoogleCalendarWatchRenewRequest(request);
+      }
+      if (url.pathname === "/api/webhooks/google-calendar") {
+        const { handleGoogleCalendarWebhookRequest } = await import(
+          "./lib/integrations/google-calendar-webhook"
+        );
+        return handleGoogleCalendarWebhookRequest(request);
       }
 
       const handler = await getServerEntry();

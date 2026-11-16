@@ -8,77 +8,129 @@ import { createInterviewScheduleRepository } from "@/lib/integrations/interview-
 import {
   INTERVIEW_RSVP_SYNC_DEFAULT_BATCH,
   runInterviewRsvpSyncBatch,
+  syncInterviewScheduleByGoogleEventId,
   type RsvpSyncBatchResult,
+  type RsvpSyncDeps,
   type RsvpSyncRow,
 } from "@/lib/integrations/interview-rsvp-sync";
 import { isSupabaseServiceRoleConfigured } from "@/lib/oauth-signup-role";
 
-export async function runInterviewRsvpSyncFromEnv(options?: {
-  batchSize?: number;
-  env?: NodeJS.ProcessEnv;
-}): Promise<RsvpSyncBatchResult> {
-  const env = options?.env ?? process.env;
+function mapRow(r: {
+  id: string;
+  status: RsvpSyncRow["status"];
+  google_event_id: string | null;
+  invited_at: string | null;
+  recruiter_id: string;
+  seeker_id: string;
+  recruiter_response: RsvpSyncRow["recruiter_response"];
+  seeker_response: RsvpSyncRow["seeker_response"];
+  html_link: string | null;
+  etag: string | null;
+  last_synced_at: string | null;
+  lease_until: string | null;
+}): RsvpSyncRow | null {
+  if (!r.google_event_id || !r.invited_at || r.status !== "scheduled") return null;
+  return {
+    id: r.id,
+    status: r.status,
+    google_event_id: r.google_event_id,
+    invited_at: r.invited_at,
+    recruiter_id: r.recruiter_id,
+    seeker_id: r.seeker_id,
+    recruiter_response: r.recruiter_response,
+    seeker_response: r.seeker_response,
+    html_link: r.html_link,
+    etag: r.etag,
+    last_synced_at: r.last_synced_at,
+    lease_until: r.lease_until,
+  };
+}
+
+async function buildRsvpSyncDeps(env: NodeJS.ProcessEnv): Promise<
+  | { ok: true; deps: RsvpSyncDeps }
+  | { ok: false; result: RsvpSyncBatchResult }
+> {
   if (!isSupabaseServiceRoleConfigured(env)) {
     return {
       ok: false,
-      scanned: 0,
-      updated: 0,
-      cancelled: 0,
-      unchanged: 0,
-      errors: 1,
-      code: "service_role_not_configured",
+      result: {
+        ok: false,
+        scanned: 0,
+        updated: 0,
+        cancelled: 0,
+        unchanged: 0,
+        errors: 1,
+        code: "service_role_not_configured",
+      },
     };
   }
 
   if (!resolveGoogleCalendarConfig(env)) {
     return {
       ok: false,
-      scanned: 0,
-      updated: 0,
-      cancelled: 0,
-      unchanged: 0,
-      errors: 1,
-      code: "google_not_configured",
+      result: {
+        ok: false,
+        scanned: 0,
+        updated: 0,
+        cancelled: 0,
+        unchanged: 0,
+        errors: 1,
+        code: "google_not_configured",
+      },
     };
   }
 
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const repository = createInterviewScheduleRepository(supabaseAdmin as never);
 
-  return runInterviewRsvpSyncBatch({
-    batchSize: options?.batchSize ?? INTERVIEW_RSVP_SYNC_DEFAULT_BATCH,
-    google: {
-      getInterviewEvent: (input) => getInterviewEvent(input, { env }),
-    },
-    store: {
-      listScheduledForRsvpSync: async (limit) => {
-        const rows = await repository.listScheduledForRsvpSync(limit);
-        return rows
-          .filter((r) => Boolean(r.google_event_id && r.invited_at && r.status === "scheduled"))
-          .map(
-            (r): RsvpSyncRow => ({
-              id: r.id,
-              status: r.status,
-              google_event_id: r.google_event_id as string,
-              invited_at: r.invited_at as string,
-              recruiter_id: r.recruiter_id,
-              seeker_id: r.seeker_id,
-              recruiter_response: r.recruiter_response,
-              seeker_response: r.seeker_response,
-              html_link: r.html_link,
-              etag: r.etag,
-              last_synced_at: r.last_synced_at,
-              lease_until: r.lease_until,
-            }),
-          );
+  return {
+    ok: true,
+    deps: {
+      google: {
+        getInterviewEvent: (input) => getInterviewEvent(input, { env }),
       },
-      tryAcquireLease: (id, until) => repository.tryAcquireLease(id, until),
-      releaseLease: (id) => repository.releaseLease(id),
-      save: (id, patch) => repository.save(id, patch),
-      loadAttendeeEmails: (recruiterId, seekerId) =>
-        repository.loadAttendeeEmailsForSync(recruiterId, seekerId),
+      store: {
+        listScheduledForRsvpSync: async (limit) => {
+          const rows = await repository.listScheduledForRsvpSync(limit);
+          return rows.map(mapRow).filter((r): r is RsvpSyncRow => r !== null);
+        },
+        findScheduledByGoogleEventId: async (googleEventId) => {
+          const row = await repository.findScheduledByGoogleEventId(googleEventId);
+          return row ? mapRow(row) : null;
+        },
+        tryAcquireLease: (id, until) => repository.tryAcquireLease(id, until),
+        releaseLease: (id) => repository.releaseLease(id),
+        save: (id, patch) => repository.save(id, patch),
+        loadAttendeeEmails: (recruiterId, seekerId) =>
+          repository.loadAttendeeEmailsForSync(recruiterId, seekerId),
+      },
     },
+  };
+}
+
+export async function runInterviewRsvpSyncFromEnv(options?: {
+  batchSize?: number;
+  env?: NodeJS.ProcessEnv;
+}): Promise<RsvpSyncBatchResult> {
+  const env = options?.env ?? process.env;
+  const built = await buildRsvpSyncDeps(env);
+  if (!built.ok) return built.result;
+
+  return runInterviewRsvpSyncBatch({
+    ...built.deps,
+    batchSize: options?.batchSize ?? INTERVIEW_RSVP_SYNC_DEFAULT_BATCH,
   });
+}
+
+/** Inbound push: sync one HireHub interview by Google event id (or small batch fallback). */
+export async function runInterviewRsvpSyncForEventFromEnv(
+  googleEventId: string,
+  options?: { env?: NodeJS.ProcessEnv },
+): Promise<RsvpSyncBatchResult> {
+  const env = options?.env ?? process.env;
+  const built = await buildRsvpSyncDeps(env);
+  if (!built.ok) return built.result;
+  return syncInterviewScheduleByGoogleEventId(built.deps, googleEventId);
 }
 
 /** Timing-safe compare for cron shared secret. */

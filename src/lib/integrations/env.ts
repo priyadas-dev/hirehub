@@ -10,6 +10,10 @@ export const INTEGRATION_ENV = {
   googleClientSecret: "GOOGLE_CLIENT_SECRET",
   googleRefreshToken: "GOOGLE_REFRESH_TOKEN",
   googleCalendarId: "GOOGLE_CALENDAR_ID",
+  /** Shared secret echoed as X-Goog-Channel-Token on Calendar push (never VITE_). */
+  googleCalendarWebhookToken: "GOOGLE_CALENDAR_WEBHOOK_TOKEN",
+  /** Public HTTPS webhook URL registered with events.watch. */
+  googleCalendarWebhookUrl: "GOOGLE_CALENDAR_WEBHOOK_URL",
 } as const;
 
 export function readIntegrationEnv(
