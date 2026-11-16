@@ -2,7 +2,8 @@
 
 **Status:** D1 core + D2 Edge wired (polling / server-delegate).  
 **Not done here:** D3 secrets paste, D4 live Google accept/decline smoke, D5 UI refetch.  
-**Architecture:** Edge cron → `HIREHUB_APP_URL/api/cron/sync-interview-rsvp` → D1 `runInterviewRsvpSyncBatch` + existing `getInterviewEvent`. **No `events.watch`.**
+**Architecture:** Edge cron → `HIREHUB_APP_URL/api/cron/sync-interview-rsvp` → D1 `runInterviewRsvpSyncBatch` + existing `getInterviewEvent`.  
+**Push primary (newer):** see `ASSESSMENT_3_TRACK1_GOOGLE_CALENDAR_WEBHOOK_RUNBOOK.md` (`events.watch` + channel-token verify). This poller stays as **fallback**.
 
 ---
 

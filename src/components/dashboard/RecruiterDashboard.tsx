@@ -6,6 +6,7 @@ import { CardSkeleton, EmptyState, ErrorState, PageHeader } from "@/components/f
 import { RecruiterJobMeta } from "@/components/jobs/RecruiterJobMeta";
 import { StatusBadge } from "@/components/status/StatusBadge";
 import type { ApplicationStatus } from "@/components/status/status";
+import { applicantDisplayName } from "@/lib/ai/recruiter-agent-ui";
 import { useAuth } from "@/lib/auth";
 import {
   fmtDeadline,
@@ -399,7 +400,10 @@ export function RecruiterDashboard() {
                   >
                     <div className="min-w-0">
                       <p className="truncate font-medium tracking-tight">
-                        {a.profiles?.full_name || a.profiles?.email || "Applicant"}
+                        {applicantDisplayName({
+                          full_name: a.profiles?.full_name,
+                          email: a.profiles?.email,
+                        })}
                       </p>
                       <p className="mt-1 truncate text-sm text-muted-foreground">
                         {a.jobs.title} · {fmtDate(a.created_at)}

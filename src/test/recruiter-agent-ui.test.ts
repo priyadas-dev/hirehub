@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  applicantDisplayName,
   detectRecruiterChatIntent,
   extractJobTitleHint,
   extractSearchTokens,
@@ -19,6 +20,16 @@ import {
   rankOwnedJobsByQuery,
   suggestJobsWithApplicants,
 } from "@/lib/ai/recruiter-agent-ui";
+
+describe("applicantDisplayName", () => {
+  it("prefers trimmed full name, then email, then Applicant", () => {
+    expect(applicantDisplayName({ full_name: "  Priya Das  ", email: "p@example.com" })).toBe(
+      "Priya Das",
+    );
+    expect(applicantDisplayName({ full_name: "   ", email: "p@example.com" })).toBe("p@example.com");
+    expect(applicantDisplayName({ full_name: null, email: null })).toBe("Applicant");
+  });
+});
 
 describe("parseShortlistAgentResult", () => {
   it("parses needs_confirm proposal", () => {

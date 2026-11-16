@@ -925,6 +925,143 @@ export async function cancelInterviewEvent(
 }
 
 // ---------------------------------------------------------------------------
+// Push notifications (events.watch) — inbound webhook registration
+// ---------------------------------------------------------------------------
+
+export type CalendarWatchChannel = {
+  channelId: string;
+  resourceId: string;
+  expirationMs: number | null;
+  calendarId: string;
+};
+
+export type WatchInterviewCalendarInput = {
+  /** Client-generated channel UUID (also verified on webhook as X-Goog-Channel-ID). */
+  channelId: string;
+  /** Public HTTPS webhook address. */
+  address: string;
+  /** Shared secret; Google echoes as X-Goog-Channel-Token. Never returned in results. */
+  token: string;
+  /** Optional absolute expiration (ms since epoch). Google may clamp. */
+  expirationMs?: number;
+};
+
+function isHttpsWebhookAddress(address: string): boolean {
+  try {
+    const u = new URL(address.trim());
+    return u.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Register Calendar push notifications for the organizer calendar.
+ * Does not return the webhook token. Callers persist channelId/resourceId/expiration only.
+ */
+export async function watchInterviewCalendar(
+  input: WatchInterviewCalendarInput,
+  options: GoogleCalendarCallOptions = {},
+): Promise<{ ok: true; channel: CalendarWatchChannel } | GoogleFailure> {
+  const channelId = input.channelId.trim();
+  const address = input.address.trim();
+  const token = input.token.trim();
+  if (!channelId || channelId.length < 8) {
+    return { ok: false, reason: "invalid_watch_channel_id", retryable: false };
+  }
+  if (!isHttpsWebhookAddress(address)) {
+    return { ok: false, reason: "invalid_webhook_address", retryable: false };
+  }
+  if (token.length < 16) {
+    return { ok: false, reason: "invalid_webhook_token", retryable: false };
+  }
+
+  return withCalendar(options, async (ctx) => {
+    const body: Record<string, unknown> = {
+      id: channelId,
+      type: "web_hook",
+      address,
+      token,
+    };
+    if (
+      typeof input.expirationMs === "number" &&
+      Number.isFinite(input.expirationMs) &&
+      input.expirationMs > Date.now()
+    ) {
+      body["expiration"] = String(Math.floor(input.expirationMs));
+    }
+
+    const res = await calendarRequest(ctx, "POST", "/watch", {}, body);
+    if (isFailure(res)) return res;
+    if (!res.ok) return classifyHttpFailure(res.status, res.json);
+
+    const json = asRecord(res.json);
+    const resourceId = str(field(json, "resourceId")).trim();
+    const returnedId = str(field(json, "id")).trim() || channelId;
+    if (!resourceId) {
+      return { ok: false, reason: "google_invalid_response", retryable: false };
+    }
+    const expirationRaw = field(json, "expiration");
+    const expirationMs =
+      typeof expirationRaw === "string" && /^\d+$/.test(expirationRaw)
+        ? Number(expirationRaw)
+        : typeof expirationRaw === "number" && Number.isFinite(expirationRaw)
+          ? expirationRaw
+          : null;
+
+    return {
+      ok: true as const,
+      channel: {
+        channelId: returnedId,
+        resourceId,
+        expirationMs,
+        calendarId: ctx.calendarId,
+      },
+    };
+  });
+}
+
+/**
+ * Stop a previously registered watch channel.
+ * Idempotent: 404/410 count as already stopped.
+ */
+export async function stopWatchChannel(
+  input: { channelId: string; resourceId: string },
+  options: GoogleCalendarCallOptions = {},
+): Promise<{ ok: true; alreadyStopped: boolean } | GoogleFailure> {
+  const channelId = input.channelId.trim();
+  const resourceId = input.resourceId.trim();
+  if (!channelId || !resourceId) {
+    return { ok: false, reason: "invalid_watch_channel_id", retryable: false };
+  }
+
+  const config = resolveGoogleCalendarConfig(options.env ?? process.env);
+  if (!config) return { ok: false, reason: "google_not_configured", retryable: false };
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const token = await refreshGoogleAccessToken(config, fetchImpl);
+  if (!token.ok) return token;
+
+  let res: Response;
+  try {
+    res = await fetchImpl(`${GOOGLE_CALENDAR_API_BASE}/channels/stop`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token.accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ id: channelId, resourceId }),
+    });
+  } catch {
+    return { ok: false, reason: "google_network_error", retryable: true };
+  }
+
+  if (res.ok || res.status === 204) return { ok: true, alreadyStopped: false };
+  if (res.status === 404 || res.status === 410) return { ok: true, alreadyStopped: true };
+  const json = await readJson(res);
+  return classifyHttpFailure(res.status, json);
+}
+
+// ---------------------------------------------------------------------------
 // Persistence mapping (used by Phase 3 server functions)
 // ---------------------------------------------------------------------------
 

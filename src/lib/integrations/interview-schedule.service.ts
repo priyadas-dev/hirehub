@@ -80,7 +80,7 @@ export function interviewScheduleUserMessage(code: string): string {
     case "interview_event_id_check_invalid":
       return "Interview storage rejected the Google event id. Apply the PROPOSED_0026 CHECK fix (Postgres quantifier limit), then retry.";
     case "service_role_not_configured":
-      return "Interview scheduling is not available on this server.";
+      return "Server is missing SUPABASE_SERVICE_ROLE_KEY or SUPABASE_URL. Add them to the host that runs this app (Vercel/Lovable secrets or local .env — not VITE_), restart, then try again.";
     case "in_progress":
       return "Interview scheduling is already in progress. Wait a moment and try again.";
     case "meet_creation_failed":

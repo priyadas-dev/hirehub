@@ -21,6 +21,8 @@ import {
   resolveGoogleCalendarConfig,
   resolveInterviewConference,
   sendInterviewInvitations,
+  stopWatchChannel,
+  watchInterviewCalendar,
   type InterviewEventInput,
   type InterviewEventSuccess,
 } from "@/lib/integrations/google-calendar";
@@ -913,5 +915,86 @@ describe("google-calendar: discard uninvited event", () => {
       ok: true,
       alreadyDiscarded: true,
     });
+  });
+});
+
+describe("google-calendar: events.watch / channels.stop", () => {
+  const CHANNEL_ID = "11111111-2222-4333-8444-555555555555";
+  const WEBHOOK_TOKEN = "webhook-token-at-least-16chars";
+  const WEBHOOK_URL = "https://hirehub.example.com/api/webhooks/google-calendar";
+
+  it("registers a watch and never returns the channel token", async () => {
+    const { fetchImpl, calendarCalls } = googleFetch([
+      jsonResponse(200, {
+        id: CHANNEL_ID,
+        resourceId: "resource-abc",
+        expiration: "1893456000000",
+      }),
+    ]);
+    const result = await watchInterviewCalendar(
+      { channelId: CHANNEL_ID, address: WEBHOOK_URL, token: WEBHOOK_TOKEN },
+      { env: ENV, fetchImpl },
+    );
+    expect(result).toEqual({
+      ok: true,
+      channel: {
+        channelId: CHANNEL_ID,
+        resourceId: "resource-abc",
+        expirationMs: 1893456000000,
+        calendarId: "primary",
+      },
+    });
+    const serialized = JSON.stringify(result);
+    expect(serialized).not.toContain(WEBHOOK_TOKEN);
+    expect(serialized).not.toContain(CLIENT_SECRET);
+    expect(serialized).not.toContain(REFRESH_TOKEN);
+    expect(serialized).not.toContain(ACCESS_TOKEN);
+
+    const call = calendarCalls()[0]!;
+    expect(call.url).toContain("/calendars/primary/events/watch");
+    expect(call.init.method).toBe("POST");
+    const body = JSON.parse(String(call.init.body)) as Record<string, unknown>;
+    expect(body).toMatchObject({
+      id: CHANNEL_ID,
+      type: "web_hook",
+      address: WEBHOOK_URL,
+      token: WEBHOOK_TOKEN,
+    });
+  });
+
+  it("rejects non-HTTPS webhook addresses and short tokens without calling Google", async () => {
+    const { fetchImpl, calls } = googleFetch([]);
+    expect(
+      await watchInterviewCalendar(
+        { channelId: CHANNEL_ID, address: "http://localhost/hook", token: WEBHOOK_TOKEN },
+        { env: ENV, fetchImpl },
+      ),
+    ).toMatchObject({ ok: false, reason: "invalid_webhook_address" });
+    expect(
+      await watchInterviewCalendar(
+        { channelId: CHANNEL_ID, address: WEBHOOK_URL, token: "short" },
+        { env: ENV, fetchImpl },
+      ),
+    ).toMatchObject({ ok: false, reason: "invalid_webhook_token" });
+    expect(calls).toHaveLength(0);
+  });
+
+  it("stops a channel and treats 404/410 as already stopped", async () => {
+    const { fetchImpl: okFetch, calls: okCalls } = googleFetch([jsonResponse(204, null)]);
+    expect(
+      await stopWatchChannel(
+        { channelId: CHANNEL_ID, resourceId: "resource-abc" },
+        { env: ENV, fetchImpl: okFetch },
+      ),
+    ).toEqual({ ok: true, alreadyStopped: false });
+    expect(okCalls.some((c) => c.url.includes("/channels/stop"))).toBe(true);
+
+    const { fetchImpl: goneFetch } = googleFetch([jsonResponse(404, {})]);
+    expect(
+      await stopWatchChannel(
+        { channelId: CHANNEL_ID, resourceId: "resource-abc" },
+        { env: ENV, fetchImpl: goneFetch },
+      ),
+    ).toEqual({ ok: true, alreadyStopped: true });
   });
 });
