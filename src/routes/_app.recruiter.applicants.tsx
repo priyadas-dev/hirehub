@@ -17,6 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { applicantDisplayName } from "@/lib/ai/recruiter-agent-ui";
 import { nextApplicationStatuses, STATUS_ACTION_LABEL } from "@/lib/hirehub";
 import { isMissingSchemaError } from "@/lib/hirehub-storage";
 import { updateApplicationStatusWithNotification } from "@/lib/notify-application-status";
@@ -308,7 +309,10 @@ function ApplicantsPage() {
         <div className="grid gap-6 lg:grid-cols-5">
           <ul className="surface-card divide-y lg:col-span-2">
             {apps.data.map((a) => {
-              const name = a.profiles?.full_name || a.profiles?.email || "Applicant";
+              const name = applicantDisplayName({
+                full_name: a.profiles?.full_name,
+                email: a.profiles?.email,
+              });
               const active = selected?.id === a.id;
               return (
                 <li key={a.id}>
@@ -339,7 +343,10 @@ function ApplicantsPage() {
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <h2 className="text-lg font-semibold">
-                    {selected.profiles?.full_name || selected.profiles?.email || "Applicant"}
+                    {applicantDisplayName({
+                      full_name: selected.profiles?.full_name,
+                      email: selected.profiles?.email,
+                    })}
                   </h2>
                   <p className="text-sm text-muted-foreground">
                     {selected.profiles?.email ? `${selected.profiles.email} · ` : ""}
@@ -350,9 +357,9 @@ function ApplicantsPage() {
               </div>
               <StatusTracker status={selected.status as ApplicationStatus} />
               <div className="space-y-2 text-sm">
-                <p className="font-medium">Cover note</p>
+                <p className="font-medium">About you</p>
                 <p className="whitespace-pre-wrap text-muted-foreground">
-                  {selected.cover_note || "No cover note provided."}
+                  {selected.cover_note || "No about-you description provided."}
                 </p>
               </div>
               {(selected.resume_storage_path || selected.resume_url) && (
