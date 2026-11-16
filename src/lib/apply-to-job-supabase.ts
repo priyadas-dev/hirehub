@@ -32,5 +32,12 @@ export function createSupabaseApplyToJobClient(supabase: SupabaseClient): ApplyT
         error: error ? { code: error.code, message: error.message } : null,
       };
     },
+    async updateSeekerProfile({ seekerId, fullName, email }) {
+      const { error } = await supabase
+        .from("profiles")
+        .update({ full_name: fullName, email })
+        .eq("id", seekerId);
+      return { error: error ? { message: error.message } : null };
+    },
   };
 }

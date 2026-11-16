@@ -160,7 +160,11 @@ function applyDeps(client: ApplyToJobClient): ApplicationAgentDeps {
     seekerId: SEEKER_ID,
     applyClient: client,
     isDeadlinePassed: () => false,
-    loadSeekerResume: async () => ({ resumeUrl: "https://example.com/resume.pdf" }),
+    loadSeekerResume: async () => ({
+      fullName: "Priya Das",
+      email: "priya@example.com",
+      resumeUrl: "https://example.com/resume.pdf",
+    }),
   };
 }
 
@@ -356,11 +360,21 @@ export async function runAgentScenarios(): Promise<AgentScenarioReport> {
     const client = memoryApplyClient();
     const d = applyDeps(client);
     const first = await runApplicationAgent(
-      { jobId: JOB_ID, jobTitle: "React Engineer", confirm: true },
+      {
+        jobId: JOB_ID,
+        jobTitle: "React Engineer",
+        confirm: true,
+        coverNote: "I build web apps with React and TypeScript.",
+      },
       d,
     );
     const second = await runApplicationAgent(
-      { jobId: JOB_ID, jobTitle: "React Engineer", confirm: true },
+      {
+        jobId: JOB_ID,
+        jobTitle: "React Engineer",
+        confirm: true,
+        coverNote: "I build web apps with React and TypeScript.",
+      },
       d,
     );
     const ok =

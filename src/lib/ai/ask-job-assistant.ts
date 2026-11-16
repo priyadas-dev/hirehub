@@ -205,11 +205,15 @@ export async function runSeekerAskJobAssistantViaSupervisor(
             loadSeekerResume: async () => {
               const { data: row } = await ctx.supabase
                 .from("profiles")
-                .select("resume_storage_path,resume_file_name,resume_url,portfolio_url")
+                .select(
+                  "full_name,email,resume_storage_path,resume_file_name,resume_url,portfolio_url",
+                )
                 .eq("id", seekerId)
                 .maybeSingle();
               if (!row) return null;
               return {
+                fullName: (row as { full_name?: string | null }).full_name,
+                email: (row as { email?: string | null }).email,
                 resumeStoragePath: (row as { resume_storage_path?: string | null }).resume_storage_path,
                 resumeFileName: (row as { resume_file_name?: string | null }).resume_file_name,
                 resumeUrl: (row as { resume_url?: string | null }).resume_url,

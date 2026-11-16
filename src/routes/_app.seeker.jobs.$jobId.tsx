@@ -37,8 +37,19 @@ import { syncCrmContactFromApplication } from "@/lib/crm/sync-from-application.s
 import { fmtDate, supabase } from "@/components/dashboard/parts";
 
 const applySchema = z.object({
+  full_name: z
+    .string()
+    .trim()
+    .min(2, "Enter your name (at least 2 characters)."),
+  email: z
+    .string()
+    .trim()
+    .email("Enter a valid email address."),
+  cover_note: z
+    .string()
+    .trim()
+    .min(10, "About you must be at least 10 characters."),
   resume_url: z.string().trim().optional(),
-  cover_note: z.string().trim().optional(),
   portfolio_url: z
     .string()
     .trim()
@@ -163,19 +174,31 @@ function JobDetailPage() {
     queryFn: async () => {
       const profileRes = await supabase
         .from("profiles")
-        .select("resume_storage_path,resume_file_name")
+        .select("full_name,email,resume_storage_path,resume_file_name")
         .eq("id", id!)
         .maybeSingle();
 
       let profilePath: string | null = null;
       let profileFileName: string | null = null;
+      let profileName: string | null = null;
+      let profileEmail: string | null = null;
       if (profileRes.error && isMissingSchemaError(profileRes.error.message)) {
-        /* columns not applied yet */
+        /* columns not applied yet — retry identity-only */
+        const identity = await supabase
+          .from("profiles")
+          .select("full_name,email")
+          .eq("id", id!)
+          .maybeSingle();
+        if (identity.error) throw identity.error;
+        profileName = identity.data?.full_name ?? null;
+        profileEmail = identity.data?.email ?? null;
       } else if (profileRes.error) {
         throw profileRes.error;
       } else {
         profilePath = profileRes.data?.resume_storage_path ?? null;
         profileFileName = profileRes.data?.resume_file_name ?? null;
+        profileName = profileRes.data?.full_name ?? null;
+        profileEmail = profileRes.data?.email ?? null;
       }
 
       const [{ data: authData }, appRes] = await Promise.all([
@@ -193,7 +216,10 @@ function JobDetailPage() {
       const meta = (authData.user?.user_metadata ?? {}) as Record<string, unknown>;
       const metaResumeRaw = meta["resume_url"];
       const metaResume = typeof metaResumeRaw === "string" ? metaResumeRaw.trim() : "";
+      const authEmail = authData.user?.email?.trim() || null;
       return {
+        full_name: profileName,
+        email: profileEmail || authEmail,
         resume_storage_path: profilePath,
         resume_file_name: profileFileName,
         resume_url: metaResume || appRes.data?.resume_url || null,
@@ -203,11 +229,23 @@ function JobDetailPage() {
 
   const form = useForm<ApplyValues>({
     resolver: zodResolver(applySchema),
-    defaultValues: { resume_url: "", cover_note: "", portfolio_url: "" },
+    defaultValues: {
+      full_name: "",
+      email: "",
+      cover_note: "",
+      resume_url: "",
+      portfolio_url: "",
+    },
   });
 
   useEffect(() => {
     if (!latestResume.data) return;
+    if (!form.getValues("full_name") && latestResume.data.full_name) {
+      form.setValue("full_name", latestResume.data.full_name, { shouldValidate: false });
+    }
+    if (!form.getValues("email") && latestResume.data.email) {
+      form.setValue("email", latestResume.data.email, { shouldValidate: false });
+    }
     if (latestResume.data.resume_url && !form.getValues("resume_url")) {
       form.setValue("resume_url", latestResume.data.resume_url, { shouldValidate: false });
     }
@@ -235,12 +273,14 @@ function JobDetailPage() {
       const result = await applyToJob(createSupabaseApplyToJobClient(supabase), {
         jobId,
         seekerId: id,
+        fullName: values.full_name,
+        email: values.email,
         canPersistStorage: canPersist,
         resumeStoragePath: storagePath,
         resumeFileName: fileName,
         resumeUrl: values.resume_url?.trim() || null,
         portfolioUrl: portfolio.url,
-        coverNote: values.cover_note?.trim() || null,
+        coverNote: values.cover_note,
         isDeadlinePassed: (job) => {
           const deadline = resolveJobDeadline(job.application_deadline, job.description);
           return isApplicationDeadlinePassed(deadline);
@@ -421,6 +461,47 @@ function JobDetailPage() {
             </div>
           ) : (
             <form className="space-y-4" onSubmit={form.handleSubmit((v) => apply.mutate(v))} noValidate>
+              <div className="space-y-2">
+                <Label htmlFor="full_name">Name</Label>
+                <Input
+                  id="full_name"
+                  autoComplete="name"
+                  placeholder="Your full name"
+                  {...form.register("full_name")}
+                />
+                {form.formState.errors.full_name && (
+                  <p className="text-xs text-destructive">{form.formState.errors.full_name.message}</p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="email">Email</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  autoComplete="email"
+                  inputMode="email"
+                  placeholder="you@example.com"
+                  {...form.register("email")}
+                />
+                {form.formState.errors.email && (
+                  <p className="text-xs text-destructive">{form.formState.errors.email.message}</p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="cover_note">About you</Label>
+                <Textarea
+                  id="cover_note"
+                  rows={4}
+                  placeholder="A short description about yourself"
+                  {...form.register("cover_note")}
+                />
+                {form.formState.errors.cover_note && (
+                  <p className="text-xs text-destructive">{form.formState.errors.cover_note.message}</p>
+                )}
+              </div>
+
               {id && (
                 <ResumePdfPicker
                   seekerId={id}
@@ -473,10 +554,6 @@ function JobDetailPage() {
                 )}
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="cover_note">Cover note (optional)</Label>
-                <Textarea id="cover_note" rows={4} placeholder="Optional note for the recruiter" {...form.register("cover_note")} />
-              </div>
               {deadlineLabel && (
                 <p className="text-xs text-muted-foreground">Apply by {deadlineLabel}.</p>
               )}

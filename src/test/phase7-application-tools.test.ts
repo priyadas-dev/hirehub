@@ -429,12 +429,21 @@ describe("Phase 7 Application Agent tools — supervisor routing", () => {
     expect(unconfirmed.ok && unconfirmed.status === "needs_confirm").toBe(true);
 
     const confirmed = await runApplicationAgent(
-      { jobId: JOB_ID, jobTitle: "React Engineer", confirm: true },
+      {
+        jobId: JOB_ID,
+        jobTitle: "React Engineer",
+        confirm: true,
+        coverNote: "I build web apps with React and TypeScript.",
+      },
       {
         seekerId: SEEKER_ID,
         applyClient,
         isDeadlinePassed: () => false,
-        loadSeekerResume: async () => ({ resumeUrl: "https://example.com/r.pdf" }),
+        loadSeekerResume: async () => ({
+          fullName: "Priya Das",
+          email: "priya@example.com",
+          resumeUrl: "https://example.com/r.pdf",
+        }),
       },
     );
     expect(confirmed.ok && confirmed.status === "created").toBe(true);

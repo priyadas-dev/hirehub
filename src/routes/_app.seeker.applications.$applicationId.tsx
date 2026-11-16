@@ -136,9 +136,9 @@ function ApplicationDetailPage() {
       <section className="surface-card space-y-4 p-5 sm:p-6">
         <h2 className="text-lg font-semibold tracking-tight">Your submission</h2>
         <div className="space-y-2 text-sm">
-          <p className="font-medium">Cover note</p>
+          <p className="font-medium">About you</p>
           <p className="whitespace-pre-wrap text-muted-foreground">
-            {a.cover_note || "No cover note."}
+            {a.cover_note || "No about-you description."}
           </p>
         </div>
         {(a.resume_storage_path || a.resume_url) && (
