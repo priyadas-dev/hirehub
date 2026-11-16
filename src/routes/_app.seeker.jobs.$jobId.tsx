@@ -33,7 +33,7 @@ import {
 import { applyToJob } from "@/lib/apply-to-job";
 import { createSupabaseApplyToJobClient } from "@/lib/apply-to-job-supabase";
 import { useAuth } from "@/lib/auth";
-import { syncCrmContactFromApplication } from "@/lib/crm/sync-from-application.server";
+import { syncCrmContactFromApplication } from "@/lib/crm/sync-from-application.fn";
 import { fmtDate, supabase } from "@/components/dashboard/parts";
 
 const applySchema = z.object({

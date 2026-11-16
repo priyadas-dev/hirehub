@@ -160,6 +160,34 @@ describe("requestApplicationStatusNotification", () => {
     });
   });
 
+  it("runs soft Resend/CRM integrations after successful in-app notify", async () => {
+    const runner = vi.fn().mockResolvedValue(undefined);
+    setApplicationStatusIntegrationsRunnerForTests(runner);
+    const delivered = buildDeliveredNotificationResult({
+      applicationId,
+      status: "shortlisted",
+      seekerId: "44444444-4444-4444-8444-444444444444",
+      jobId: "55555555-5555-4555-8555-555555555555",
+      jobTitle: "Engineer",
+    });
+    invoke.mockResolvedValue({ data: delivered, error: null });
+
+    await requestApplicationStatusNotification(applicationId, "shortlisted");
+    expect(runner).toHaveBeenCalledTimes(1);
+    expect(runner).toHaveBeenCalledWith(applicationId, "shortlisted");
+  });
+
+  it("does not run soft integrations when in-app notify fails", async () => {
+    const runner = vi.fn().mockResolvedValue(undefined);
+    setApplicationStatusIntegrationsRunnerForTests(runner);
+    invoke.mockResolvedValue({ data: null, error: { message: "FunctionsRelayError" } });
+
+    await expect(requestApplicationStatusNotification(applicationId, "hired")).rejects.toBeInstanceOf(
+      NotifyApplicationStatusError,
+    );
+    expect(runner).not.toHaveBeenCalled();
+  });
+
   it("throws when the Edge Function invoke fails", async () => {
     invoke.mockResolvedValue({ data: null, error: { message: "FunctionsRelayError" } });
 

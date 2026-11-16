@@ -2,7 +2,9 @@ import { createHmac } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import {
   applyRecipientTrackingEvent,
+  campaignSendIdempotencyKey,
   markRecipientSent,
+  prepareCampaignSend,
   summarizeCampaignTracking,
 } from "@/lib/crm/campaigns";
 import { sendCampaignEmailViaResend } from "@/lib/crm/campaign-mail";
@@ -13,6 +15,7 @@ import {
   RESEND_TEST_RECIPIENTS,
 } from "@/lib/crm/resend-test-fixtures";
 import { createMemoryEmailDeliveryStore } from "@/lib/integrations/email-delivery-store";
+import { isResendOutboundConfigured } from "@/lib/integrations/env";
 import {
   mapResendEventToCrmTracking,
   mapResendEventToEmailDeliveryRow,
@@ -202,10 +205,100 @@ describe("CRM recipient tracking helpers", () => {
     ).toBe("pending");
   });
 
+  it("allows prepareCampaignSend retry when status is sent but no Resend accept", () => {
+    const campaign = {
+      id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      recruiterId: R1,
+      segmentId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      name: "Retry",
+      subject: "Hello",
+      htmlBody: "<p>Hi</p>",
+      status: "sent" as const,
+      sendIdempotencyKey: campaignSendIdempotencyKey("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"),
+      confirmedAt: "2026-11-01T00:00:00.000Z",
+      sentAt: "2026-11-01T00:00:00.000Z",
+      createdAt: "2026-11-01T00:00:00.000Z",
+    };
+    const segment = {
+      id: campaign.segmentId!,
+      recruiterId: R1,
+      name: "Seg",
+      kind: "new" as const,
+      segmentType: "manual" as const,
+      filter: {},
+      createdAt: "2026-11-01T00:00:00.000Z",
+    };
+    const contact = {
+      id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+      recruiterId: R1,
+      companyId: null,
+      seekerProfileId: null,
+      email: "delivered@resend.dev",
+      emailNormalized: "delivered@resend.dev",
+      fullName: "Test",
+      skills: [],
+      jobInterests: [],
+      jobCategories: [],
+      applicationStatus: null,
+      segmentKind: "new" as const,
+      hubspotContactId: null,
+      notes: null,
+      createdAt: "2026-11-01T00:00:00.000Z",
+    };
+    const pendingRecipient = baseRecipient({
+      campaignId: campaign.id,
+      contactId: contact.id,
+      trackingStatus: "pending",
+      resendEmailId: null,
+    });
+
+    const retry = prepareCampaignSend({
+      campaign,
+      segment,
+      contacts: [contact],
+      existingRecipients: [pendingRecipient],
+      confirm: true,
+      manualMemberContactIds: [contact.id],
+    });
+    expect(retry.ok && !retry.alreadySent).toBe(true);
+
+    const locked = prepareCampaignSend({
+      campaign,
+      segment,
+      contacts: [contact],
+      existingRecipients: [
+        baseRecipient({
+          campaignId: campaign.id,
+          contactId: contact.id,
+          trackingStatus: "sent",
+          resendEmailId: "re_accepted",
+        }),
+      ],
+      confirm: true,
+      manualMemberContactIds: [contact.id],
+    });
+    expect(locked.ok && locked.alreadySent).toBe(true);
+  });
+
   it("denies cross-recruiter CRM mutation", () => {
     expect(
       assertCanMutateCrm({ ownerRecruiterId: R1, callerId: R2, callerRole: "recruiter" }).ok,
     ).toBe(false);
+  });
+});
+
+describe("isResendOutboundConfigured", () => {
+  it("reports missing API key and From without exposing values", () => {
+    expect(isResendOutboundConfigured({})).toEqual({
+      ok: false,
+      missing: ["RESEND_API_KEY", "RESEND_FROM_EMAIL", "CONTACT_FROM_EMAIL"],
+    });
+    expect(
+      isResendOutboundConfigured({
+        RESEND_API_KEY: "re_test",
+        CONTACT_FROM_EMAIL: "HireHub <onboarding@resend.dev>",
+      }),
+    ).toEqual({ ok: true, missing: [] });
   });
 });
 

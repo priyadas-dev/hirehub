@@ -13,6 +13,8 @@ import {
 import { syncCrmContactToHubSpot } from "@/lib/crm/hubspot-contact-sync";
 import { canAccessCrmOwnedResource } from "@/lib/crm/ownership";
 import { parseSegmentFilter, parseSegmentType } from "@/lib/crm/segments";
+import { isResendOutboundConfigured } from "@/lib/integrations/env";
+import { ensureProcessEnvFromDotenv } from "@/lib/server-process-env";
 import type {
   CrmCampaign,
   CrmCampaignRecipient,
@@ -121,10 +123,15 @@ export type SendCrmCampaignResult = {
   summary?: ReturnType<typeof summarizeCampaignTracking>;
   emailsSkipped?: number;
   emailsFailed?: number;
+  emailsAccepted?: number;
+  /** Present when Resend host secrets are missing — never includes secret values. */
+  providerMissing?: Array<"RESEND_API_KEY" | "RESEND_FROM_EMAIL" | "CONTACT_FROM_EMAIL">;
 };
 
 /**
  * Confirmed campaign send via Resend. AuthZ from JWT + campaign.recruiter_id.
+ * DB reads/writes use the caller's Supabase client (RLS owner policies) — same as
+ * contacts/segments — so send does not require SUPABASE_SERVICE_ROLE_KEY.
  * Soft-fails HubSpot; never exposes service-role to the browser.
  */
 export const sendCrmCampaign = createServerFn({ method: "POST" })
@@ -132,6 +139,20 @@ export const sendCrmCampaign = createServerFn({ method: "POST" })
   .validator((data: unknown) => requestSchema.parse(data))
   .handler(async ({ data, context }): Promise<SendCrmCampaignResult> => {
     try {
+      ensureProcessEnvFromDotenv();
+      const resendConfigured = isResendOutboundConfigured();
+      if (!resendConfigured.ok) {
+        return {
+          ok: false,
+          error:
+            "Email provider is not configured on the app host. Set RESEND_API_KEY and RESEND_FROM_EMAIL (or CONTACT_FROM_EMAIL) for this deployment, then redeploy and retry.",
+          providerMissing: resendConfigured.missing,
+          emailsSkipped: 0,
+          emailsFailed: 0,
+          emailsAccepted: 0,
+        };
+      }
+
       const { data: profile } = await context.supabase
         .from("profiles")
         .select("id,role")
@@ -139,10 +160,9 @@ export const sendCrmCampaign = createServerFn({ method: "POST" })
         .maybeSingle();
       if (!profile) return { ok: false, error: "Caller profile not found" };
 
-      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-      const admin = supabaseAdmin as unknown as LooseClient;
+      const db = context.supabase as unknown as LooseClient;
 
-      const campaignRes = await admin.from("crm_campaigns").select("*").eq("id", data.campaignId).maybeSingle();
+      const campaignRes = await db.from("crm_campaigns").select("*").eq("id", data.campaignId).maybeSingle();
       if (campaignRes.error || !campaignRes.data) {
         return { ok: false, error: "Campaign not found" };
       }
@@ -161,7 +181,7 @@ export const sendCrmCampaign = createServerFn({ method: "POST" })
       if (data.subject !== undefined || data.htmlBody !== undefined) {
         const nextSubject = data.subject !== undefined ? data.subject.trim() : campaign.subject;
         const nextHtml = data.htmlBody !== undefined ? data.htmlBody : campaign.htmlBody;
-        const { error: contentError } = await admin
+        const { error: contentError } = await db
           .from("crm_campaigns")
           .update({
             subject: nextSubject,
@@ -179,10 +199,10 @@ export const sendCrmCampaign = createServerFn({ method: "POST" })
       let segment: CrmSegment | null = null;
       let manualMemberContactIds: string[] | undefined;
       if (campaign.segmentId) {
-        const segRes = await admin.from("crm_segments").select("*").eq("id", campaign.segmentId).maybeSingle();
+        const segRes = await db.from("crm_segments").select("*").eq("id", campaign.segmentId).maybeSingle();
         if (segRes.data) segment = mapSegment(segRes.data);
         if (segment?.segmentType === "manual") {
-          const membersRes = await admin
+          const membersRes = await db
             .from("crm_segment_members")
             .select("contact_id")
             .eq("segment_id", segment.id);
@@ -192,10 +212,10 @@ export const sendCrmCampaign = createServerFn({ method: "POST" })
         }
       }
 
-      const contactsRes = await admin.from("crm_contacts").select("*").eq("recruiter_id", campaign.recruiterId);
+      const contactsRes = await db.from("crm_contacts").select("*").eq("recruiter_id", campaign.recruiterId);
       const contacts = (contactsRes.data ?? []).map(mapContact);
 
-      const recipientsRes = await admin
+      const recipientsRes = await db
         .from("crm_campaign_recipients")
         .select("*")
         .eq("campaign_id", campaign.id);
@@ -218,7 +238,7 @@ export const sendCrmCampaign = createServerFn({ method: "POST" })
         };
       }
 
-      await admin
+      await db
         .from("crm_campaigns")
         .update({
           status: "sending",
@@ -230,10 +250,11 @@ export const sendCrmCampaign = createServerFn({ method: "POST" })
 
       let emailsSkipped = 0;
       let emailsFailed = 0;
+      let emailsAccepted = 0;
       const contactById = new Map(contacts.map((c) => [c.id, c]));
 
       for (const recipient of prepared.recipients) {
-        await admin.from("crm_campaign_recipients").upsert(
+        await db.from("crm_campaign_recipients").upsert(
           {
             id: recipient.id,
             campaign_id: recipient.campaignId,
@@ -251,8 +272,10 @@ export const sendCrmCampaign = createServerFn({ method: "POST" })
         if (
           recipient.trackingStatus === "sent" ||
           recipient.trackingStatus === "opened" ||
-          recipient.trackingStatus === "delivered"
+          recipient.trackingStatus === "delivered" ||
+          recipient.resendEmailId
         ) {
+          emailsAccepted += 1;
           continue;
         }
 
@@ -267,20 +290,34 @@ export const sendCrmCampaign = createServerFn({ method: "POST" })
 
         if (mail.ok && mail.skipped) {
           emailsSkipped += 1;
+          await db
+            .from("crm_campaign_recipients")
+            .update({
+              hubspot_sync_reason: `email_${mail.reason}`,
+            })
+            .eq("id", recipient.id);
           continue;
         }
         if (!mail.ok) {
           emailsFailed += 1;
+          await db
+            .from("crm_campaign_recipients")
+            .update({
+              hubspot_sync_reason: `email_${mail.reason}`,
+            })
+            .eq("id", recipient.id);
           continue;
         }
 
+        emailsAccepted += 1;
         const updated = markRecipientSent(recipient, mail.messageId);
-        await admin
+        await db
           .from("crm_campaign_recipients")
           .update({
             tracking_status: updated.trackingStatus,
             resend_email_id: updated.resendEmailId,
             sent_at: updated.sentAt,
+            hubspot_sync_reason: null,
           })
           .eq("id", recipient.id);
 
@@ -294,7 +331,7 @@ export const sendCrmCampaign = createServerFn({ method: "POST" })
 
         const syncOk = hs.ok && !hs.skipped ? true : hs.ok ? null : false;
         const syncReason = hs.ok ? (hs.skipped ? hs.reason : null) : hs.reason;
-        await admin
+        await db
           .from("crm_campaign_recipients")
           .update({
             hubspot_sync_ok: syncOk,
@@ -303,15 +340,47 @@ export const sendCrmCampaign = createServerFn({ method: "POST" })
           .eq("id", recipient.id);
 
         if (hs.ok && !hs.skipped && hs.hubspotContactId) {
-          await admin
+          await db
             .from("crm_contacts")
             .update({ hubspot_contact_id: hs.hubspotContactId })
             .eq("id", recipient.contactId);
         }
       }
 
+      const refreshed = await db
+        .from("crm_campaign_recipients")
+        .select("*")
+        .eq("campaign_id", campaign.id);
+      const finalRecipients = (refreshed.data ?? []).map(mapRecipient);
+
+      // Do not lock the campaign as "sent" when Resend accepted zero recipients.
+      if (emailsAccepted === 0) {
+        await db
+          .from("crm_campaigns")
+          .update({
+            status: "ready",
+            send_idempotency_key: null,
+            sent_at: null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", campaign.id);
+
+        const skipHint =
+          emailsSkipped > 0
+            ? "Email provider skipped all recipients (check RESEND_API_KEY and From address on the app host)."
+            : "Resend rejected all recipients.";
+        return {
+          ok: false,
+          error: `${skipHint} Fix configuration and click Confirm & send again.`,
+          summary: summarizeCampaignTracking(finalRecipients),
+          emailsSkipped,
+          emailsFailed,
+          emailsAccepted: 0,
+        };
+      }
+
       const finalCampaign = markCampaignSent(prepared.campaign);
-      await admin
+      await db
         .from("crm_campaigns")
         .update({
           status: "sent",
@@ -321,18 +390,13 @@ export const sendCrmCampaign = createServerFn({ method: "POST" })
         })
         .eq("id", campaign.id);
 
-      const refreshed = await admin
-        .from("crm_campaign_recipients")
-        .select("*")
-        .eq("campaign_id", campaign.id);
-      const finalRecipients = (refreshed.data ?? []).map(mapRecipient);
-
       return {
         ok: true,
         alreadySent: false,
         summary: summarizeCampaignTracking(finalRecipients),
         emailsSkipped,
         emailsFailed,
+        emailsAccepted,
       };
     } catch (e) {
       return {

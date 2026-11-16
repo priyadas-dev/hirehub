@@ -108,12 +108,20 @@ export function prepareCampaignSend(input: {
     input.campaign.status === "sent" &&
     input.campaign.sendIdempotencyKey === campaignSendIdempotencyKey(input.campaign.id)
   ) {
-    return {
-      ok: true,
-      campaign: input.campaign,
-      recipients: input.existingRecipients.filter((r) => r.campaignId === input.campaign.id),
-      alreadySent: true,
-    };
+    const existingForCampaign = input.existingRecipients.filter(
+      (r) => r.campaignId === input.campaign.id,
+    );
+    // Incomplete send: campaign marked sent but Resend never accepted any recipient
+    // (provider missing / all failed). Allow retry instead of permanent alreadySent lock.
+    const anyAcceptedByResend = existingForCampaign.some((r) => Boolean(r.resendEmailId));
+    if (anyAcceptedByResend) {
+      return {
+        ok: true,
+        campaign: input.campaign,
+        recipients: existingForCampaign,
+        alreadySent: true,
+      };
+    }
   }
 
   const preview = buildCampaignPreview(input.campaign);

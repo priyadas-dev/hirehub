@@ -1,5 +1,11 @@
-import { INTEGRATION_ENV, readIntegrationEnv, resolveResendFromEmail } from "@/lib/integrations/env";
+import {
+  INTEGRATION_ENV,
+  isResendOutboundConfigured,
+  readIntegrationEnv,
+  resolveResendFromEmail,
+} from "@/lib/integrations/env";
 import { classifyResendFailure } from "@/lib/resend-errors";
+import { ensureProcessEnvFromDotenv } from "@/lib/server-process-env";
 
 export function buildCampaignEmailPayload(input: {
   from: string;
@@ -51,12 +57,14 @@ export async function sendCampaignEmailViaResend(input: {
   env?: NodeJS.ProcessEnv;
   fetchImpl?: typeof fetch;
 }): Promise<SendCampaignEmailResult> {
+  if (!input.env) ensureProcessEnvFromDotenv();
   const env = input.env ?? process.env;
-  const apiKey = readIntegrationEnv(INTEGRATION_ENV.resendApiKey, env);
-  const from = resolveResendFromEmail(env);
-  if (!apiKey || !from) {
+  const configured = isResendOutboundConfigured(env);
+  if (!configured.ok) {
     return { ok: true, skipped: true, reason: "provider_not_configured" };
   }
+  const apiKey = readIntegrationEnv(INTEGRATION_ENV.resendApiKey, env);
+  const from = resolveResendFromEmail(env);
   if (!input.to.includes("@")) {
     return { ok: true, skipped: true, reason: "missing_recipient_email" };
   }

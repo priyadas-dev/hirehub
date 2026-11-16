@@ -1,5 +1,11 @@
 import { classifyResendFailure } from "@/lib/resend-errors";
-import { INTEGRATION_ENV, readIntegrationEnv, resolveResendFromEmail } from "@/lib/integrations/env";
+import {
+  INTEGRATION_ENV,
+  isResendOutboundConfigured,
+  readIntegrationEnv,
+  resolveResendFromEmail,
+} from "@/lib/integrations/env";
+import { ensureProcessEnvFromDotenv } from "@/lib/server-process-env";
 import type { ApplicationStatus } from "@/components/status/status";
 
 export function applicationStatusEmailIdempotencyKey(
@@ -70,6 +76,7 @@ export async function sendApplicationStatusMail(input: {
   /** When true, skip if key already sent in this process (and optional external check). */
   alreadySent?: (key: string) => boolean | Promise<boolean>;
 }): Promise<SendApplicationStatusMailResult> {
+  if (!input.env) ensureProcessEnvFromDotenv();
   const env = input.env ?? process.env;
   const idempotencyKey = applicationStatusEmailIdempotencyKey(input.applicationId, input.status);
 
@@ -77,10 +84,11 @@ export async function sendApplicationStatusMail(input: {
     return { ok: true, skipped: true, reason: "already_sent", idempotencyKey };
   }
 
+  const configured = isResendOutboundConfigured(env);
   const apiKey = readIntegrationEnv(INTEGRATION_ENV.resendApiKey, env);
   const from = resolveResendFromEmail(env);
   const to = input.seekerEmail.trim();
-  if (!apiKey || !from) {
+  if (!configured.ok || !apiKey || !from) {
     return { ok: true, skipped: true, reason: "provider_not_configured", idempotencyKey };
   }
   if (!to || !to.includes("@")) {

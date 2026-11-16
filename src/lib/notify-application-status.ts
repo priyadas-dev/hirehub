@@ -1,6 +1,10 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { ApplicationStatus } from "@/components/status/status";
+import { deliverApplicationIntegrationsAfterNotify } from "@/lib/integrations/deliver-application-integrations-after-notify";
+import { syncCrmContactFromApplication } from "@/lib/crm/sync-from-application.fn";
 import { nextApplicationStatuses } from "@/lib/hirehub";
+
+export { isAuthorizedApplicationNotifier } from "@/lib/application-notifier-authz";
 
 export const NOTIFY_APPLICATION_STATUS_FN = "notify-application-status" as const;
 
@@ -73,20 +77,6 @@ export function parseNotifyApplicationStatusBody(
   return { ok: true, value: { applicationId, status: status as ApplicationStatus } };
 }
 
-/**
- * Caller may notify only when they own the job or are an admin.
- * Role and recruiter id must come from the database / JWT — never the request body.
- */
-export function isAuthorizedApplicationNotifier(args: {
-  callerId: string;
-  callerRole: string | null | undefined;
-  jobRecruiterId: string;
-}): boolean {
-  if (!args.callerId || !args.jobRecruiterId) return false;
-  if (args.callerRole === "admin") return true;
-  return args.callerId === args.jobRecruiterId;
-}
-
 /** Response shape when the edge function records an in-app notification. */
 export function buildDeliveredNotificationResult(notification: {
   applicationId: string;
@@ -108,16 +98,16 @@ async function defaultApplicationStatusIntegrationsRunner(
   applicationId: string,
   status: ApplicationStatus,
 ): Promise<void> {
+  // createServerFn RPC stubs are statically imported (non-`.server` modules) so
+  // the browser Applicants shortlist path can reach the Vercel/app-host Resend
+  // handler. Dynamic `import("*.server")` previously failed in the client and
+  // was soft-swallowed — status updated, email never sent.
   try {
-    const { deliverApplicationIntegrationsAfterNotify } = await import(
-      "@/lib/integrations/deliver-application-integrations.server"
-    );
     await deliverApplicationIntegrationsAfterNotify({ data: { applicationId, status } });
   } catch {
     /* soft-fail — keep in-app notify success */
   }
   try {
-    const { syncCrmContactFromApplication } = await import("@/lib/crm/sync-from-application.server");
     await syncCrmContactFromApplication({ data: { applicationId } });
   } catch {
     /* soft-fail — CRM sync must not break status notify */

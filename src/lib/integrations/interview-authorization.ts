@@ -1,5 +1,5 @@
 import type { ApplicationStatus } from "@/components/status/status";
-import { isAuthorizedApplicationNotifier } from "@/lib/notify-application-status";
+import { isAuthorizedApplicationNotifier } from "@/lib/application-notifier-authz";
 import {
   buildInterviewAttendees,
   DEFAULT_INTERVIEW_TIMEZONE,

@@ -100,14 +100,21 @@ function CrmCampaignDetailPage() {
       void qc.invalidateQueries({ queryKey: ["crm-recipients", campaignId] });
       void qc.invalidateQueries({ queryKey: ["crm-dashboard", id] });
       if (!result.ok) {
-        toast.error(result.error || "Send failed");
+        const missing =
+          result.providerMissing && result.providerMissing.length > 0
+            ? ` Missing: ${result.providerMissing.join(", ")}.`
+            : "";
+        toast.error((result.error || "Send failed") + missing, { duration: 10_000 });
         return;
       }
       if (result.alreadySent) toast.message("Campaign already sent (idempotent)");
       else {
         const parts = ["Campaign send finished"];
+        if (typeof result.emailsAccepted === "number") {
+          parts.push(`${result.emailsAccepted} accepted by Resend`);
+        }
         if (typeof result.emailsFailed === "number" && result.emailsFailed > 0) {
-          parts.push(`${result.emailsFailed} failed (still pending)`);
+          parts.push(`${result.emailsFailed} failed`);
         }
         if (typeof result.emailsSkipped === "number" && result.emailsSkipped > 0) {
           parts.push(`${result.emailsSkipped} skipped`);
@@ -153,6 +160,10 @@ function CrmCampaignDetailPage() {
   const preview = buildCampaignPreview(mergeCampaignDraft(campaign.data, { subject, htmlBody }));
   const segmentName = segments.data?.find((s) => s.id === campaign.data!.segmentId)?.name ?? "None";
   const tracking = summarizeCampaignTracking(recipients.data ?? []);
+  const anyAcceptedByResend = (recipients.data ?? []).some((r) => Boolean(r.resendEmailId));
+  const incompleteSend =
+    campaign.data.status === "sent" && !anyAcceptedByResend && (recipients.data?.length ?? 0) > 0;
+  const canSend = campaign.data.status !== "sent" || incompleteSend;
 
   return (
     <div className="space-y-8">
@@ -178,7 +189,7 @@ function CrmCampaignDetailPage() {
               contentDirtyRef.current = true;
               setSubject(e.target.value);
             }}
-            disabled={campaign.data.status === "sent"}
+            disabled={campaign.data.status === "sent" && !incompleteSend}
           />
         </div>
         <div className="space-y-1.5">
@@ -191,7 +202,7 @@ function CrmCampaignDetailPage() {
               contentDirtyRef.current = true;
               setHtmlBody(e.target.value);
             }}
-            disabled={campaign.data.status === "sent"}
+            disabled={campaign.data.status === "sent" && !incompleteSend}
             placeholder="<p>Hello from HireHub…</p>"
           />
         </div>
@@ -214,9 +225,17 @@ function CrmCampaignDetailPage() {
         )}
       </section>
 
-      {campaign.data.status !== "sent" && (
+      {canSend && (
         <section className="surface-card space-y-4 p-5 sm:p-6">
-          <h2 className="text-sm font-semibold">Send with Resend</h2>
+          <h2 className="text-sm font-semibold">
+            {incompleteSend ? "Retry send with Resend" : "Send with Resend"}
+          </h2>
+          {incompleteSend && (
+            <p className="text-sm text-destructive">
+              Previous send did not reach Resend (recipients still pending/failed). Confirm host secrets
+              (`RESEND_API_KEY` + From), redeploy if needed, then retry.
+            </p>
+          )}
           <label className="flex items-start gap-2 text-sm">
             <input
               type="checkbox"
@@ -233,7 +252,7 @@ function CrmCampaignDetailPage() {
             disabled={!confirmChecked || !preview.ready || sendMutation.isPending}
             onClick={() => sendMutation.mutate()}
           >
-            Confirm & send
+            {incompleteSend ? "Confirm & retry send" : "Confirm & send"}
           </Button>
         </section>
       )}
