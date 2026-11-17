@@ -30,7 +30,12 @@ import { createSupabaseApplyToJobClient } from "@/lib/apply-to-job-supabase";
 import { createSupabaseSaveJobClient } from "@/lib/save-job-supabase";
 import { createSupabaseSeekerApplicationStatusClient } from "@/lib/seeker-application-status-supabase";
 import { isApplicationDeadlinePassed } from "@/lib/job-fields";
-import { storageFirstFolder, storagePathIsSafe } from "@/lib/hirehub-storage";
+import {
+  RESUMES_BUCKET,
+  buildResumeObjectPath,
+  storageFirstFolder,
+  storagePathIsSafe,
+} from "@/lib/hirehub-storage";
 import { createServerAgentMemory } from "@/lib/ai/memory/server-memory";
 import { withDurableAgentMemory } from "@/lib/ai/memory/durable-agent-memory";
 import {
@@ -192,6 +197,14 @@ export async function runSeekerAskJobAssistantViaSupervisor(
   // Isolated Map per request: avoids concurrent hydrate/persist races on the shared Path A cache.
   const memory = createServerAgentMemory({ isolated: true });
 
+  const chatPdfBase64 = data.attachmentBase64 ?? data.resumePdfBase64;
+  const chatMeta = data.attachmentMeta;
+  const chatLooksLikeResumePdf =
+    Boolean(chatPdfBase64) &&
+    (chatMeta?.mime === "application/pdf" ||
+      chatMeta?.kind === "pdf" ||
+      /\.pdf$/i.test(chatMeta?.name ?? ""));
+
   // Path B: hydrate from agent_sessions (JWT + RLS); fall back to in-process Map if table missing.
   const { result } = await withDurableAgentMemory({
     memory,
@@ -215,6 +228,42 @@ export async function runSeekerAskJobAssistantViaSupervisor(
               if (!storagePathIsSafe(path) || storageFirstFolder(path) !== id) {
                 throw new Error("Resume storage path must belong to the signed-in seeker.");
               }
+            },
+            hasChatResumeAttachment: chatLooksLikeResumePdf,
+            ensureChatResume: async () => {
+              if (!chatLooksLikeResumePdf || !chatPdfBase64) return null;
+              const bytes = decodeResumePdfBase64(chatPdfBase64);
+              if (!bytes || bytes.byteLength < 64) {
+                throw new Error(
+                  "I could not read the resume PDF from chat. Upload it in Profile, then Confirm again.",
+                );
+              }
+              const fileName = chatMeta?.name?.trim() || "resume.pdf";
+              const storagePath = buildResumeObjectPath(seekerId, fileName);
+              const { error: uploadErr } = await ctx.supabase.storage
+                .from(RESUMES_BUCKET)
+                .upload(storagePath, bytes, {
+                  contentType: "application/pdf",
+                  upsert: false,
+                });
+              if (uploadErr) {
+                throw new Error(
+                  "Could not save your chat resume to HireHub Storage. Upload the PDF in Profile, then Confirm again.",
+                );
+              }
+              const { error: profileErr } = await ctx.supabase
+                .from("profiles")
+                .update({
+                  resume_storage_path: storagePath,
+                  resume_file_name: fileName,
+                })
+                .eq("id", seekerId);
+              if (profileErr) {
+                throw new Error(
+                  "Resume uploaded, but profile update failed. Open Profile to finish saving it, then Confirm again.",
+                );
+              }
+              return { resumeStoragePath: storagePath, resumeFileName: fileName };
             },
             loadSeekerResume: async () => {
               const { data: row } = await ctx.supabase

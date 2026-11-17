@@ -35,6 +35,19 @@ export type ApplicationAgentDeps = {
     resumeUrl?: string | null;
     portfolioUrl?: string | null;
   } | null>;
+  /**
+   * True when this ask turn includes a chat PDF/DOCX resume attachment.
+   * Portfolio is never required — resume alone is enough to apply.
+   */
+  hasChatResumeAttachment?: boolean;
+  /**
+   * On Confirm: persist a chat-attached resume to the seeker's Storage + profile
+   * when the profile has no resume yet. Returns the new storage path.
+   */
+  ensureChatResume?: () => Promise<{
+    resumeStoragePath: string;
+    resumeFileName: string;
+  } | null>;
   /** Save Job tool — JWT saved_jobs client. */
   saveClient?: SaveJobClient;
   /** Check Application Status tool — JWT applications client. */
@@ -87,24 +100,35 @@ const UUID_IN_TEXT_RE =
 /** True when the seeker is asking the Application Agent to apply (not general advice). */
 export function looksLikeApplyIntent(question: string): boolean {
   const q = question.trim();
+  // Match apply / applied / applying — noisy chat often uses past tense.
   if (
-    !/\b(apply|submit\s+(an?\s+)?application|send\s+(my\s+)?(resume|cv))\b/i.test(q)
+    !/\b(appl(?:y|ied|ying)|submit\s+(an?\s+)?application|send\s+(my\s+)?(resume|cv))\b/i.test(
+      q,
+    )
   ) {
     return false;
   }
-  // "apply to this job" / "apply for that role"
+  // Generic advice only — keep on legacy ("How do I apply in general?")
+  if (
+    /\bhow\b[\s\S]{0,24}\b(do|can|should)\b[\s\S]{0,24}\bappl(?:y|ied|ying)\b/i.test(q) &&
+    !/\b(this|that|first|second|third|job|role|software|developer|engineer)\b/i.test(q)
+  ) {
+    return false;
+  }
+  // "apply to this job" / "now applied in the job" / "apply for that role"
   if (/\b(job|role|position|opening|this|that|it)\b/i.test(q)) return true;
   // "apply to the first job" / "apply first one"
   if (/\b(first|1st|second|2nd|third|3rd|one)\b/i.test(q)) return true;
-  // "apply Software Engineer" / "apply for NOC Engineer" (title after apply)
-  // Avoid generic advice like "How do I apply in general?"
+  // "apply Software Engineer" / "apply in software developtre" / "now apply in …"
   if (
-    /\bapply(?:\s+to|\s+for)?\s+(?!in\b|to\b|for\b|a\b|an\b|the\b|my\b|please\b)[A-Za-z]/i.test(
+    /\bappl(?:y|ied|ying)(?:\s+to|\s+for|\s+in)?\s+(?!general\b|here\b|online\b|please\b)[A-Za-z]/i.test(
       q,
     )
   ) {
     return true;
   }
+  // Banglish / short: "sudu resume ase now applied"
+  if (/\b(resume|cv)\b/i.test(q) && /\bappl(?:y|ied|ying)\b/i.test(q)) return true;
   return false;
 }
 
@@ -152,7 +176,7 @@ function tokenizeJobHint(question: string): string[] {
   return question
     .toLowerCase()
     .replace(
-      /\b(please|can you|could you|i want to|i('?d| would) like to|save|bookmark|favourite|favorite|apply|submit|application|the|a|an|this|that|it|job|jobs|role|roles|position|opening|for|to|in|at|on|of|and|or|with|from|approved|full-?time|part-?time|contract)\b/gi,
+      /\b(please|can you|could you|i want to|i('?d| would) like to|save|bookmark|favourite|favorite|appl(?:y|ied|ying)|submit|application|the|a|an|this|that|it|job|jobs|role|roles|position|opening|for|to|in|at|on|of|and|or|with|from|now|only|just|sudu|ase|amar|bujtesi|resume|cv|approved|full-?time|part-?time|contract)\b/gi,
       " ",
     )
     .replace(/[^a-z0-9+#.\s-]/g, " ")
@@ -250,10 +274,22 @@ export function extractApplyJobId(input: {
   const byTitle = resolveRecentJobIdByTitle(input.question, recent);
   if (byTitle) return byTitle;
 
-  // "save this one" / "apply to that job" → primary card from last Discovery turn.
+  const titleTokens = tokenizeJobHint(input.question);
+
+  // "save this one" / "apply to that job" → primary card when no competing title tokens.
   if (
     recent.length &&
     /\b(this|that|it)\s*(one|job|role|position|opening)?\b/i.test(input.question)
+  ) {
+    return recent[0]!.id;
+  }
+
+  // "now applied in the job" / "apply the job" with no title cue → primary card.
+  // If title cues exist but are ambiguous (byTitle null), ask — don't guess first card.
+  if (
+    recent.length &&
+    titleTokens.length === 0 &&
+    /\bappl(?:y|ied|ying)\b[\s\S]{0,48}\b(the\s+)?job\b/i.test(input.question)
   ) {
     return recent[0]!.id;
   }
@@ -483,19 +519,28 @@ export async function runApplicationAgent(
   const resume = (await deps.loadSeekerResume?.()) ?? {};
   const fullName = resume.fullName?.trim() || "";
   const email = resume.email?.trim() || "";
-  const storagePath = resume.resumeStoragePath?.trim() || null;
+  let storagePath = resume.resumeStoragePath?.trim() || null;
+  let resumeFileName = resume.resumeFileName?.trim() || null;
   const resumeUrl = resume.resumeUrl?.trim() || null;
-  const hasResumeFile = Boolean(storagePath || resumeUrl);
+  let hasResumeFile = Boolean(storagePath || resumeUrl);
+  const chatResumeReady = Boolean(deps.hasChatResumeAttachment);
 
   if (!input.confirm) {
-    const resumeHint = hasResumeFile
-      ? "Your resume on file will be attached."
-      : "Your profile has no resume yet — upload one in Profile before confirming, or apply from the job page.";
+    let resumeHint: string;
+    if (hasResumeFile) {
+      resumeHint = "Your resume on file will be attached. Portfolio is optional — resume alone is enough.";
+    } else if (chatResumeReady) {
+      resumeHint =
+        "I see the resume you attached in chat — that is enough (no portfolio needed). Tap Confirm and I will attach it and apply.";
+    } else {
+      resumeHint =
+        "Attach your resume here (PDF) or upload it in Profile, then tap Confirm. Portfolio is not required.";
+    }
     return {
       ok: true,
       status: "needs_confirm",
       pendingApply: { jobId, title, requiresConfirm: true },
-      message: `I can apply to “${title}” for you. ${resumeHint} Confirm to submit — nothing is sent until you confirm.`,
+      message: `I can apply to “${title}” for you. ${resumeHint} Nothing is sent until you Confirm.`,
       insertsAttempted: 0,
     };
   }
@@ -505,9 +550,30 @@ export async function runApplicationAgent(
       ok: false,
       code: "validation",
       message:
-        "To apply here, your profile needs a name and email. Update your profile, then confirm again — or open the job page and use the Apply form.",
+        "Your profile needs a name and email first. Update Profile, then Confirm again — or apply from the job page.",
       insertsAttempted: 0,
     };
+  }
+
+  if (!hasResumeFile && deps.ensureChatResume) {
+    try {
+      const ensured = await deps.ensureChatResume();
+      if (ensured?.resumeStoragePath) {
+        storagePath = ensured.resumeStoragePath.trim();
+        resumeFileName = ensured.resumeFileName?.trim() || resumeFileName;
+        hasResumeFile = true;
+      }
+    } catch (err) {
+      return {
+        ok: false,
+        code: "validation",
+        message:
+          err instanceof Error
+            ? err.message
+            : "Could not save the resume from chat. Upload it in Profile, then Confirm again.",
+        insertsAttempted: 0,
+      };
+    }
   }
 
   if (!hasResumeFile) {
@@ -515,7 +581,7 @@ export async function runApplicationAgent(
       ok: false,
       code: "validation",
       message:
-        "I can’t submit this application yet — no resume is on your profile. Upload a resume in Profile (PDF/DOCX), then say “apply” again and Confirm.",
+        "I still need a resume to apply. Attach a PDF in chat or upload one in Profile, then say “apply” and Confirm. Portfolio is not required.",
       insertsAttempted: 0,
     };
   }
@@ -545,8 +611,9 @@ export async function runApplicationAgent(
     email,
     canPersistStorage: Boolean(storagePath),
     resumeStoragePath: storagePath,
-    resumeFileName: resume.resumeFileName ?? null,
+    resumeFileName,
     resumeUrl: storagePath ? null : resumeUrl,
+    // Portfolio is optional — never block apply when missing.
     portfolioUrl: resume.portfolioUrl ?? null,
     coverNote: aboutYou,
     isDeadlinePassed: deps.isDeadlinePassed,

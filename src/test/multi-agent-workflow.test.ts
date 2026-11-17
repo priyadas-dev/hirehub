@@ -93,6 +93,9 @@ describe("Multi-agent — conversational Save / Apply resolution", () => {
     expect(looksLikeApplyIntent("apply Software Engineer")).toBe(true);
     expect(looksLikeApplyIntent("apply for that job")).toBe(true);
     expect(looksLikeApplyIntent("apply to the first job")).toBe(true);
+    expect(looksLikeApplyIntent("now apply in software developtre")).toBe(true);
+    expect(looksLikeApplyIntent("sudu resume ase now applied in the job")).toBe(true);
+    expect(looksLikeApplyIntent("How do I apply in general?")).toBe(false);
   });
 
   it("resolves ordinal / title / this-one against recent cards", () => {
@@ -102,6 +105,12 @@ describe("Multi-agent — conversational Save / Apply resolution", () => {
     );
     expect(extractApplyJobId({ question: "apply to that job", recentJobs: recent })).toBe(JOB_A);
     expect(extractSaveJobId({ question: "I like the second job", recentJobs: recent })).toBe(JOB_B);
+    expect(
+      extractApplyJobId({ question: "now apply in software developtre", recentJobs: recent }),
+    ).toBe(JOB_B);
+    expect(
+      extractApplyJobId({ question: "sudu resume ase now applied in the job", recentJobs: recent }),
+    ).toBe(JOB_A);
   });
 });
 
@@ -254,6 +263,41 @@ describe("Multi-agent — Supervisor tool execution (not text-only)", () => {
       expect(result.pendingApply?.jobId).toBe(JOB_B);
       expect(result.supervisor?.routedTo).toBe("application");
     }
+  });
+
+  it("Supervisor routes noisy 'apply in software developtre' to Application", async () => {
+    const runApplicationAgentFn = vi.fn(async () => ({
+      ok: true as const,
+      status: "needs_confirm" as const,
+      pendingApply: {
+        jobId: JOB_B,
+        title: "Software Engineer",
+        requiresConfirm: true as const,
+      },
+      message: "I can apply. Resume alone is enough.",
+      insertsAttempted: 0 as const,
+    }));
+
+    const result = await runSupervisor(
+      { question: "now apply in software developtre", recentJobs: recent },
+      {
+        role: "seeker",
+        userId: USER,
+        conversationId: "conv-apply-typo",
+        memory,
+        listLiveJobs: async () => ({ ok: true, jobs: livePool }),
+        retrieveCorpus: async () => ({ ok: true, matches: [] }),
+        runApplicationAgent: runApplicationAgentFn,
+        runLegacyPipeline: async () => {
+          throw new Error("legacy must not answer apply in developtre");
+        },
+      },
+    );
+
+    expect(result.ok).toBe(true);
+    expect(runApplicationAgentFn).toHaveBeenCalled();
+    expect(runApplicationAgentFn.mock.calls[0]?.[0]?.jobId).toBe(JOB_B);
+    if (result.ok) expect(result.supervisor?.routedTo).toBe("application");
   });
 
   it("Save tool failure is reported honestly (no fake success)", async () => {
@@ -474,8 +518,63 @@ describe("Multi-agent — final workflow verification", () => {
       },
     );
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.message).toMatch(/resume/i);
+    if (!result.ok) {
+      expect(result.message).toMatch(/resume/i);
+      expect(result.message).toMatch(/portfolio is not required/i);
+    }
     expect(db.rows.size).toBe(0);
+  });
+
+  it("4b) Chat resume alone is enough — propose mentions no portfolio; Confirm persists via ensureChatResume", async () => {
+    const db = createApplyDb();
+    const ensureChatResume = vi.fn(async () => ({
+      resumeStoragePath: `${USER}/chat-cv.pdf`,
+      resumeFileName: "Dibyo resume.pdf",
+    }));
+
+    const proposed = await runApplicationAgent(
+      { jobId: JOB_B, jobTitle: "Software Engineer", confirm: false },
+      {
+        seekerId: USER,
+        applyClient: db.client,
+        isDeadlinePassed: () => false,
+        hasChatResumeAttachment: true,
+        ensureChatResume,
+        loadSeekerResume: async () => ({
+          fullName: "Priya Das",
+          email: "priya@example.com",
+        }),
+      },
+    );
+    expect(proposed.ok && proposed.status === "needs_confirm").toBe(true);
+    if (proposed.ok) {
+      expect(proposed.message).toMatch(/resume/i);
+      expect(proposed.message).toMatch(/no portfolio|optional/i);
+      expect(proposed.message).not.toMatch(/GitHub|portfolio required/i);
+    }
+    expect(db.rows.size).toBe(0);
+    expect(ensureChatResume).not.toHaveBeenCalled();
+
+    const confirmed = await runApplicationAgent(
+      { jobId: JOB_B, jobTitle: "Software Engineer", confirm: true },
+      {
+        seekerId: USER,
+        applyClient: db.client,
+        isDeadlinePassed: () => false,
+        hasChatResumeAttachment: true,
+        ensureChatResume,
+        assertResumeStoragePath: (path, id) => {
+          if (!path.startsWith(`${id}/`)) throw new Error("bad path");
+        },
+        loadSeekerResume: async () => ({
+          fullName: "Priya Das",
+          email: "priya@example.com",
+        }),
+      },
+    );
+    expect(ensureChatResume).toHaveBeenCalledTimes(1);
+    expect(confirmed.ok && confirmed.status === "created").toBe(true);
+    expect(db.rows.size).toBe(1);
   });
 
   it("6) Confirm with resume inserts application into DB store", async () => {
