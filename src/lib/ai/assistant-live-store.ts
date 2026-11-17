@@ -10,6 +10,7 @@ import {
   looksLikeConfirmApplyIntent,
   looksLikeResumeDeliveryIntent,
 } from "@/lib/ai/agents/application";
+import { stripJobUuidsFromText } from "@/lib/ai/assistant-chat-display";
 import {
   createConversationId,
   readAssistantHistory,
@@ -390,21 +391,32 @@ export function runAssistantLiveAsk(userId: string, payload: AssistantAskPayload
   const outboundAttachmentBase64 =
     payload.attachmentBase64 ?? confirmResume?.base64 ?? undefined;
 
-  // Keep prior-turn context short — long context + Gemini 3.8 was timing out on live follow-ups.
-  const conversationContext = contextSourceTurns
-    .filter((t) => t.result && !t.pending)
-    .slice(-1)
-    .map((t) => {
-      const answer =
-        t.result && t.result.ok
-          ? t.result.answer.slice(0, 160)
-          : t.result && !t.result.ok
-            ? t.result.message.slice(0, 100)
-            : "";
-      return `User: ${t.question.slice(0, 120)}\nAssistant: ${answer}`;
-    })
-    .join("\n\n")
-    .slice(0, 400);
+  // Confirm needs prior name/email hints; normal turns stay short to avoid Gemini timeouts.
+  // Never put raw job UUIDs into context that could leak into UI dumps.
+  const conversationContext = (
+    effectiveConfirmApply
+      ? contextSourceTurns
+          .slice(-6)
+          .map((t) => {
+            const userLine = stripJobUuidsFromText(t.question).slice(0, 200);
+            return userLine ? `User: ${userLine}` : "";
+          })
+          .filter(Boolean)
+          .join("\n")
+      : contextSourceTurns
+          .filter((t) => t.result && !t.pending)
+          .slice(-1)
+          .map((t) => {
+            const answer =
+              t.result && t.result.ok
+                ? t.result.answer.slice(0, 160)
+                : t.result && !t.result.ok
+                  ? t.result.message.slice(0, 100)
+                  : "";
+            return `User: ${stripJobUuidsFromText(t.question).slice(0, 120)}\nAssistant: ${answer}`;
+          })
+          .join("\n\n")
+  ).slice(0, effectiveConfirmApply ? 1200 : 400);
 
   inflight = (async () => {
     try {

@@ -29,6 +29,7 @@ import {
   fileToBase64,
   validateAssistantAttachment,
 } from "@/lib/ai/assistant-attachments";
+import { formatSeekerChatUserQuestion } from "@/lib/ai/assistant-chat-display";
 import {
   deleteConversation,
   readAssistantHistory,
@@ -110,6 +111,25 @@ function SeekerAssistantPage() {
   const formError = live?.formError ?? null;
   const attachStatus = live?.attachStatus ?? null;
 
+  /** Job id → title for hiding UUIDs in chat bubbles. */
+  const jobTitleById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const turn of turns) {
+      const r = turn.result;
+      if (!r || !r.ok) continue;
+      if (r.pendingApply?.jobId && r.pendingApply.title) {
+        map.set(r.pendingApply.jobId, r.pendingApply.title);
+      }
+      if (r.saveOutcome?.jobId && r.saveOutcome.title) {
+        map.set(r.saveOutcome.jobId, r.saveOutcome.title);
+      }
+      for (const job of r.liveCitations ?? []) {
+        if (job.id && job.title) map.set(job.id, job.title);
+      }
+    }
+    return map;
+  }, [turns]);
+
   useEffect(() => {
     if (!userId) return;
     ensureAssistantLiveState(userId);
@@ -176,7 +196,7 @@ function SeekerAssistantPage() {
   function beginEditTurn(turn: LiveChatTurn) {
     if (busy) return;
     setEditingTurnId(turn.id);
-    setEditDraft(turn.question);
+    setEditDraft(formatSeekerChatUserQuestion(turn.question, jobTitleById));
     queueMicrotask(() => editInputRef.current?.focus());
   }
 
@@ -415,7 +435,7 @@ function SeekerAssistantPage() {
                         </div>
                       ) : (
                         <div className="relative space-y-2 rounded-2xl rounded-br-md bg-signal/15 px-4 py-3 text-sm text-foreground">
-                          <p>{turn.question}</p>
+                          <p>{formatSeekerChatUserQuestion(turn.question, jobTitleById)}</p>
                           {turn.attachment && (
                             <p className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
                               <Paperclip className="size-3" />
@@ -457,16 +477,14 @@ function SeekerAssistantPage() {
                             busy={busy}
                             onRetry={() => void submit(turn.question, { retryTurnId: turn.id })}
                             onConfirmApply={(jobId) => {
-                              // Include recent user lines so name/email from earlier turns survive Confirm.
-                              const priorUserLines = turns
-                                .map((t) => t.question.trim())
-                                .filter(Boolean)
-                                .slice(-6)
-                                .join("\n");
-                              const confirmQuestion =
-                                `${priorUserLines}\nPlease confirm apply to job ${jobId}`.trim();
+                              // Show job title in chat — never the UUID. Identity travels via
+                              // conversationContext in the live store; applyJobId is the real id.
+                              const title =
+                                (turn.result?.ok && turn.result.pendingApply?.title) ||
+                                jobTitleById.get(jobId) ||
+                                "this job";
                               void runAssistantLiveAsk(userId, {
-                                question: confirmQuestion.slice(0, 1400),
+                                question: `Please confirm apply to ${title}`.slice(0, 200),
                                 applyJobId: jobId,
                                 confirmApply: true,
                                 ask: async ({ data }) =>
