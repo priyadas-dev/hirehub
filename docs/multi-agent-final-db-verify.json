@@ -1,0 +1,13 @@
+{
+    "recentSavedCount":  2,
+    "recentSavedTitles":  [
+                              "Software Engineer Intern",
+                              "Junior Software Developer"
+                          ],
+    "saveThisOneVerified":  true,
+    "saveSecondVerified":  true,
+    "recentApplications":  [
+
+                           ],
+    "note":  "Confirm-apply live insert was skipped in UI; no new application expected unless MULTI_AGENT_CONFIRM_APPLY=1"
+}

@@ -84,18 +84,52 @@ const UUID_RE =
 const UUID_IN_TEXT_RE =
   /[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/i;
 
+/** True when the seeker is asking the Application Agent to apply (not general advice). */
 export function looksLikeApplyIntent(question: string): boolean {
-  return (
-    /\b(apply|submit\s+(an?\s+)?application|send\s+(my\s+)?(resume|cv))\b/i.test(question) &&
-    /\b(job|role|position|opening|this|that|it)\b/i.test(question)
-  );
+  const q = question.trim();
+  if (
+    !/\b(apply|submit\s+(an?\s+)?application|send\s+(my\s+)?(resume|cv))\b/i.test(q)
+  ) {
+    return false;
+  }
+  // "apply to this job" / "apply for that role"
+  if (/\b(job|role|position|opening|this|that|it)\b/i.test(q)) return true;
+  // "apply to the first job" / "apply first one"
+  if (/\b(first|1st|second|2nd|third|3rd|one)\b/i.test(q)) return true;
+  // "apply Software Engineer" / "apply for NOC Engineer" (title after apply)
+  // Avoid generic advice like "How do I apply in general?"
+  if (
+    /\bapply(?:\s+to|\s+for)?\s+(?!in\b|to\b|for\b|a\b|an\b|the\b|my\b|please\b)[A-Za-z]/i.test(
+      q,
+    )
+  ) {
+    return true;
+  }
+  return false;
 }
 
+/** True when the seeker is asking to save/bookmark a shown job. */
 export function looksLikeSaveJobIntent(question: string): boolean {
-  return (
-    /\b(save|bookmark|favourite|favorite)\b/i.test(question) &&
-    /\b(job|role|position|opening|this|that|it)\b/i.test(question)
-  );
+  const q = question.trim();
+  // "I like the second job" / "keep this for later"
+  if (
+    /\bi like\b[\s\S]{0,40}\b(job|one|this|that|first|1st|second|2nd|third|3rd)\b/i.test(q) ||
+    /\bkeep\b[\s\S]{0,24}\b(this|that|it|job|one|first|second|third)\b/i.test(q)
+  ) {
+    return true;
+  }
+  // Match save / saved / bookmark / bookmarked / favourite(d)
+  if (!/\b(save[ds]?|bookmark(?:ed)?|favourited?|favorited?)\b/i.test(q)) {
+    return false;
+  }
+  if (/\b(job|role|position|opening|this|that|it)\b/i.test(q)) return true;
+  // "saved first one" / "save the second"
+  if (/\b(first|1st|second|2nd|third|3rd|one)\b/i.test(q)) return true;
+  // "save Software Engineer"
+  if (/\b(save[ds]?|bookmark(?:ed)?)\b[\s\S]{0,80}\b[A-Za-z][A-Za-z0-9+.#/-]{1,}\b/i.test(q)) {
+    return true;
+  }
+  return false;
 }
 
 export function looksLikeCheckStatusIntent(question: string): boolean {
@@ -197,7 +231,7 @@ export function extractApplyJobId(input: {
   const recent = input.recentJobs ?? [];
   if (recent.length === 1) return recent[0]!.id;
 
-  // "apply to the first/second job"
+  // "apply to the first/second job" / "save the second"
   const ordinal = input.question.match(/\b(first|1st|second|2nd|third|3rd)\b/i);
   if (ordinal && recent.length) {
     const map: Record<string, number> = {
@@ -213,7 +247,18 @@ export function extractApplyJobId(input: {
   }
 
   // Fuzzy / noisy title match against cards already shown in this conversation.
-  return resolveRecentJobIdByTitle(input.question, recent);
+  const byTitle = resolveRecentJobIdByTitle(input.question, recent);
+  if (byTitle) return byTitle;
+
+  // "save this one" / "apply to that job" → primary card from last Discovery turn.
+  if (
+    recent.length &&
+    /\b(this|that|it)\s*(one|job|role|position|opening)?\b/i.test(input.question)
+  ) {
+    return recent[0]!.id;
+  }
+
+  return null;
 }
 
 /** Same job-id resolution as apply — used for Save Job. */
@@ -435,31 +480,46 @@ export async function runApplicationAgent(
     input.recentJobs?.find((j) => j.id === jobId)?.title ||
     "this job";
 
+  const resume = (await deps.loadSeekerResume?.()) ?? {};
+  const fullName = resume.fullName?.trim() || "";
+  const email = resume.email?.trim() || "";
+  const storagePath = resume.resumeStoragePath?.trim() || null;
+  const resumeUrl = resume.resumeUrl?.trim() || null;
+  const hasResumeFile = Boolean(storagePath || resumeUrl);
+
   if (!input.confirm) {
+    const resumeHint = hasResumeFile
+      ? "Your resume on file will be attached."
+      : "Your profile has no resume yet — upload one in Profile before confirming, or apply from the job page.";
     return {
       ok: true,
       status: "needs_confirm",
       pendingApply: { jobId, title, requiresConfirm: true },
-      message: `I can apply to “${title}” for you. Confirm to submit your application — nothing is sent until you confirm.`,
+      message: `I can apply to “${title}” for you. ${resumeHint} Confirm to submit — nothing is sent until you confirm.`,
       insertsAttempted: 0,
     };
   }
 
-  const resume = (await deps.loadSeekerResume?.()) ?? {};
-  const fullName = resume.fullName?.trim() || "";
-  const email = resume.email?.trim() || "";
-  const aboutYou = input.coverNote?.trim() || "";
-  if (!fullName || !email || aboutYou.length < 10) {
+  if (!fullName || !email) {
     return {
       ok: false,
       code: "validation",
       message:
-        "To apply here, your profile needs a name and email, and you must include an About you note (at least 10 characters). Or open the job page and use the Apply form.",
+        "To apply here, your profile needs a name and email. Update your profile, then confirm again — or open the job page and use the Apply form.",
       insertsAttempted: 0,
     };
   }
 
-  const storagePath = resume.resumeStoragePath?.trim() || null;
+  if (!hasResumeFile) {
+    return {
+      ok: false,
+      code: "validation",
+      message:
+        "I can’t submit this application yet — no resume is on your profile. Upload a resume in Profile (PDF/DOCX), then say “apply” again and Confirm.",
+      insertsAttempted: 0,
+    };
+  }
+
   if (storagePath && deps.assertResumeStoragePath) {
     try {
       deps.assertResumeStoragePath(storagePath, seekerId);
@@ -473,6 +533,11 @@ export async function runApplicationAgent(
     }
   }
 
+  // UI Confirm does not collect a cover note; use an explicit default after Confirm only.
+  const aboutYou =
+    input.coverNote?.trim() ||
+    `I am interested in the “${title}” role and am applying through the HireHub assistant.`;
+
   const result: ApplyToJobResult = await applyToJob(deps.applyClient, {
     jobId,
     seekerId,
@@ -481,7 +546,7 @@ export async function runApplicationAgent(
     canPersistStorage: Boolean(storagePath),
     resumeStoragePath: storagePath,
     resumeFileName: resume.resumeFileName ?? null,
-    resumeUrl: storagePath ? null : resume.resumeUrl ?? null,
+    resumeUrl: storagePath ? null : resumeUrl,
     portfolioUrl: resume.portfolioUrl ?? null,
     coverNote: aboutYou,
     isDeadlinePassed: deps.isDeadlinePassed,

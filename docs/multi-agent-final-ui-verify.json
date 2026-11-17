@@ -1,0 +1,53 @@
+{
+  "generatedAt": "2026-11-17T09:29:05.732Z",
+  "baseUrl": "http://localhost:8080",
+  "confirmApplyEnabled": false,
+  "checks": [
+    {
+      "id": "login",
+      "status": "pass",
+      "notes": "seeker session"
+    },
+    {
+      "id": "open-assistant",
+      "status": "pass"
+    },
+    {
+      "id": "1-noisy-search-finace",
+      "status": "pass",
+      "notes": "Discovery-style reply"
+    },
+    {
+      "id": "1b-noisy-search-it",
+      "status": "pass",
+      "notes": "Second noisy discovery turn"
+    },
+    {
+      "id": "2-save-this-one",
+      "status": "pass",
+      "notes": "HISTORY\n\nNew\nsave this one\n\nJOB SEEKER\n\nAI Job Assistant\n\nAsk anything — career advice, interview prep, concepts, or approved HireHub jobs. Answers keep going if you navigate away and come back.\n\nBrowse jobs\n\nfinace job\n"
+    },
+    {
+      "id": "3-5-apply-propose-confirm-required",
+      "status": "pass",
+      "notes": "HISTORY\n\nNew\napply for this job\n\nJOB SEEKER\n\nAI Job Assistant\n\nAsk anything — career advice, interview prep, concepts, or approved HireHub jobs. Answers keep going if you navigate away and come back.\n\nBrowse jobs\n\nfinace"
+    },
+    {
+      "id": "4-resume-gate-message",
+      "status": "pass",
+      "notes": "Asked to upload resume (none on profile)"
+    },
+    {
+      "id": "6-confirm-apply-result",
+      "status": "skipped",
+      "notes": "Set MULTI_AGENT_CONFIRM_APPLY=1 to exercise live insert; covered by workflow DB tests"
+    },
+    {
+      "id": "7-follow-up-second",
+      "status": "pass",
+      "notes": "HISTORY\n\nNew\nsave the second job\n\nJOB SEEKER\n\nAI Job Assistant\n\nAsk anything — career advice, interview prep, concepts, or approved HireHub jobs. Answers keep going if you navigate"
+    }
+  ],
+  "askSummaries": [],
+  "screenshot": "docs/multi-agent-final-ui-verify.png"
+}

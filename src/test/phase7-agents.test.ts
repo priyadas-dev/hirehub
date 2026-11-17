@@ -67,7 +67,10 @@ function createUniqueStore() {
 describe("Phase 7 application agent — confirm gate", () => {
   it("detects apply intent", () => {
     expect(looksLikeApplyIntent("Please apply to this job")).toBe(true);
+    expect(looksLikeApplyIntent("apply Software Engineer")).toBe(true);
+    expect(looksLikeApplyIntent("apply to the first job")).toBe(true);
     expect(looksLikeApplyIntent("What is React?")).toBe(false);
+    expect(looksLikeApplyIntent("How do I apply in general?")).toBe(false);
   });
 
   it("extracts applyJobId from payload, UUID in question, or ordinal", () => {

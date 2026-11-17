@@ -162,6 +162,19 @@ function isExplicitVacancyPattern(q: string): boolean {
   ) {
     return true;
   }
+  // "any engineering vacancy?", "show me jobs for fresher"
+  if (
+    /\b(vacanc(?:y|ies)|openings?)\b/i.test(q) &&
+    /\b(engineer|engineering|software|developer|finance|banking|fresher|junior|intern)\b/i.test(q)
+  ) {
+    return true;
+  }
+  if (
+    jobNoun.test(q) &&
+    /\b(fresher|freshers|graduate|junior|entry[\s-]?level)\b/i.test(q)
+  ) {
+    return true;
+  }
   return false;
 }
 

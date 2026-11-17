@@ -115,6 +115,8 @@ describe("Phase 7 Application Agent — Save Job tool", () => {
   it("detects save job intent", () => {
     expect(looksLikeSaveJobIntent("Please save this job")).toBe(true);
     expect(looksLikeSaveJobIntent("bookmark the first job")).toBe(true);
+    expect(looksLikeSaveJobIntent("saved first one")).toBe(true);
+    expect(looksLikeSaveJobIntent("save Software Engineer")).toBe(true);
     expect(looksLikeSaveJobIntent("What is React?")).toBe(false);
   });
 

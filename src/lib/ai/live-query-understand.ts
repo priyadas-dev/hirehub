@@ -156,6 +156,18 @@ export function normalizeLiveJobQuestion(raw: string): string {
     .replace(/\s+/g, " ")
     .trim();
 
+  // Correct known typos so intent + ILIKE see "finance" not "finace"
+  q = q
+    .split(/\s+/)
+    .map((tok) => {
+      const cleaned = tok.replace(/[^a-zA-Z0-9+#.-]/g, "");
+      if (!cleaned) return tok;
+      const fixed = correctTypoToken(cleaned.toLowerCase());
+      if (fixed === cleaned.toLowerCase()) return tok;
+      return tok.replace(new RegExp(cleaned, "i"), fixed);
+    })
+    .join(" ");
+
   return q;
 }
 
@@ -226,16 +238,33 @@ export function looksLikeIndustryOrRoleJobAsk(question: string): boolean {
     return true;
   }
 
-  // Conversational: work with computers / in technology / in finance
+  // Conversational: work with computers / in technology / in finance / software work
   if (
-    /\b(work with computers|work in (it|tech|technology|finance|banking|software)|job in (it|tech|technology|finance|banking|software)|something in (software|finance|it|tech))\b/i.test(
+    /\b(work with computers|work in (it|tech|technology|finance|banking|software)|job in (it|tech|technology|finance|banking|software)|something in (software|finance|it|tech|programming)|software work|programming work)\b/i.test(
       q,
     )
   ) {
     return true;
   }
 
-  // Topic switch follow-up: "what about finance?", "how about IT?"
+  // "find something related to programming" / "anything related to finance"
+  if (
+    /\b(something|anything|jobs?|roles?)\b[\s\S]{0,40}\brelated\b[\s\S]{0,40}/i.test(q) &&
+    INDUSTRY_OR_ROLE_CUE.test(q)
+  ) {
+    return true;
+  }
+
+  // "i need a software work" / "want engineering work"
+  if (
+    /\b(need|want|looking for)\b[\s\S]{0,40}\b(software|engineer|engineering|programming|finance|banking|it)\b[\s\S]{0,24}\b(work|job|role|gig)?\b/i.test(
+      q,
+    )
+  ) {
+    return true;
+  }
+
+  // Topic switch follow-up: "what about finance?", "how about IT?", "what about banking?"
   if (/^(what|how) about\b/i.test(q) && INDUSTRY_OR_ROLE_CUE.test(q)) {
     return true;
   }
