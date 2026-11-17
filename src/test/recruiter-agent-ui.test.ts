@@ -236,6 +236,30 @@ describe("detectRecruiterChatIntent", () => {
       "priya",
     )[0]?.id).toBe("3");
   });
+
+  it("does not match Dibyo via priya substring in email when Priya exists by name", () => {
+    const hits = matchApplicantsByNameHint(
+      [
+        {
+          id: "dibyo",
+          profiles: {
+            full_name: "Dibyo Das",
+            email: "priya.das+testsee@sjinnovation.com",
+          },
+        },
+        {
+          id: "priya",
+          profiles: {
+            full_name: "Priya Das",
+            email: "priyadas142307@gmail.com",
+          },
+        },
+      ],
+      "priya",
+    );
+    expect(hits).toHaveLength(1);
+    expect(hits[0]?.id).toBe("priya");
+  });
 });
 
 describe("owned job chat helpers", () => {

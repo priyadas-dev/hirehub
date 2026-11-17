@@ -738,21 +738,47 @@ function extractApplicantNameHintLegacy(question: string): string | null {
   return null;
 }
 
-/** Match applicants by display name (case-insensitive substring). */
+function applicantNameMatchesHint(
+  name: string,
+  needle: string,
+  parts: string[],
+): boolean {
+  if (!name) return false;
+  if (name.includes(needle)) return true;
+  // All name parts present (order-insensitive): "roy koushik" ≈ "Koushik Roy"
+  if (parts.length > 1 && parts.every((p) => name.includes(p))) return true;
+  return false;
+}
+
+/**
+ * Match applicants by person name first.
+ * Email is only a fallback when no display-name hit exists — otherwise
+ * "confirm priya" falsely matches “Dibyo Das” via priya.das+…@email.
+ */
 export function matchApplicantsByNameHint<
   T extends { id: string; profiles?: { full_name?: string | null; email?: string | null } | null },
 >(applicants: T[], nameHint: string): T[] {
   const needle = nameHint.trim().toLowerCase();
   if (!needle) return [];
   const parts = needle.split(/\s+/).filter(Boolean);
+
+  const byName = applicants.filter((a) => {
+    const name = (a.profiles?.full_name ?? "").trim().toLowerCase();
+    return applicantNameMatchesHint(name, needle, parts);
+  });
+  if (byName.length > 0) return byName;
+
+  // No name hit — allow email local-part / full email match (nameless profiles).
   return applicants.filter((a) => {
     const name = (a.profiles?.full_name ?? "").trim().toLowerCase();
     const email = (a.profiles?.email ?? "").trim().toLowerCase();
-    if (!name && !email) return false;
-    if (name.includes(needle) || email.includes(needle)) return true;
-    // All name parts present (order-insensitive): "roy koushik" ≈ "Koushik Roy"
-    if (parts.length > 1 && parts.every((p) => name.includes(p))) return true;
-    return false;
+    if (!email) return false;
+    // If they already have a different display name, do not match on email substring.
+    if (name && !applicantNameMatchesHint(name, needle, parts)) return false;
+    if (email.includes(needle)) return true;
+    const local = email.split("@")[0] ?? "";
+    const tokens = local.split(/[.+_\-]+/).filter(Boolean);
+    return tokens.some((t) => t === needle || t.startsWith(needle));
   });
 }
 
