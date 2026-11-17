@@ -49,6 +49,21 @@ describe("classifyAssistantIntent routing table", () => {
     },
     { q: "Can you improve my resume?", intent: "resume_improve", searchJobs: false },
     {
+      q: "tell me about a ai job",
+      intent: "job_search",
+      searchJobs: true,
+    },
+    {
+      q: "Tell me about remote software jobs",
+      intent: "job_search",
+      searchJobs: true,
+    },
+    {
+      q: "Describe AI engineer openings",
+      intent: "job_search",
+      searchJobs: true,
+    },
+    {
       q: "Find me a software developer job.",
       intent: "job_search",
       searchJobs: true,

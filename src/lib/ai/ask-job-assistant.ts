@@ -19,7 +19,6 @@ import {
   type JobAssistantDeps,
 } from "@/lib/ai/job-assistant";
 import {
-  buildLiveJobFilterQuery,
   filterLiveJobsByQuery,
   recommendApprovedLiveJobs,
 } from "@/lib/ai/live-recommend";
@@ -117,7 +116,6 @@ export function buildSeekerJobAssistantDeps(ctx: SeekerAssistantContext): JobAss
     listLiveJobs: async (question, options) => {
       const skills = options?.skillTerms ?? [];
       const limit = options?.limit ?? 8;
-      const filterQuery = buildLiveJobFilterQuery(question);
       const cacheQuery = `${question.slice(0, 200)}|skills:${skills.join(",").slice(0, 80)}|limit:${limit}`;
       const cached = aiMatchGuard.getCached<{ ok: true; jobs: LiveApprovedJob[] }>(
         ctx.userId,
@@ -125,43 +123,47 @@ export function buildSeekerJobAssistantDeps(ctx: SeekerAssistantContext): JobAss
       );
       if (cached) return cached;
 
-      const primary = await recommendApprovedLiveJobs(ctx.supabase as never, {
-        query: question.slice(0, 200),
-        limit,
-      });
-      if (!primary.ok) return { ok: false, message: primary.message };
-
-      if (!skills.length) {
-        const result = { ok: true as const, jobs: primary.jobs };
-        aiMatchGuard.setCached(ctx.userId, cacheQuery, result);
-        return result;
-      }
-
-      const skillPass = await recommendApprovedLiveJobs(ctx.supabase as never, {
-        query: `${question.slice(0, 120)} ${skills.join(" ")}`.slice(0, 200),
-        limit: Math.max(limit, 30),
-      });
-
-      const byId = new Map<string, (typeof primary.jobs)[number]>();
-      for (const job of primary.jobs) byId.set(job.id, job);
-      if (skillPass.ok) {
-        for (const job of skillPass.jobs) byId.set(job.id, job);
-      }
-
-      if (byId.size < 5) {
-        const broad = await recommendApprovedLiveJobs(ctx.supabase as never, {
-          query: filterQuery,
-          limit: 30,
+      const runSearch = async (): Promise<
+        { ok: true; jobs: LiveApprovedJob[] } | { ok: false; message: string }
+      > => {
+        const primary = await recommendApprovedLiveJobs(ctx.supabase as never, {
+          query: question.slice(0, 200),
+          limit,
         });
-        if (broad.ok) {
-          for (const job of broad.jobs) byId.set(job.id, job);
-        }
-      }
+        if (!primary.ok) return { ok: false, message: primary.message };
 
-      const merged = filterLiveJobsByQuery([...byId.values()], question);
-      const result = { ok: true as const, jobs: merged };
-      aiMatchGuard.setCached(ctx.userId, cacheQuery, result);
-      return result;
+        if (!skills.length) {
+          return { ok: true as const, jobs: primary.jobs };
+        }
+
+        // One skill pass only — avoid a third broad query that blows live latency.
+        const skillPass = await recommendApprovedLiveJobs(ctx.supabase as never, {
+          query: `${question.slice(0, 120)} ${skills.join(" ")}`.slice(0, 200),
+          limit: Math.max(limit, 20),
+        });
+
+        const byId = new Map<string, (typeof primary.jobs)[number]>();
+        for (const job of primary.jobs) byId.set(job.id, job);
+        if (skillPass.ok) {
+          for (const job of skillPass.jobs) byId.set(job.id, job);
+        }
+
+        const merged = filterLiveJobsByQuery([...byId.values()], question);
+        return { ok: true as const, jobs: merged.slice(0, Math.max(limit, 12)) };
+      };
+
+      const raced = await Promise.race([
+        runSearch(),
+        new Promise<{ ok: false; message: string }>((resolve) =>
+          setTimeout(
+            () => resolve({ ok: false, message: "Approved job search timed out. Please try again." }),
+            8_000,
+          ),
+        ),
+      ]);
+      if (!raced.ok) return raced;
+      aiMatchGuard.setCached(ctx.userId, cacheQuery, raced);
+      return raced;
     },
     generateAnswer: async (prompt) => {
       const generated = await fetchGeminiGeneratedText(prompt, readGeminiApiKey());

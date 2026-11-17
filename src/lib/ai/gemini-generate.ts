@@ -53,7 +53,7 @@ const FALLBACK_ASSISTANT_MODELS = ["gemini-flash-latest"] as const;
 export const GEMINI_CHAT_THINKING_LEVEL = "low" as const;
 
 /** Hard cap so a slow Gemini call cannot pin the Vercel function / UI forever. */
-export const GEMINI_GENERATE_TIMEOUT_MS = 20_000 as const;
+export const GEMINI_GENERATE_TIMEOUT_MS = 28_000 as const;
 
 /** Prefer AbortSignal.timeout; fall back to AbortController when unavailable. */
 export function createGeminiAbortSignal(timeoutMs: number): AbortSignal {

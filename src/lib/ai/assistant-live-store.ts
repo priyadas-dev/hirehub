@@ -266,20 +266,21 @@ export function runAssistantLiveAsk(userId: string, payload: AssistantAskPayload
         }))
       : undefined;
 
+  // Keep prior-turn context short — long context + Gemini 3.8 was timing out on live follow-ups.
   const conversationContext = prevTurns
     .filter((t) => t.result && !t.pending)
-    .slice(-2)
+    .slice(-1)
     .map((t) => {
       const answer =
         t.result && t.result.ok
-          ? t.result.answer.slice(0, 280)
+          ? t.result.answer.slice(0, 160)
           : t.result && !t.result.ok
-            ? t.result.message.slice(0, 160)
+            ? t.result.message.slice(0, 100)
             : "";
-      return `User: ${t.question.slice(0, 200)}\nAssistant: ${answer}`;
+      return `User: ${t.question.slice(0, 120)}\nAssistant: ${answer}`;
     })
     .join("\n\n")
-    .slice(0, 1200);
+    .slice(0, 400);
 
   inflight = (async () => {
     try {

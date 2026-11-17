@@ -76,8 +76,37 @@ function isResumeImprovePattern(q: string): boolean {
   );
 }
 
+/**
+ * "Tell me about an AI job" / "describe remote jobs" — vacancy seeking, not a concept essay.
+ * These must not go to Gemini general_knowledge (slow/timeout on live); Discovery is faster.
+ */
+function isJobTopicAskPattern(q: string): boolean {
+  const jobNoun = /\b(jobs?|openings?|vacancies|positions?|roles?|opportunit(?:y|ies)?)\b/i;
+  if (!jobNoun.test(q)) return false;
+  // Avoid stealing interview / learning questions that mention "job".
+  if (isInterviewPattern(q) || isLearningPattern(q)) return false;
+  if (
+    /\b(tell me about|describe|info(rmation)? (on|about)|details (on|about)|any info(rmation)? (on|about))\b/i.test(
+      q,
+    )
+  ) {
+    return true;
+  }
+  // "what is/are … job(s)" when the topic is a role/vacancy, not a CS concept.
+  if (
+    /^(what\s+(is|are)|what'?s)\b/i.test(q) &&
+    /\b(a |an |the )?(ai|ml|software|frontend|backend|full[\s-]?stack|data|product|design|marketing|sales|remote|full[\s-]?time|part[\s-]?time)?.{0,40}\b(jobs?|roles?|openings?|positions?)\b/i.test(
+      q,
+    )
+  ) {
+    return true;
+  }
+  return false;
+}
+
 function isExplicitVacancyPattern(q: string): boolean {
   const jobNoun = /\b(jobs?|openings?|vacancies|positions?|roles?|opportunit(?:y|ies)?)\b/i;
+  if (isJobTopicAskPattern(q)) return true;
   if (
     /\b(find|show|search|list|browse|get me|give me|gimme|looking for|recommend|are there|is there|do you have|have you got)\b/i.test(
       q,
