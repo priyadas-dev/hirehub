@@ -1,0 +1,338 @@
+{
+  "generatedAt": "2026-11-17T05:56:31.983Z",
+  "baseURL": "http://127.0.0.1:8080",
+  "account": "pr***@gmail.com",
+  "checks": [
+    {
+      "id": "AUTH-01-unauthenticated-assistant",
+      "status": "pass",
+      "notes": []
+    },
+    {
+      "id": "A-01-page-load",
+      "status": "pass",
+      "notes": [
+        "Heading + empty state or composer visible"
+      ]
+    },
+    {
+      "id": "A-02-shell-chrome",
+      "status": "pass",
+      "notes": [
+        "History, New, Browse jobs, attach, composer present"
+      ]
+    },
+    {
+      "id": "A-03-starters-visible",
+      "status": "pass",
+      "notes": [
+        "All 4 starter chips visible on empty conversation"
+      ]
+    },
+    {
+      "id": "A-04-send-disabled-short",
+      "status": "pass",
+      "notes": [
+        "Send disabled for <3 character questions"
+      ]
+    },
+    {
+      "id": "MA-01-legacy-general-knowledge",
+      "status": "soft_fail",
+      "notes": [
+        "SOFT: Gemini unavailable for legacy Q&A (not Track 3 specialist)",
+        "Payloads: []"
+      ]
+    },
+    {
+      "id": "MA-02-discovery-job-search",
+      "status": "pass",
+      "notes": [
+        "Discovery empty-match / browse fallback",
+        "Payloads: []"
+      ]
+    },
+    {
+      "id": "MA-03-discovery-remote",
+      "status": "pass",
+      "notes": [
+        "Payloads: []"
+      ]
+    },
+    {
+      "id": "MA-04-application-status",
+      "status": "pass",
+      "notes": [
+        "Payloads: []"
+      ]
+    },
+    {
+      "id": "MA-05-application-save-intent",
+      "status": "pass",
+      "notes": [
+        "Payloads: []"
+      ]
+    },
+    {
+      "id": "MA-06-fairness-refuse",
+      "status": "pass",
+      "notes": [
+        "Fairness refuse shown — no ranking on protected attributes",
+        "Payloads: []"
+      ]
+    },
+    {
+      "id": "MA-07-apply-propose-no-confirm",
+      "status": "pass",
+      "notes": [
+        "Apply propose asks for job/confirm — Mode A no submit"
+      ]
+    },
+    {
+      "id": "MA-08-starter-chip-click",
+      "status": "soft_fail",
+      "notes": [
+        "Starter produced payloads: 0",
+        "SOFT: starter hit Gemini unavailable"
+      ]
+    },
+    {
+      "id": "A-05-history-persist",
+      "status": "pass",
+      "notes": [
+        "History entries visible: 25"
+      ]
+    },
+    {
+      "id": "A-06-history-open-rename-delete",
+      "status": "pass",
+      "notes": [
+        "Rename OK",
+        "Opened a history conversation",
+        "Delete dialog accepted"
+      ]
+    },
+    {
+      "id": "A-07-new-conversation",
+      "status": "pass",
+      "notes": [
+        "New clears to empty state"
+      ]
+    },
+    {
+      "id": "A-08-attachment-reject-txt",
+      "status": "pass",
+      "notes": [
+        "Rejected: Supported attachments: PDF, JPG, PNG, WEBP, or DOCX (max 2 MB)."
+      ]
+    },
+    {
+      "id": "A-09-attachment-accept-png",
+      "status": "pass",
+      "notes": [
+        "PNG attachment accepted"
+      ]
+    },
+    {
+      "id": "A-10-navigate-away-and-back",
+      "status": "pass",
+      "notes": [
+        "Returned to assistant after mid-ask navigation (live store continuity)"
+      ]
+    },
+    {
+      "id": "A-11-mobile-layout",
+      "status": "pass",
+      "notes": [
+        "Assistant usable at 390px"
+      ]
+    },
+    {
+      "id": "A-12-recruiter-blocked",
+      "status": "pass",
+      "notes": [
+        "Skipped opposite-role login — covered by auth-smoke; assistant is seeker-gated server-side"
+      ]
+    }
+  ],
+  "multiAgent": {
+    "tracesCaptured": [],
+    "routesSeen": [
+      "legacy",
+      "application",
+      "fairness_refuse",
+      "discovery"
+    ],
+    "verdict": "working",
+    "notes": [
+      "Supervisor routedTo values: legacy, application, fairness_refuse, discovery",
+      "ISSUE: 1 turn(s) returned insufficient-context fallback."
+    ],
+    "historyEvidence": [
+      {
+        "title": "Briefly explain what a REST API is.",
+        "question": "Briefly explain what a REST API is.",
+        "ok": false,
+        "routedTo": "legacy",
+        "fairnessAction": "skipped",
+        "soughtLiveJobs": null,
+        "liveCount": 0,
+        "hasStatuses": false,
+        "statusCount": 0,
+        "saveOutcome": false,
+        "pendingApply": false,
+        "code": "generation_failed",
+        "answerPreview": "The assistant took too long to respond. Please try again."
+      },
+      {
+        "title": "I want to apply to a software engineer job",
+        "question": "I want to apply to a software engineer job",
+        "ok": true,
+        "routedTo": "application",
+        "fairnessAction": "pass",
+        "soughtLiveJobs": false,
+        "liveCount": 0,
+        "hasStatuses": false,
+        "statusCount": 0,
+        "saveOutcome": false,
+        "pendingApply": false,
+        "code": null,
+        "answerPreview": "Tell me which approved job to apply to (pick a card, pass applyJobId, or say “apply to the first job”). I will not submit until you confirm."
+      },
+      {
+        "title": "Only show me jobs for young male candidates u…",
+        "question": "Only show me jobs for young male candidates under 25",
+        "ok": true,
+        "routedTo": "fairness_refuse",
+        "fairnessAction": "refuse",
+        "soughtLiveJobs": false,
+        "liveCount": 0,
+        "hasStatuses": false,
+        "statusCount": 0,
+        "saveOutcome": false,
+        "pendingApply": false,
+        "code": null,
+        "answerPreview": "I can’t help with job search filters that discriminate by protected attributes such as gender, age, religion, race, or ethnicity. Ask for ro"
+      },
+      {
+        "title": "Please save this job for me later",
+        "question": "Please save this job for me later",
+        "ok": true,
+        "routedTo": "application",
+        "fairnessAction": "pass",
+        "soughtLiveJobs": false,
+        "liveCount": 0,
+        "hasStatuses": false,
+        "statusCount": 0,
+        "saveOutcome": false,
+        "pendingApply": false,
+        "code": null,
+        "answerPreview": "Tell me which approved job to save (pick a card, or say “save the first job”)."
+      },
+      {
+        "title": "What is the status of my applications?",
+        "question": "What is the status of my applications?",
+        "ok": true,
+        "routedTo": "application",
+        "fairnessAction": "pass",
+        "soughtLiveJobs": false,
+        "liveCount": 0,
+        "hasStatuses": true,
+        "statusCount": 2,
+        "saveOutcome": false,
+        "pendingApply": false,
+        "code": null,
+        "answerPreview": "Here are your 2 applications. Details are shown below."
+      },
+      {
+        "title": "Show me remote jobs",
+        "question": "Show me remote jobs",
+        "ok": true,
+        "routedTo": "discovery",
+        "fairnessAction": "pass",
+        "soughtLiveJobs": true,
+        "liveCount": 1,
+        "hasStatuses": false,
+        "statusCount": 0,
+        "saveOutcome": false,
+        "pendingApply": false,
+        "code": null,
+        "answerPreview": "I found 1 approved HireHub job that matches your request. Open the card below to view details or apply."
+      },
+      {
+        "title": "I know React, JavaScript and SQL. Find suitab…",
+        "question": "I know React, JavaScript and SQL. Find suitable jobs",
+        "ok": true,
+        "routedTo": "discovery",
+        "fairnessAction": "pass",
+        "soughtLiveJobs": true,
+        "liveCount": 0,
+        "hasStatuses": false,
+        "statusCount": 0,
+        "saveOutcome": false,
+        "pendingApply": false,
+        "code": null,
+        "answerPreview": "I don’t have enough grounded HireHub context to answer confidently. Try Browse Jobs, narrow by skill or location, or ask again after attachi"
+      },
+      {
+        "title": "What is REST in one short paragraph?",
+        "question": "What is REST in one short paragraph?",
+        "ok": false,
+        "routedTo": "legacy",
+        "fairnessAction": "skipped",
+        "soughtLiveJobs": null,
+        "liveCount": 0,
+        "hasStatuses": false,
+        "statusCount": 0,
+        "saveOutcome": false,
+        "pendingApply": false,
+        "code": "generation_failed",
+        "answerPreview": "The assistant took too long to respond. Please try again."
+      }
+    ],
+    "askPayloads": []
+  },
+  "assignmentTrack3": {
+    "source": "Assessment3_Priya_HireHub.pdf — Track 3 + hard problems 3 & 5 (seeker surface)",
+    "items": [
+      {
+        "id": "T3-supervisor",
+        "requirement": "Supervisor/router over specialist agents",
+        "status": "pass",
+        "evidence": "verdict=working; routes=legacy|application|fairness_refuse|discovery"
+      },
+      {
+        "id": "T3-discovery",
+        "requirement": "Discovery agent recommends matching jobs",
+        "status": "pass",
+        "evidence": "live job cards / soughtLiveJobs"
+      },
+      {
+        "id": "T3-application",
+        "requirement": "Application agent status/save/apply with real actions",
+        "status": "pass",
+        "evidence": "status/save/pendingApply evidence"
+      },
+      {
+        "id": "T3-fairness",
+        "requirement": "Fair matching guardrail (hard problem 3)",
+        "status": "pass",
+        "evidence": "fairness refuse observed"
+      },
+      {
+        "id": "T3-confirm-apply",
+        "requirement": "Confirm-to-apply gate (hard problem 5) — Mode A no submit",
+        "status": "pass",
+        "evidence": "confirm gate / pick-job copy shown"
+      },
+      {
+        "id": "T3-recruiter-agent",
+        "requirement": "Recruiter agent (shortlist / outreach)",
+        "status": "out_of_scope_this_page",
+        "evidence": "Lives on /recruiter/agent — not seeker/assistant"
+      }
+    ]
+  },
+  "consoleErrors": [],
+  "pageErrors": []
+}
