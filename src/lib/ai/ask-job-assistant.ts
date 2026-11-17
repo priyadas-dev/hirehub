@@ -91,11 +91,20 @@ export function buildSeekerJobAssistantDeps(ctx: SeekerAssistantContext): JobAss
       try {
         const { createRagAdminClient } = await import("@/lib/ai/rag-admin");
         const admin = createRagAdminClient();
-        const result = await retrieveCorpusMatches(admin, { query: question, matchCount: 5 });
+        // Cap RAG so a slow embed/RPC cannot starve the Gemini answer on Vercel.
+        const result = await Promise.race([
+          retrieveCorpusMatches(admin, { query: question, matchCount: 5 }),
+          new Promise<{ ok: false; message: string }>((resolve) =>
+            setTimeout(
+              () => resolve({ ok: false, message: "Corpus retrieval timed out." }),
+              8_000,
+            ),
+          ),
+        ]);
         if (!result.ok) {
           return {
             ok: false,
-            unavailable: /not ready|not configured|Missing/i.test(result.message),
+            unavailable: /not ready|not configured|Missing|timed out/i.test(result.message),
             message: result.message,
           };
         }

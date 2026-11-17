@@ -3,12 +3,34 @@ import { createMiddleware } from '@tanstack/react-start'
 import { getRequest } from '@tanstack/react-start/server'
 import { createClient } from '@supabase/supabase-js'
 import type { Database } from './types'
+import {
+  ensureProcessEnvFromDotenv,
+  normalizeProcessEnvValue,
+} from '@/lib/server-process-env'
 
 
 
 
 function isNewSupabaseApiKey(value: string): boolean {
   return value.startsWith('sb_publishable_') || value.startsWith('sb_secret_');
+}
+
+/**
+ * Prefer server secrets; fall back to VITE_* so local `.env` that only has
+ * browser keys still authenticates JWT server functions (askJobAssistant, etc.).
+ * Prefer SUPABASE_* on hosts; never put service-role behind VITE_.
+ */
+function readServerSupabaseUrl(): string {
+  return normalizeProcessEnvValue(
+    process.env['SUPABASE_URL'] || process.env['VITE_SUPABASE_URL'],
+  );
+}
+
+function readServerSupabasePublishableKey(): string {
+  return normalizeProcessEnvValue(
+    process.env['SUPABASE_PUBLISHABLE_KEY'] ||
+      process.env['VITE_SUPABASE_PUBLISHABLE_KEY'],
+  );
 }
 
 function createSupabaseFetch(supabaseKey: string): typeof fetch {
@@ -33,14 +55,17 @@ function createSupabaseFetch(supabaseKey: string): typeof fetch {
 
 export const requireSupabaseAuth = createMiddleware({ type: 'function' }).server(
   async ({ next }) => {
-    
-    const SUPABASE_URL = process.env['SUPABASE_URL'];
-    const SUPABASE_PUBLISHABLE_KEY = process.env['SUPABASE_PUBLISHABLE_KEY'];
+    ensureProcessEnvFromDotenv();
+
+    const SUPABASE_URL = readServerSupabaseUrl();
+    const SUPABASE_PUBLISHABLE_KEY = readServerSupabasePublishableKey();
 
     if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
       const missing = [
-        ...(!SUPABASE_URL ? ['SUPABASE_URL'] : []),
-        ...(!SUPABASE_PUBLISHABLE_KEY ? ['SUPABASE_PUBLISHABLE_KEY'] : []),
+        ...(!SUPABASE_URL ? ['SUPABASE_URL / VITE_SUPABASE_URL'] : []),
+        ...(!SUPABASE_PUBLISHABLE_KEY
+          ? ['SUPABASE_PUBLISHABLE_KEY / VITE_SUPABASE_PUBLISHABLE_KEY']
+          : []),
       ];
       const message = `Missing Supabase environment variable(s): ${missing.join(', ')}. Connect Supabase in Lovable Cloud.`;
       console.error(`[Supabase] ${message}`);

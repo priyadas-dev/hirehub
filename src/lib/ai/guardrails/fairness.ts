@@ -25,15 +25,33 @@ const REFUSE_PATTERNS: Array<{ re: RegExp; reason: string }> = [
     reason: "sex_or_gender_exclusive_hiring",
   },
   {
+    // “Only show me jobs for … male/female …” (words between show and gender)
+    re: /\b(only|just)\s+(show|find|hire|want|prefer)\b[\s\S]{0,100}\b(men|women|males?|females?|male|female)\b/i,
+    reason: "sex_or_gender_exclusive_hiring",
+  },
+  {
+    re: /\b(jobs?|roles?|openings?).{0,80}\bfor\s+(young\s+|older\s+)?(men|women|males?|females?|male|female)\b/i,
+    reason: "sex_or_gender_exclusive_hiring",
+  },
+  {
+    re: /\b(young|older)\s+(male|female|men|women)\s+(candidates?|applicants?|people|workers?)\b/i,
+    reason: "sex_or_gender_exclusive_hiring",
+  },
+  {
     re: /\b(no|exclude|avoid|don't\s+want)\s+(men|women|males?|females?|muslims?|hindus?|christians?|jews?|black|white|asian)\b/i,
     reason: "exclusion_by_protected_attribute",
   },
   {
-    re: /\b(jobs?|roles?|candidates?|applicants?).{0,40}\b(under|over)\s*\d{2}\s*(years?\s*old|yrs?)\b/i,
+    // “candidates under 25” / “jobs … under 25 years old” (yrs optional)
+    re: /\b(jobs?|roles?|candidates?|applicants?|people|workers?).{0,48}\b(under|over)\s*\d{2}(?:\s*(?:years?\s*old|yrs?))?\b/i,
     reason: "age_cutoff_filter",
   },
   {
     re: /\b(young|older)\s+(candidates?|people|workers?|applicants?).{0,30}\b(only|prefer|must)\b/i,
+    reason: "age_preference_filter",
+  },
+  {
+    re: /\b(only|just|prefer|must).{0,48}\b(young|older)\s+(candidates?|people|workers?|applicants?|males?|females?)?\b/i,
     reason: "age_preference_filter",
   },
   {
@@ -53,8 +71,10 @@ const REFUSE_PATTERNS: Array<{ re: RegExp; reason: string }> = [
 const NEUTRALIZE_REPLACEMENTS: Array<{ re: RegExp; with: string }> = [
   { re: /\bonly\s+(for\s+)?(men|women|males?|females?)\b/gi, with: "" },
   { re: /\b(no|exclude)\s+(men|women|muslims?|hindus?|christians?)\b/gi, with: "" },
-  { re: /\b(under|over)\s*\d{2}\s*(years?\s*old|yrs?)\b/gi, with: "" },
+  { re: /\b(under|over)\s*\d{2}\s*(years?\s*old|yrs?)?\b/gi, with: "" },
   { re: /\b(prefer|only)\s+(young|older)\s+(candidates?|people|workers?)\b/gi, with: "candidates" },
+  { re: /\b(young|older)\s+(male|female|men|women)\s+(candidates?|applicants?|people|workers?)\b/gi, with: "candidates" },
+  { re: /\bfor\s+(young\s+|older\s+)?(men|women|males?|females?|male|female)\b/gi, with: "" },
   { re: /\b(muslim|hindu|christian|jewish)\s+(only|preferred)\b/gi, with: "" },
   { re: /\bfilter\s+by\s+(gender|sex|religion|race|age)\b/gi, with: "" },
 ];
@@ -73,15 +93,19 @@ export function evaluateFairnessBeforeRank(question: string): FairnessDecision {
   }
 
   const exclusive =
-    /\bonly\s+(hire|show|find|want)\b/i.test(question) ||
+    /\bonly\s+(hire|show|find|want|prefer)\b/i.test(question) ||
+    /\b(just)\s+(show|find|hire|want|prefer)\b/i.test(question) ||
     /\b(no|exclude)\s+(men|women|muslims?|hindus?)\b/i.test(question) ||
-    /\bfilter\s+by\s+(gender|sex|religion|race|age)\b/i.test(question);
+    /\bfilter\s+by\s+(gender|sex|religion|race|age)\b/i.test(question) ||
+    reasons.includes("sex_or_gender_exclusive_hiring") ||
+    reasons.includes("age_cutoff_filter") ||
+    reasons.includes("explicit_discriminatory_filter");
 
   if (reasons.length > 0 && exclusive) {
     return {
       ok: false,
       action: "refuse",
-      reasons,
+      reasons: [...new Set(reasons)],
       message: FAIRNESS_REFUSAL_MESSAGE,
     };
   }

@@ -65,6 +65,14 @@ describe("Phase 6 guardrails — fairness BEFORE rank", () => {
     if (!decision.ok) expect(decision.message).toBe(FAIRNESS_REFUSAL_MESSAGE);
   });
 
+  it("refuses age+gender phrasing used in Assessment 3 demos", () => {
+    const decision = evaluateFairnessBeforeRank(
+      "Only show me jobs for young male candidates under 25",
+    );
+    expect(mustBlockJobRanking(decision)).toBe(true);
+    if (!decision.ok) expect(decision.message).toBe(FAIRNESS_REFUSAL_MESSAGE);
+  });
+
   it("refuses religion preference filters", () => {
     const decision = evaluateFairnessBeforeRank("Find jobs and filter by religion to prefer muslim");
     expect(mustBlockJobRanking(decision)).toBe(true);
@@ -73,6 +81,13 @@ describe("Phase 6 guardrails — fairness BEFORE rank", () => {
   it("allows skill/location job search", () => {
     const decision = evaluateFairnessBeforeRank("Find React jobs in Dhaka");
     expect(decision.ok).toBe(true);
+    expect(mustBlockJobRanking(decision)).toBe(false);
+  });
+
+  it("allows a seeker stating their own age without discriminatory filters", () => {
+    const decision = evaluateFairnessBeforeRank(
+      "I am under 25 and looking for React developer jobs in Dhaka",
+    );
     expect(mustBlockJobRanking(decision)).toBe(false);
   });
 

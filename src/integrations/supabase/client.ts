@@ -8,11 +8,48 @@ function isNewSupabaseApiKey(value: string): boolean {
   return value.startsWith('sb_publishable_') || value.startsWith('sb_secret_');
 }
 
+/**
+ * Normalize env strings that may include wrapping quotes, curly quotes, or whitespace.
+ * Vite usually strips quotes; some editors / paste paths leave them in the value and
+ * Supabase then rejects the URL as invalid.
+ */
+export function normalizeSupabaseEnvValue(value: string | undefined | null): string {
+  let v = (value ?? "").trim();
+  if (!v) return "";
+  // Straight or curly wrapping quotes: "…", '…', “…”, ‘…’
+  if (
+    (v.startsWith('"') && v.endsWith('"')) ||
+    (v.startsWith("'") && v.endsWith("'")) ||
+    (v.startsWith("\u201C") && v.endsWith("\u201D")) ||
+    (v.startsWith("\u2018") && v.endsWith("\u2019"))
+  ) {
+    v = v.slice(1, -1).trim();
+  }
+  return v;
+}
+
+function readSupabaseUrl(): string {
+  return normalizeSupabaseEnvValue(
+    import.meta.env["VITE_SUPABASE_URL"] ||
+      (typeof process !== "undefined" ? process.env["VITE_SUPABASE_URL"] : undefined) ||
+      (typeof process !== "undefined" ? process.env["SUPABASE_URL"] : undefined),
+  );
+}
+
+function readSupabasePublishableKey(): string {
+  return normalizeSupabaseEnvValue(
+    import.meta.env["VITE_SUPABASE_PUBLISHABLE_KEY"] ||
+      (typeof process !== "undefined" ? process.env["VITE_SUPABASE_PUBLISHABLE_KEY"] : undefined) ||
+      (typeof process !== "undefined" ? process.env["SUPABASE_PUBLISHABLE_KEY"] : undefined),
+  );
+}
+
 // The public URL can be reachable only from the browser, so server requests go to the runtime URL of the same backend.
 function serverSupabaseUrl(publicUrl: string, supabaseKey: string): string | undefined {
   if (typeof window !== 'undefined' || typeof process === 'undefined') return undefined;
-  const serverUrl = process.env['SUPABASE_URL']?.replace(/\/+$/, '');
-  if (!serverUrl || serverUrl === publicUrl || process.env['SUPABASE_PUBLISHABLE_KEY'] !== supabaseKey) return undefined;
+  const serverUrl = normalizeSupabaseEnvValue(process.env['SUPABASE_URL']).replace(/\/+$/, '');
+  const serverKey = readSupabasePublishableKey();
+  if (!serverUrl || serverUrl === publicUrl || serverKey !== supabaseKey) return undefined;
   return serverUrl;
 }
 
@@ -62,17 +99,23 @@ function createSupabaseClient() {
     }
   }
 
-  // Use import.meta.env for client-side (Vite build-time replacement)
-  // Fall back to process.env for SSR (server-side rendering)
-  const SUPABASE_URL = import.meta.env['VITE_SUPABASE_URL'] || process.env['SUPABASE_URL'];
-  const SUPABASE_PUBLISHABLE_KEY = import.meta.env['VITE_SUPABASE_PUBLISHABLE_KEY'] || process.env['SUPABASE_PUBLISHABLE_KEY'];
+  // Browser: VITE_* via import.meta.env. SSR: process.env (loaded from .env in vite.config).
+  const SUPABASE_URL = readSupabaseUrl();
+  const SUPABASE_PUBLISHABLE_KEY = readSupabasePublishableKey();
 
   if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
     const missing = [
-      ...(!SUPABASE_URL ? ['SUPABASE_URL'] : []),
-      ...(!SUPABASE_PUBLISHABLE_KEY ? ['SUPABASE_PUBLISHABLE_KEY'] : []),
+      ...(!SUPABASE_URL ? ['VITE_SUPABASE_URL / SUPABASE_URL'] : []),
+      ...(!SUPABASE_PUBLISHABLE_KEY ? ['VITE_SUPABASE_PUBLISHABLE_KEY / SUPABASE_PUBLISHABLE_KEY'] : []),
     ];
     const message = `Missing Supabase environment variable(s): ${missing.join(', ')}. Connect Supabase in Lovable Cloud.`;
+    console.error(`[Supabase] ${message}`);
+    throw new Error(message);
+  }
+
+  if (!/^https?:\/\//i.test(SUPABASE_URL)) {
+    const message =
+      "Invalid Supabase URL in env (must start with http:// or https://). Check VITE_SUPABASE_URL / SUPABASE_URL — remove wrapping quotes and restart the dev server.";
     console.error(`[Supabase] ${message}`);
     throw new Error(message);
   }

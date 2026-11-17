@@ -185,7 +185,7 @@ export type AssistantAskPayload = {
 };
 
 /** Client ceiling — if the server fn never resolves (Vercel hang), clear Thinking… */
-export const ASSISTANT_CLIENT_TIMEOUT_MS = 45_000 as const;
+export const ASSISTANT_CLIENT_TIMEOUT_MS = 35_000 as const;
 
 function withClientAskTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return new Promise<T>((resolve, reject) => {
@@ -358,9 +358,11 @@ export function runAssistantLiveAsk(userId: string, payload: AssistantAskPayload
       const raw = err instanceof Error ? err.message : "";
       const message = /Unauthorized|auth/i.test(raw)
         ? "Sign in as a job seeker to use the assistant."
-        : /timed out/i.test(raw)
-          ? "The assistant took too long. Please try again."
-          : "Something went wrong talking to the assistant. Try again.";
+        : /Missing Supabase environment variable/i.test(raw)
+          ? "Assistant server is missing Supabase config. Add SUPABASE_PUBLISHABLE_KEY (or VITE_SUPABASE_PUBLISHABLE_KEY) and restart the app."
+          : /timed out/i.test(raw)
+            ? "The assistant took too long. Please try again."
+            : "Something went wrong talking to the assistant. Try again.";
       if (!state || state.userId !== userId) return;
       const updatedTurns = state.turns.map((t) =>
         t.id === turnId
