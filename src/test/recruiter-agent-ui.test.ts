@@ -1,14 +1,18 @@
 import { describe, expect, it } from "vitest";
 import {
   applicantDisplayName,
+  applyApplicantStatusFilter,
   detectRecruiterChatIntent,
   extractApplicantNameHint,
   extractApplicantNameHints,
   extractApplicantOrdinalRef,
+  extractApplicantStatusFilter,
   extractJobTitleHint,
   extractMinYearsExperience,
   extractSearchTokens,
   extractTopNApplicants,
+  isApplicantStatusFilterQuestion,
+  isListApplicantsQuestion,
   formatOwnedJobsReply,
   formatRankedApplicantsReply,
   htmlToEditablePlain,
@@ -159,6 +163,28 @@ describe("detectRecruiterChatIntent", () => {
     expect(detectRecruiterChatIntent("What about the second candidate?")).toBe("shortlist");
     expect(detectRecruiterChatIntent("Find candidates with React experience")).toBe("shortlist");
     expect(detectRecruiterChatIntent("Show software engineers")).toBe("list_applicants");
+    expect(
+      detectRecruiterChatIntent("show the applicant who are not shortlisted"),
+    ).toBe("list_applicants");
+    expect(isApplicantStatusFilterQuestion("show applicants who are not shortlisted")).toBe(
+      true,
+    );
+    expect(isListApplicantsQuestion("show the applicant who are not shortlisted")).toBe(true);
+    expect(isShortlistishQuestion("show the applicant who are not shortlisted")).toBe(false);
+    expect(extractApplicantStatusFilter("show who are not shortlisted")).toEqual({
+      kind: "exclude",
+      statuses: ["shortlisted"],
+    });
+    expect(
+      applyApplicantStatusFilter(
+        [
+          { id: "1", status: "applied" },
+          { id: "2", status: "shortlisted" },
+          { id: "3", status: "rejected" },
+        ],
+        { kind: "exclude", statuses: ["shortlisted"] },
+      ).map((a) => a.id),
+    ).toEqual(["1", "3"]);
     expect(detectRecruiterChatIntent("show my own jobs?")).toBe("list_jobs");
     expect(detectRecruiterChatIntent("is this is my own jobs?")).toBe("list_jobs");
     expect(detectRecruiterChatIntent("List my jobs with applicants")).toBe("list_jobs");

@@ -44,9 +44,11 @@ import {
   RECRUITER_SHORTLIST_PROCESS_HELP,
   applicantDisplayName,
   detectRecruiterChatIntent,
+  applyApplicantStatusFilter,
   extractApplicantNameHint,
   extractApplicantNameHints,
   extractApplicantOrdinalRef,
+  extractApplicantStatusFilter,
   extractJobTitleHint,
   extractTopNApplicants,
   formatOwnedJobsReply as formatOwnedJobsChatReply,
@@ -66,6 +68,7 @@ import {
   rankOwnedJobsByQuery,
   resolveApplicantChoiceFromRef,
   suggestJobsWithApplicants,
+  type ApplicantStatusFilter,
   type RecruiterChatTurn,
 } from "@/lib/ai/recruiter-agent-ui";
 import { useAuth } from "@/lib/auth";
@@ -161,6 +164,9 @@ function RecruiterAgentPage() {
   const [selectedAppId, setSelectedAppId] = useState("");
   const [jobSearch, setJobSearch] = useState("");
   const [applicantSearch, setApplicantSearch] = useState("");
+  /** Chat-driven status filter for the applicants panel (e.g. not shortlisted). */
+  const [applicantStatusFilter, setApplicantStatusFilter] =
+    useState<ApplicantStatusFilter | null>(null);
   const [question, setQuestion] = useState("");
   const [turns, setTurns] = useState<RecruiterChatTurn[]>([]);
   const [conversationId, setConversationId] = useState(() => createRecruiterConversationId());
@@ -266,19 +272,20 @@ function RecruiterAgentPage() {
 
   const filteredApplicants = useMemo(() => {
     const q = applicantSearch.trim().toLowerCase();
-    if (!q) return applicantPool.slice(0, jobId ? 40 : 20);
-    return applicantPool
-      .filter((a) => {
-        const name = a.profiles?.full_name?.toLowerCase() ?? "";
-        const email = a.profiles?.email?.toLowerCase() ?? "";
-        const title = a.jobs?.title?.toLowerCase() ?? "";
-        const status = String(a.status).toLowerCase();
-        return (
-          name.includes(q) || email.includes(q) || title.includes(q) || status.includes(q)
-        );
-      })
-      .slice(0, 40);
-  }, [applicantPool, applicantSearch, jobId]);
+    const statusFiltered = applyApplicantStatusFilter(applicantPool, applicantStatusFilter);
+    const textFiltered = !q
+      ? statusFiltered
+      : statusFiltered.filter((a) => {
+          const name = a.profiles?.full_name?.toLowerCase() ?? "";
+          const email = a.profiles?.email?.toLowerCase() ?? "";
+          const title = a.jobs?.title?.toLowerCase() ?? "";
+          const status = String(a.status).toLowerCase();
+          return (
+            name.includes(q) || email.includes(q) || title.includes(q) || status.includes(q)
+          );
+        });
+    return textFiltered.slice(0, jobId ? 40 : 20);
+  }, [applicantPool, applicantSearch, applicantStatusFilter, jobId]);
 
   const selectedApp = useMemo(() => {
     const fromJob = appsForJob.data?.find((a) => a.id === selectedAppId);
@@ -584,9 +591,17 @@ function RecruiterAgentPage() {
   async function replyListApplicants(questionText?: string, forJobId?: string) {
     let effectiveJobId = forJobId || jobId;
     let matchedTitle: string | null = null;
+    const statusFilter = questionText?.trim()
+      ? extractApplicantStatusFilter(questionText)
+      : null;
+    // Persist filter so the applicants panel matches the chat answer.
+    setApplicantStatusFilter(statusFilter);
+
+    // Status-only asks ("not shortlisted") should list across owned jobs — do not force a job pick.
+    const statusOnlyAsk = Boolean(statusFilter) && !extractJobTitleHint(questionText ?? "");
 
     // "show software developer applicant" → resolve owned job from NL when none selected.
-    if (!effectiveJobId && questionText?.trim()) {
+    if (!effectiveJobId && questionText?.trim() && !statusOnlyAsk) {
       const rankedJobs = rankOwnedJobsByQuery(jobs.data ?? [], questionText);
       const matched =
         rankedJobs[0] &&
@@ -602,7 +617,7 @@ function RecruiterAgentPage() {
     }
 
     let list: ApplicantRow[];
-    if (effectiveJobId) {
+    if (effectiveJobId && !statusOnlyAsk) {
       list = await loadApplicantsForJob(effectiveJobId);
       if (matchedTitle) {
         appendTurns({
@@ -613,20 +628,53 @@ function RecruiterAgentPage() {
         });
       }
     } else {
-      list = filteredApplicants;
-      appendTurns({
-        id: newTurnId(),
-        role: "assistant",
-        text:
-          "No job selected yet — showing recent applicants across jobs you own. Pick a job (or name it in chat) to narrow the list.",
-        source: "local" as const,
-      });
+      // Prefer full cross-job pool for status filters (not the truncated sidebar slice).
+      let pool = appsAcrossOwned.data ?? [];
+      if (pool.length === 0) {
+        try {
+          const refreshed = await appsAcrossOwned.refetch();
+          pool = refreshed.data ?? [];
+        } catch {
+          pool = [];
+        }
+      }
+      list = pool;
+      if (!statusFilter) {
+        appendTurns({
+          id: newTurnId(),
+          role: "assistant",
+          text:
+            "No job selected yet — showing recent applicants across jobs you own. Pick a job (or name it in chat) to narrow the list.",
+          source: "local" as const,
+        });
+      }
     }
+    list = applyApplicantStatusFilter(list, statusFilter);
+    const filterNote = statusFilter
+      ? statusFilter.kind === "exclude"
+        ? ` (excluding ${statusFilter.statuses.join(", ")})`
+        : ` (only ${statusFilter.statuses.join(", ")})`
+      : "";
+    const ranked = list.map((applicant) => ({
+      applicant,
+      score: isShortlistableApplicationStatus(applicant.status) ? 60 : 40,
+      reasons: [String(applicant.status)],
+    }));
     appendTurns({
       id: newTurnId(),
       role: "assistant",
-      text: formatApplicantsReply(list),
+      text: `${formatApplicantsReply(list).replace(
+        "Applicants (owned jobs only):",
+        `Applicants${filterNote} (owned jobs only):`,
+      )}${
+        statusFilter
+          ? "\n\nThe applicants panel is filtered to match. Select a card to shortlist (only “applied” can be shortlisted)."
+          : ""
+      }`,
       source: "local" as const,
+      applicantChoices: list.length
+        ? toApplicantChoices(ranked as never)
+        : undefined,
     });
   }
 
@@ -1454,6 +1502,23 @@ function RecruiterAgentPage() {
                     onChange={(e) => setApplicantSearch(e.target.value)}
                   />
                 </div>
+                {applicantStatusFilter ? (
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                    <span>
+                      Filter:{" "}
+                      {applicantStatusFilter.kind === "exclude"
+                        ? `not ${applicantStatusFilter.statuses.join(", ")}`
+                        : `only ${applicantStatusFilter.statuses.join(", ")}`}
+                    </span>
+                    <button
+                      type="button"
+                      className="underline hover:text-foreground"
+                      onClick={() => setApplicantStatusFilter(null)}
+                    >
+                      Clear
+                    </button>
+                  </div>
+                ) : null}
                 {applicantsLoading ? (
                   <RecruiterAgentLoading label="Loading applicants…" />
                 ) : applicantsError ? (

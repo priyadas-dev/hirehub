@@ -258,11 +258,82 @@ export function isConfirmShortlistQuestion(question: string): boolean {
   return CONFIRM_WORD_RE.test(q);
 }
 
+/**
+ * "show applicants who are not shortlisted" / "only applied" — list/filter, not shortlist action.
+ */
+export function isApplicantStatusFilterQuestion(question: string): boolean {
+  const q = question.trim();
+  if (!q) return false;
+  if (
+    /\b(not|non|never|aren't|arent|without|except|excluding)\b[\s\S]{0,32}\bshort[\s-]?(?:list(?:ed|ing|e)?|lis)\b/i.test(
+      q,
+    )
+  ) {
+    return true;
+  }
+  if (
+    /\b(who|that|which)\s+are\s+not\b[\s\S]{0,24}\bshort[\s-]?(?:list(?:ed|ing|e)?|lis)\b/i.test(q)
+  ) {
+    return true;
+  }
+  if (/\b(only|just)\s+(applied|shortlisted|rejected|interview|hired)\b/i.test(q)) return true;
+  if (
+    /\b(list|show|see|display|find)\b[\s\S]{0,48}\b(only\s+)?(applied|pending)\b[\s\S]{0,24}\b(applicant|cand+idate)s?\b/i.test(
+      q,
+    )
+  ) {
+    return true;
+  }
+  return false;
+}
+
+export type ApplicantStatusFilter =
+  | { kind: "exclude"; statuses: string[] }
+  | { kind: "include"; statuses: string[] };
+
+/** Parse NL status filters for applicant lists. */
+export function extractApplicantStatusFilter(question: string): ApplicantStatusFilter | null {
+  const q = question.trim();
+  if (!q) return null;
+  if (
+    /\b(not|non|never|aren't|arent|without|except|excluding)\b[\s\S]{0,32}\bshort[\s-]?(?:list(?:ed|ing|e)?|lis)\b/i.test(
+      q,
+    ) ||
+    /\b(who|that|which)\s+are\s+not\b[\s\S]{0,24}\bshort[\s-]?(?:list(?:ed|ing|e)?|lis)\b/i.test(q)
+  ) {
+    return { kind: "exclude", statuses: ["shortlisted"] };
+  }
+  if (/\b(only|just)\s+applied\b/i.test(q) || /\bpending\b[\s\S]{0,24}\b(applicant|cand+idate)s?\b/i.test(q)) {
+    return { kind: "include", statuses: ["applied"] };
+  }
+  if (/\b(only|just)\s+short[\s-]?(?:list(?:ed)?|lis)\b/i.test(q)) {
+    return { kind: "include", statuses: ["shortlisted"] };
+  }
+  if (/\b(only|just)\s+rejected\b/i.test(q)) return { kind: "include", statuses: ["rejected"] };
+  if (/\b(only|just)\s+interview\b/i.test(q)) return { kind: "include", statuses: ["interview"] };
+  if (/\b(only|just)\s+hired\b/i.test(q)) return { kind: "include", statuses: ["hired"] };
+  return null;
+}
+
+export function applyApplicantStatusFilter<T extends { status: string }>(
+  applicants: T[],
+  filter: ApplicantStatusFilter | null | undefined,
+): T[] {
+  if (!filter) return applicants;
+  const wanted = new Set(filter.statuses.map((s) => s.toLowerCase()));
+  if (filter.kind === "include") {
+    return applicants.filter((a) => wanted.has(String(a.status).toLowerCase()));
+  }
+  return applicants.filter((a) => !wanted.has(String(a.status).toLowerCase()));
+}
+
 export function isShortlistishQuestion(question: string): boolean {
   const q = question.trim();
   if (isProcessHelpQuestion(q)) return false;
   if (isConfirmShortlistQuestion(q)) return false;
   if (isOfferDraftishQuestion(q)) return false;
+  // Status filters like "not shortlisted" are list asks, not shortlist actions.
+  if (isApplicantStatusFilterQuestion(q)) return false;
   // Accept "shortlist", "short list", "short-list", typos (shortlis), and common candidate typos.
   return (
     SHORTLIST_WORD_RE.test(q) ||
@@ -451,12 +522,18 @@ export function isListApplicantsQuestion(question: string): boolean {
   const q = question.trim();
   // Jobs+applicants starter is handled as list_jobs.
   if (isListJobsWithApplicantsQuestion(q)) return false;
-  // Ranking / shortlist phrasing must not become a plain list dump.
-  if (
-    /\b(best|top|rank|recommend|short[\s-]?(?:list(?:ed|ing|e)?|lis)|move\b[\s\S]{0,24}short)/i.test(
-      q,
-    )
-  ) {
+  // "show applicants who are not shortlisted" / "only applied candidates"
+  if (isApplicantStatusFilterQuestion(q)) {
+    return (
+      /\b(list|show|see|display|find)\b/i.test(q) ||
+      /\b(applicant|cand+idate)s?\b/i.test(q) ||
+      /\b(only|just)\s+(applied|shortlisted|rejected|interview|hired)\b/i.test(q)
+    );
+  }
+  // Ranking / shortlist *action* phrasing must not become a plain list dump.
+  if (/\b(best|top|rank|recommend)\b/i.test(q)) return false;
+  if (/\bmove\b[\s\S]{0,24}\bshort/i.test(q)) return false;
+  if (SHORTLIST_WORD_RE.test(q) && !/\b(not|non|aren't|arent|without)\b/i.test(q)) {
     return false;
   }
   return (
