@@ -27,9 +27,11 @@ export type RecruiterAgentRequest =
   | {
       action: "draft_outreach";
       jobId: string;
+      applicationId?: string;
       contactId?: string;
       segmentId?: string;
       confirmSend?: boolean;
+      draftKind?: "outreach" | "offer";
     }
   | {
       action: "supervised";
@@ -118,9 +120,11 @@ function requestToDirective(data: RecruiterAgentRequest): RecruiterSupervisorDir
     return {
       kind: "draft_outreach",
       jobId: data.jobId,
+      applicationId: data.applicationId,
       contactId: data.contactId,
       segmentId: data.segmentId,
       confirmSend: Boolean(data.confirmSend),
+      draftKind: data.draftKind,
     };
   }
   return undefined;
@@ -131,7 +135,9 @@ function questionForRequest(data: RecruiterAgentRequest): string {
     return `Shortlist application ${data.applicationId}${data.confirm ? " with confirm" : ""}.`;
   }
   if (data.action === "draft_outreach") {
-    return `Draft outreach email campaign for job ${data.jobId}.`;
+    const kind = data.draftKind === "offer" ? "offer letter" : "outreach email campaign";
+    const who = data.applicationId ? ` for application ${data.applicationId}` : "";
+    return `Draft ${kind} for job ${data.jobId}${who}.`;
   }
   return data.question;
 }

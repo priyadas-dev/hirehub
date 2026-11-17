@@ -125,6 +125,45 @@ describe("Phase 7 recruiter — supervisor orchestration", () => {
     );
   });
 
+  it("routes offer-letter asks to draft_outreach as offer without auto-send", async () => {
+    const runRecruiterAgent = vi.fn(async () => ({
+      ok: true as const,
+      message: "Offer draft created.",
+      specialist: {},
+    }));
+
+    await runSupervisor(
+      {
+        question: "Prepare an offer letter for this candidate",
+        recruiterJobId: JOB_ID,
+        recruiterApplicationId: APP_ID,
+      },
+      {
+        role: "recruiter",
+        userId: OWNER_ID,
+        listLiveJobs: async () => ({ ok: true, jobs: [] }),
+        retrieveCorpus: async () => ({ ok: true, matches: [] }),
+        runRecruiterAgent,
+        runLegacyPipeline: async () => {
+          throw new Error("legacy should not run");
+        },
+      },
+    );
+
+    expect(runRecruiterAgent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "draft_outreach",
+        jobId: JOB_ID,
+        applicationId: APP_ID,
+        draftKind: "offer",
+        confirmSend: false,
+      }),
+    );
+    expect(runRecruiterAgent).not.toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "shortlist" }),
+    );
+  });
+
   it("rejects non-owner recruiter via specialist forbidden result", async () => {
     const runRecruiterAgent = vi.fn(async () => ({
       ok: false as const,

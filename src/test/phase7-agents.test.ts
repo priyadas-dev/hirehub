@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   extractApplyJobId,
   looksLikeApplyIntent,
+  looksLikeConfirmApplyIntent,
   runApplicationAgent,
 } from "@/lib/ai/agents/application";
 import {
@@ -71,6 +72,16 @@ describe("Phase 7 application agent — confirm gate", () => {
     expect(looksLikeApplyIntent("apply to the first job")).toBe(true);
     expect(looksLikeApplyIntent("What is React?")).toBe(false);
     expect(looksLikeApplyIntent("How do I apply in general?")).toBe(false);
+  });
+
+  it("detects chat confirm so Gemini cannot invent a fake submit", () => {
+    expect(looksLikeConfirmApplyIntent("confirm")).toBe(true);
+    expect(looksLikeConfirmApplyIntent("conifrm")).toBe(true);
+    expect(looksLikeConfirmApplyIntent("yes")).toBe(true);
+    expect(looksLikeConfirmApplyIntent("Please confirm apply")).toBe(true);
+    expect(looksLikeConfirmApplyIntent(`Please confirm apply to job ${JOB_ID}`)).toBe(true);
+    expect(looksLikeApplyIntent("confirm")).toBe(true);
+    expect(looksLikeConfirmApplyIntent("show me software jobs")).toBe(false);
   });
 
   it("extracts applyJobId from payload, UUID in question, or ordinal", () => {
@@ -382,6 +393,36 @@ describe("Phase 7 recruiter agent — ownership", () => {
       expect(result.campaign.recruiterId).toBe(OWNER_ID);
       expect(result.send).toBeUndefined();
       expect(result.preview.subject).toMatch(/React Engineer/);
+    }
+  });
+
+  it("drafts offer letter with known terms and flags missing salary/joining", () => {
+    const result = draftRecruiterOutreach(
+      {
+        job: {
+          id: JOB_ID,
+          title: "React Engineer",
+          recruiterId: OWNER_ID,
+          companyName: "TechnoNext",
+          salaryRange: "80k-100k",
+        },
+        draftKind: "offer",
+        applicantName: "Ada Lovelace",
+        applicantEmail: "ada@example.com",
+        confirmSend: false,
+      },
+      { callerId: OWNER_ID, callerRole: "recruiter" },
+    );
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.send).toBeUndefined();
+      expect(result.preview.subject).toMatch(/Offer/i);
+      expect(result.campaign.htmlBody).toMatch(/Ada Lovelace/);
+      expect(result.campaign.htmlBody).toMatch(/80k-100k/);
+      expect(result.campaign.htmlBody).toMatch(/joining date/i);
+      expect(result.message).toMatch(/joining date/i);
+      expect(result.message).toMatch(/Nothing was emailed/i);
     }
   });
 });

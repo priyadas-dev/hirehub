@@ -36,6 +36,7 @@ import {
   extractSaveJobId,
   filterRecentJobsByQuestion,
   looksLikeApplyIntent,
+  looksLikeConfirmApplyIntent,
   looksLikeCheckStatusIntent,
   looksLikeSaveJobIntent,
   type CheckStatusAgentInput,
@@ -46,6 +47,7 @@ import {
 import {
   extractRecruiterApplicationId,
   extractRecruiterJobId,
+  looksLikeOfferDraftIntent,
   looksLikeOutreachDraftIntent,
   looksLikeShortlistIntent,
 } from "@/lib/ai/agents/recruiter";
@@ -67,6 +69,7 @@ export type RecruiterSupervisorDirective = {
   contactId?: string;
   segmentId?: string;
   confirmSend?: boolean;
+  draftKind?: "outreach" | "offer";
 };
 
 export type SupervisorTurnInput = AskJobAssistantInput & {
@@ -87,6 +90,7 @@ export type RecruiterSupervisorAgentInput = {
   segmentId?: string;
   /** Draft-only from NL; structured callers may pass explicit confirmSend. */
   confirmSend?: boolean;
+  draftKind?: "outreach" | "offer";
 };
 
 export type RecruiterSupervisorAgentResult = {
@@ -290,10 +294,12 @@ async function runRecruiterSupervisorTurn(
       {
         kind: "draft_outreach",
         jobId: directive.jobId,
+        applicationId: directive.applicationId,
         contactId: directive.contactId,
         segmentId: directive.segmentId,
         confirm: false,
         confirmSend: Boolean(directive.confirmSend),
+        draftKind: directive.draftKind,
       },
       deps,
       pii.redacted,
@@ -307,8 +313,9 @@ async function runRecruiterSupervisorTurn(
     Boolean(input.recruiterApplicationId) ||
     (confirm && Boolean(input.recruiterApplicationId));
 
-  const wantsOutreach =
-    looksLikeOutreachDraftIntent(questionForRoute) || Boolean(input.recruiterJobId);
+  // Do not treat a contextual jobId alone as outreach — that caused wrong drafts.
+  const wantsOutreach = looksLikeOutreachDraftIntent(questionForRoute);
+  const offerish = looksLikeOfferDraftIntent(questionForRoute);
 
   let applicationId: string | null = null;
   let jobId: string | null = null;
@@ -336,8 +343,40 @@ async function runRecruiterSupervisorTurn(
   ) {
     jobId = null;
   }
-  if (wantsShortlist && input.recruiterApplicationId) {
+  // Offer/outreach NL must not be forced into shortlist just because an applicationId is in context.
+  if (wantsShortlist && input.recruiterApplicationId && !wantsOutreach) {
     jobId = null;
+  }
+
+  if (wantsOutreach && offerish) {
+    if (!jobId) {
+      jobId = input.recruiterJobId?.trim() || null;
+    }
+    if (!jobId) {
+      return {
+        ...okAssistant({
+          answer:
+            "Tell me which owned job (and applicant) this offer draft is for. I will draft only — nothing is emailed until you explicitly authorize a send.",
+          model: "recruiter-agent",
+          soughtLiveJobs: false,
+          liveJobsAvailable: false,
+          insufficientContext: false,
+        }),
+        supervisor: recruiterTrace(pii.redacted),
+      };
+    }
+    return dispatchRecruiterSpecialist(
+      {
+        kind: "draft_outreach",
+        jobId,
+        applicationId: applicationId || input.recruiterApplicationId,
+        confirm: false,
+        confirmSend: false,
+        draftKind: "offer",
+      },
+      deps,
+      pii.redacted,
+    );
   }
 
   if (wantsShortlist) {
@@ -368,10 +407,14 @@ async function runRecruiterSupervisorTurn(
 
   if (wantsOutreach) {
     if (!jobId) {
+      jobId = input.recruiterJobId?.trim() || null;
+    }
+    if (!jobId) {
       return {
         ...okAssistant({
-          answer:
-            "Tell me which owned job this outreach is for (include jobId or the job UUID). I will draft only — nothing is sent until you confirm in CRM.",
+          answer: offerish
+            ? "Tell me which owned job (and applicant) this offer draft is for. I will draft only — nothing is emailed until you explicitly authorize a send."
+            : "Tell me which owned job this outreach is for (include jobId or the job UUID). I will draft only — nothing is sent until you confirm in CRM.",
           model: "recruiter-agent",
           soughtLiveJobs: false,
           liveJobsAvailable: false,
@@ -384,8 +427,10 @@ async function runRecruiterSupervisorTurn(
       {
         kind: "draft_outreach",
         jobId,
+        applicationId: input.recruiterApplicationId,
         confirm: false,
         confirmSend: false,
+        draftKind: offerish ? "offer" : "outreach",
       },
       deps,
       pii.redacted,
@@ -537,10 +582,13 @@ export async function runSupervisor(
   const classified = classifyAssistantIntent(questionForRoute);
 
   // Phase 7: application agent (confirm-to-apply) before discovery/legacy.
+  // Chat "confirm"/"yes" must hit Application Agent — not legacy Gemini inventing success.
+  const chatConfirmApply = looksLikeConfirmApplyIntent(questionForRoute);
   const wantsApply =
     Boolean(deps.runApplicationAgent) &&
     (Boolean(input.confirmApply) ||
       Boolean(input.applyJobId) ||
+      chatConfirmApply ||
       looksLikeApplyIntent(questionForRoute));
 
   // Task 2: Save Job / Check Status — same Application Agent, after apply priority.
@@ -733,7 +781,11 @@ export async function runSupervisor(
     const applied = await deps.runApplicationAgent({
       jobId,
       jobTitle: recentJobs?.find((j) => j.id === jobId)?.title,
-      confirm: Boolean(input.confirmApply),
+      // Finalize only with explicit Confirm button OR chat confirm that carried applyJobId
+      // (client recovers pendingApply / prior UUID). Bare "yes" after a single card must not apply.
+      confirm:
+        Boolean(input.confirmApply) ||
+        (chatConfirmApply && Boolean(input.applyJobId?.trim())),
       recentJobs,
       question: questionForRoute,
       conversationContext: input.conversationContext,

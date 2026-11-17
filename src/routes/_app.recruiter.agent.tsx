@@ -45,11 +45,15 @@ import {
   applicantDisplayName,
   detectRecruiterChatIntent,
   extractApplicantNameHint,
+  extractApplicantNameHints,
+  extractApplicantOrdinalRef,
   extractJobTitleHint,
+  extractTopNApplicants,
   formatOwnedJobsReply as formatOwnedJobsChatReply,
   formatRankedApplicantsReply,
   htmlToEditablePlain,
   isListJobsWithApplicantsQuestion,
+  isOfferDraftishQuestion,
   matchApplicantsByNameHint,
   matchOwnedJobByTitle,
   normalizeRecruiterChatTurn,
@@ -58,6 +62,7 @@ import {
   parseSupervisedAgentMessage,
   rankApplicantsByProfileAndResume,
   rankOwnedJobsByQuery,
+  resolveApplicantChoiceFromRef,
   suggestJobsWithApplicants,
   type RecruiterChatTurn,
 } from "@/lib/ai/recruiter-agent-ui";
@@ -433,12 +438,22 @@ function RecruiterAgentPage() {
     return parsed;
   }
 
-  async function runOutreach(ownedJobId: string) {
+  async function runOutreach(
+    ownedJobId: string,
+    options?: {
+      applicationId?: string | null;
+      draftKind?: "outreach" | "offer";
+    },
+  ) {
+    const draftKind = options?.draftKind ?? "outreach";
+    const applicationId = options?.applicationId?.trim() || undefined;
     const result = await ask({
       data: {
         action: "draft_outreach" as const,
         jobId: ownedJobId,
         confirmSend: false,
+        draftKind,
+        ...(applicationId ? { applicationId } : {}),
       },
     });
     const parsed = parseOutreachAgentResult(result);
@@ -463,8 +478,22 @@ function RecruiterAgentPage() {
       source: "supervisor",
       draft: { subject: parsed.subject, body },
     });
-    toast.success("Outreach draft ready", { duration: AGENT_TOAST_MS });
+    toast.success(draftKind === "offer" ? "Offer draft ready" : "Outreach draft ready", {
+      duration: AGENT_TOAST_MS,
+    });
     return parsed;
+  }
+
+  function latestApplicantChoices(): NonNullable<
+    Extract<RecruiterChatTurn, { role: "assistant" }>["applicantChoices"]
+  > {
+    for (let i = turns.length - 1; i >= 0; i -= 1) {
+      const t = turns[i];
+      if (t?.role === "assistant" && t.applicantChoices && t.applicantChoices.length > 0) {
+        return t.applicantChoices;
+      }
+    }
+    return [];
   }
 
   async function runSupervised(text: string, contextJobId?: string, contextAppId?: string) {
@@ -550,11 +579,37 @@ function RecruiterAgentPage() {
     return (data ?? []) as unknown as ApplicantRow[];
   }
 
-  async function replyListApplicants(forJobId?: string) {
-    const effectiveJobId = forJobId || jobId;
+  async function replyListApplicants(questionText?: string, forJobId?: string) {
+    let effectiveJobId = forJobId || jobId;
+    let matchedTitle: string | null = null;
+
+    // "show software developer applicant" → resolve owned job from NL when none selected.
+    if (!effectiveJobId && questionText?.trim()) {
+      const rankedJobs = rankOwnedJobsByQuery(jobs.data ?? [], questionText);
+      const matched =
+        rankedJobs[0] &&
+        (rankedJobs.length === 1 ||
+          (rankedJobs[1] != null && rankedJobs[0].score > rankedJobs[1].score))
+          ? rankedJobs[0].job
+          : matchOwnedJobByTitle(jobs.data ?? [], questionText);
+      if (matched) {
+        selectJob(matched.id);
+        effectiveJobId = matched.id;
+        matchedTitle = matched.title;
+      }
+    }
+
     let list: ApplicantRow[];
     if (effectiveJobId) {
       list = await loadApplicantsForJob(effectiveJobId);
+      if (matchedTitle) {
+        appendTurns({
+          id: newTurnId(),
+          role: "assistant",
+          text: `Showing applicants for your owned job “${matchedTitle}”.`,
+          source: "local" as const,
+        });
+      }
     } else {
       list = filteredApplicants;
       appendTurns({
@@ -613,6 +668,7 @@ function RecruiterAgentPage() {
     }
 
     const nameHint = extractApplicantNameHint(text);
+    const topN = extractTopNApplicants(text);
     let ranked = rankApplicantsByProfileAndResume(list, text, jobMeta);
     if (nameHint) {
       const byName = list.filter((a) =>
@@ -638,7 +694,8 @@ function RecruiterAgentPage() {
       }));
     }
 
-    const top = ranked[0]!;
+    const visible = topN ? ranked.slice(0, topN) : ranked;
+    const top = visible[0]!;
     const topRow = list.find((a) => a.id === top.applicant.id);
     if (topRow) selectApplicant(topRow);
 
@@ -646,13 +703,17 @@ function RecruiterAgentPage() {
       full_name: top.applicant.profiles?.full_name,
       email: top.applicant.profiles?.email,
     });
+    const multiNote =
+      topN && visible.length > 1
+        ? `\n\nShowing top ${visible.length}. Confirm shortlists one person at a time — top proposal is ${topName}; Select another card to retarget.`
+        : `\n\nTop proposal: ${topName}. Use Select / View resume below, then Confirm shortlist in the bar (status does not change until Confirm).`;
 
     appendTurns({
       id: newTurnId(),
       role: "assistant",
-      text: `${formatRankedApplicantsReply(ranked, jobMeta.title)}\n\nTop proposal: ${topName}. Use Select / View resume below, then Confirm shortlist in the bar (status does not change until Confirm).`,
+      text: `${formatRankedApplicantsReply(visible, jobMeta.title)}${multiNote}`,
       source: "local" as const,
-      applicantChoices: toApplicantChoices(ranked),
+      applicantChoices: toApplicantChoices(visible),
     });
 
     await runShortlist(top.applicant.id, false, { quiet: true });
@@ -696,9 +757,42 @@ function RecruiterAgentPage() {
   }
 
   async function handleShortlistIntent(text: string) {
-    const nameHint = extractApplicantNameHint(text);
-    // Prefer an explicit person name over a stale Confirm chip (e.g. previous Dibyo proposal).
-    if (nameHint) {
+    const ordinalRef = extractApplicantOrdinalRef(text);
+    if (ordinalRef) {
+      const choices = latestApplicantChoices();
+      const resolved = resolveApplicantChoiceFromRef(
+        choices,
+        ordinalRef,
+        selectedAppId || pendingShortlistAppId,
+      );
+      if (resolved?.applicationId) {
+        setPendingShortlistAppId(null);
+        await selectAndProposeShortlist(resolved.applicationId, { alreadyBusy: true });
+        return;
+      }
+      if (ordinalRef.kind === "index") {
+        appendTurns({
+          id: newTurnId(),
+          role: "assistant",
+          text: `I don’t have a ranked list yet to pick candidate #${ordinalRef.index + 1}. Rank applicants first (e.g. “find the best candidates” or “shortlist from <job>”), then say “the second candidate”.`,
+          source: "local" as const,
+        });
+        return;
+      }
+      appendTurns({
+        id: newTurnId(),
+        role: "assistant",
+        text: `I need a specific applicant for that. Select a card, say a name, or rank candidates first — then “move him/her to shortlisted” or “shortlist this candidate” will work.`,
+        source: "local" as const,
+      });
+      return;
+    }
+
+    const nameHints = extractApplicantNameHints(text);
+    // Prefer explicit person name(s) over a stale Confirm chip (e.g. previous Dibyo proposal).
+    if (nameHints.length > 0) {
+      // Clear stale Confirm bar until we propose a matching applicant.
+      setPendingShortlistAppId(null);
       let pool = applicantPool;
       if (pool.length === 0) {
         try {
@@ -708,7 +802,15 @@ function RecruiterAgentPage() {
           pool = [];
         }
       }
-      const byName = matchApplicantsByNameHint(pool, nameHint);
+      const byName: ApplicantRow[] = [];
+      const seen = new Set<string>();
+      for (const hint of nameHints) {
+        for (const row of matchApplicantsByNameHint(pool, hint)) {
+          if (seen.has(row.id)) continue;
+          seen.add(row.id);
+          byName.push(row);
+        }
+      }
       if (byName.length === 1) {
         await selectAndProposeShortlist(byName[0]!.id, { alreadyBusy: true });
         return;
@@ -717,12 +819,12 @@ function RecruiterAgentPage() {
         const ranked = byName.map((applicant) => ({
           applicant,
           score: 50,
-          reasons: [`name matches “${nameHint}”`],
+          reasons: [`name matches “${nameHints.join(", ")}”`],
         }));
         appendTurns({
           id: newTurnId(),
           role: "assistant",
-          text: `I found ${byName.length} applicants matching “${nameHint}”. Select one below (do not Confirm the previous proposal unless it’s the same person).`,
+          text: `I found ${byName.length} applicants matching “${nameHints.join(", ")}”. Select one below, then Confirm shortlist (one person at a time).`,
           source: "local" as const,
           applicantChoices: toApplicantChoices(ranked as never),
         });
@@ -731,7 +833,7 @@ function RecruiterAgentPage() {
       appendTurns({
         id: newTurnId(),
         role: "assistant",
-        text: `I couldn’t find “${nameHint}” among applicants on jobs you own. Use Select on a card, or say “shortlist from <job title>”.`,
+        text: `I couldn’t find “${nameHints.join(", ")}” among applicants on jobs you own. Use Select on a card, or say “shortlist from <job title>”.`,
         source: "local" as const,
       });
       return;
@@ -986,7 +1088,7 @@ function RecruiterAgentPage() {
         return;
       }
       if (intent === "list_applicants") {
-        await replyListApplicants();
+        await replyListApplicants(text);
         return;
       }
       if (intent === "shortlist") {
@@ -998,15 +1100,50 @@ function RecruiterAgentPage() {
         return;
       }
       if (intent === "draft_outreach") {
+        const draftKind = isOfferDraftishQuestion(text) ? ("offer" as const) : ("outreach" as const);
         const hint = extractJobTitleHint(text);
         let targetJobId = jobId;
+        let targetAppId = selectedAppId || pendingShortlistAppId;
+
+        const ordinalRef = extractApplicantOrdinalRef(text);
+        if (ordinalRef) {
+          const resolved = resolveApplicantChoiceFromRef(
+            latestApplicantChoices(),
+            ordinalRef,
+            targetAppId,
+          );
+          if (resolved?.applicationId) {
+            targetAppId = resolved.applicationId;
+            setSelectedAppId(resolved.applicationId);
+          }
+        }
+
+        const nameHints = extractApplicantNameHints(text);
+        if (nameHints.length > 0) {
+          let pool = applicantPool;
+          if (pool.length === 0) {
+            try {
+              const refreshed = await appsAcrossOwned.refetch();
+              pool = refreshed.data ?? [];
+            } catch {
+              pool = [];
+            }
+          }
+          const byName = matchApplicantsByNameHint(pool, nameHints[0]!);
+          if (byName.length === 1) {
+            targetAppId = byName[0]!.id;
+            targetJobId = byName[0]!.job_id;
+            selectApplicant(byName[0]!);
+          }
+        }
+
         if (hint) {
           const matched = matchOwnedJobByTitle(jobs.data ?? [], hint);
           if (matched) {
             targetJobId = matched.id;
             selectJob(matched.id);
           }
-        } else {
+        } else if (!targetJobId) {
           const ranked = rankOwnedJobsByQuery(jobs.data ?? [], text);
           if (ranked.length === 1) {
             targetJobId = ranked[0]!.job.id;
@@ -1015,28 +1152,42 @@ function RecruiterAgentPage() {
         }
         // Reuse job from selected / pending shortlist applicant when chat has context.
         if (!targetJobId) {
-          const contextAppId = selectedAppId || pendingShortlistAppId;
           const contextApp =
-            (contextAppId &&
-              (appsForJob.data?.find((a) => a.id === contextAppId) ||
-                appsAcrossOwned.data?.find((a) => a.id === contextAppId))) ||
+            (targetAppId &&
+              (appsForJob.data?.find((a) => a.id === targetAppId) ||
+                appsAcrossOwned.data?.find((a) => a.id === targetAppId))) ||
             null;
           if (contextApp?.job_id) {
             targetJobId = contextApp.job_id;
             selectJob(contextApp.job_id);
             setSelectedAppId(contextApp.id);
+            targetAppId = contextApp.id;
           }
         }
         if (!targetJobId) {
           appendTurns({
             id: newTurnId(),
             role: "assistant",
-            text: "Select an owned job first (or name it), then ask me to draft outreach. Emails are never sent from this page.",
+            text:
+              draftKind === "offer"
+                ? "Select an owned job and applicant first (or name them), then ask me to draft an offer. Nothing is emailed until you explicitly send."
+                : "Select an owned job first (or name it), then ask me to draft outreach. Emails are never sent from this page.",
             source: "local" as const,
           });
           return;
         }
-        await runOutreach(targetJobId);
+        if (draftKind === "offer" && !targetAppId) {
+          appendTurns({
+            id: newTurnId(),
+            role: "assistant",
+            text: `I can draft against “${
+              jobs.data?.find((j) => j.id === targetJobId)?.title ?? "this job"
+            }”, but I need an applicant (Select a card, or say “offer for <name>”). I will not invent candidate details or send email.`,
+            source: "local" as const,
+          });
+          return;
+        }
+        await runOutreach(targetJobId, { applicationId: targetAppId, draftKind });
         return;
       }
       if (intent === "browse") {
