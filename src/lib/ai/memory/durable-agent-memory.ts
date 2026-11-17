@@ -23,9 +23,26 @@ export type DurableMemoryStatus = {
 /** Process-local latch when agent_sessions is missing — avoid hammering PostgREST. */
 let durableStoreUnavailable = false;
 
+/** Don't block chat on a slow / hung agent_sessions probe (Path A fallback). */
+const DURABLE_IO_TIMEOUT_MS = 2_500;
+
 /** Test helper */
 export function _resetDurableUnavailableLatchForTests() {
   durableStoreUnavailable = false;
+}
+
+async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | "timeout"> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<"timeout">((resolve) => {
+        timer = setTimeout(() => resolve("timeout"), ms);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 /**
@@ -48,7 +65,14 @@ export async function hydrateDurableAgentMemory(args: {
     return { hydrated: false, persisted: false, fallback: true, reason: "no_db" };
   }
 
-  const loaded = await loadAgentSession(db, args.userId, args.conversationId);
+  const loadedOrTimeout = await withTimeout(
+    loadAgentSession(db, args.userId, args.conversationId),
+    DURABLE_IO_TIMEOUT_MS,
+  );
+  if (loadedOrTimeout === "timeout") {
+    return { hydrated: false, persisted: false, fallback: true, reason: "unavailable" };
+  }
+  const loaded = loadedOrTimeout;
   if (!loaded.ok) {
     if (loaded.reason === "missing_table") durableStoreUnavailable = true;
     return {
@@ -102,12 +126,19 @@ export async function persistDurableAgentMemory(args: {
     return { hydrated: true, persisted: false, fallback: true, reason: "empty" };
   }
 
-  const saved = await saveAgentSession(db, {
-    userId: args.userId,
-    conversationId: args.conversationId,
-    memory: payload,
-    expectedUpdatedAt: meta.expectedUpdatedAt,
-  });
+  const savedOrTimeout = await withTimeout(
+    saveAgentSession(db, {
+      userId: args.userId,
+      conversationId: args.conversationId,
+      memory: payload,
+      expectedUpdatedAt: meta.expectedUpdatedAt,
+    }),
+    DURABLE_IO_TIMEOUT_MS,
+  );
+  if (savedOrTimeout === "timeout") {
+    return { hydrated: true, persisted: false, fallback: true, reason: "unavailable" };
+  }
+  const saved = savedOrTimeout;
 
   if (!saved.ok) {
     return {

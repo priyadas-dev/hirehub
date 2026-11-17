@@ -184,6 +184,27 @@ export type AssistantAskPayload = {
   retryTurnId?: string;
 };
 
+/** Client ceiling — if the server fn never resolves (Vercel hang), clear Thinking… */
+export const ASSISTANT_CLIENT_TIMEOUT_MS = 45_000 as const;
+
+function withClientAskTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error("Assistant request timed out"));
+    }, ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (err) => {
+        clearTimeout(timer);
+        reject(err);
+      },
+    );
+  });
+}
+
 /**
  * Run an assistant ask against the live store. Safe if the React tree unmounts mid-request.
  */
@@ -262,28 +283,31 @@ export function runAssistantLiveAsk(userId: string, payload: AssistantAskPayload
 
   inflight = (async () => {
     try {
-      const result = await payload.ask({
-        data: {
-          question: trimmed,
-          ...(attachmentMeta
-            ? {
-                attachmentMeta: {
-                  name: attachmentMeta.name,
-                  mime: attachmentMeta.mime,
-                  sizeBytes: attachmentMeta.sizeBytes,
-                  kind: attachmentMeta.kind,
-                },
-              }
-            : {}),
-          ...(payload.attachmentBase64 ? { attachmentBase64: payload.attachmentBase64 } : {}),
-          ...(sessionSkills.length ? { sessionSkills } : {}),
-          ...(recentJobs?.length ? { recentJobs } : {}),
-          ...(conversationContext ? { conversationContext } : {}),
-          ...(conversationId ? { conversationId } : {}),
-          ...(payload.applyJobId ? { applyJobId: payload.applyJobId } : {}),
-          ...(payload.confirmApply ? { confirmApply: true } : {}),
-        },
-      });
+      const result = await withClientAskTimeout(
+        payload.ask({
+          data: {
+            question: trimmed,
+            ...(attachmentMeta
+              ? {
+                  attachmentMeta: {
+                    name: attachmentMeta.name,
+                    mime: attachmentMeta.mime,
+                    sizeBytes: attachmentMeta.sizeBytes,
+                    kind: attachmentMeta.kind,
+                  },
+                }
+              : {}),
+            ...(payload.attachmentBase64 ? { attachmentBase64: payload.attachmentBase64 } : {}),
+            ...(sessionSkills.length ? { sessionSkills } : {}),
+            ...(recentJobs?.length ? { recentJobs } : {}),
+            ...(conversationContext ? { conversationContext } : {}),
+            ...(conversationId ? { conversationId } : {}),
+            ...(payload.applyJobId ? { applyJobId: payload.applyJobId } : {}),
+            ...(payload.confirmApply ? { confirmApply: true } : {}),
+          },
+        }),
+        ASSISTANT_CLIENT_TIMEOUT_MS,
+      );
 
       if (!state || state.userId !== userId) return;
 
@@ -331,9 +355,11 @@ export function runAssistantLiveAsk(userId: string, payload: AssistantAskPayload
       persistCompleted(userId, conversationId, updatedTurns, trimmed);
       emit();
     } catch (err) {
-      const message =
-        err instanceof Error && /Unauthorized|auth/i.test(err.message)
-          ? "Sign in as a job seeker to use the assistant."
+      const raw = err instanceof Error ? err.message : "";
+      const message = /Unauthorized|auth/i.test(raw)
+        ? "Sign in as a job seeker to use the assistant."
+        : /timed out/i.test(raw)
+          ? "The assistant took too long. Please try again."
           : "Something went wrong talking to the assistant. Try again.";
       if (!state || state.userId !== userId) return;
       const updatedTurns = state.turns.map((t) =>

@@ -84,6 +84,36 @@ describe("fetchGeminiGeneratedText", () => {
       model: GEMINI_ASSISTANT_MODEL,
     });
     expect(JSON.stringify(result)).not.toContain("secret-gemini-key");
+
+    const body = JSON.parse(String(fetchImpl.mock.calls[0]?.[1]?.body ?? "{}")) as {
+      generationConfig?: {
+        thinkingConfig?: { thinkingLevel?: string };
+        temperature?: unknown;
+      };
+    };
+    // Gemini 3.8 Flash defaults to medium thinking — chat must force low for latency.
+    expect(body.generationConfig?.thinkingConfig?.thinkingLevel).toBe("low");
+    expect(body.generationConfig?.temperature).toBeUndefined();
+  });
+
+  it("maps AbortSignal timeout to a clear unavailable message", async () => {
+    const fetchImpl = vi.fn(async () => {
+      const err = new Error("The operation was aborted due to timeout");
+      err.name = "TimeoutError";
+      throw err;
+    });
+
+    const result = await fetchGeminiGeneratedText("Hello", "test-key", {
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      timeoutMs: 10,
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    // Timeout must not cascade into fallback-model retries (would double wait).
+    expect(result.category).toBe("other");
+    expect(result.message).toMatch(/took too long/i);
+    expect(fetchImpl).toHaveBeenCalledOnce();
   });
 
   it("accepts complete answers even when finishReason is MAX_TOKENS", async () => {

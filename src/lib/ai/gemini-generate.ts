@@ -46,12 +46,32 @@ export function looksLikeTruncatedAssistantAnswer(text: string): boolean {
 
 const FALLBACK_ASSISTANT_MODELS = ["gemini-flash-latest"] as const;
 
+/**
+ * Gemini 3.8 Flash defaults to medium thinking — that makes seeker chat feel hung
+ * ("Thinking…" for a long time). Chat answers should stay on low latency.
+ */
+export const GEMINI_CHAT_THINKING_LEVEL = "low" as const;
+
+/** Hard cap so a slow Gemini call cannot pin the Vercel function / UI forever. */
+export const GEMINI_GENERATE_TIMEOUT_MS = 20_000 as const;
+
+/** Prefer AbortSignal.timeout; fall back to AbortController when unavailable. */
+export function createGeminiAbortSignal(timeoutMs: number): AbortSignal {
+  if (typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function") {
+    return AbortSignal.timeout(timeoutMs);
+  }
+  const controller = new AbortController();
+  setTimeout(() => controller.abort(), timeoutMs);
+  return controller.signal;
+}
+
 async function generateOnce(
   prompt: string,
   apiKey: string,
   model: string,
   fetchImpl: typeof fetch,
   maxOutputTokens: number,
+  timeoutMs: number,
 ): Promise<GenerateTextResult & { http?: number; providerStatus?: string | null }> {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
 
@@ -63,19 +83,31 @@ async function generateOnce(
         "Content-Type": "application/json",
         "x-goog-api-key": apiKey,
       },
+      signal: createGeminiAbortSignal(timeoutMs),
       body: JSON.stringify({
         contents: [{ role: "user", parts: [{ text: prompt }] }],
         generationConfig: {
-          temperature: 0.4,
+          // Gemini 3+ deprecates temperature/topP; omit them.
           maxOutputTokens,
+          thinkingConfig: {
+            thinkingLevel: GEMINI_CHAT_THINKING_LEVEL,
+          },
         },
       }),
     });
-  } catch {
+  } catch (err) {
+    const timedOut =
+      (err instanceof Error && (err.name === "TimeoutError" || err.name === "AbortError")) ||
+      (typeof DOMException !== "undefined" &&
+        err instanceof DOMException &&
+        (err.name === "TimeoutError" || err.name === "AbortError"));
     return {
       ok: false,
-      message: "The assistant could not reach Gemini. Try again shortly.",
-      category: "unavailable",
+      message: timedOut
+        ? "The assistant took too long to respond. Please try again."
+        : "The assistant could not reach Gemini. Try again shortly.",
+      // Timeouts are not retryable — another model would double the wait.
+      category: timedOut ? "other" : "unavailable",
     };
   }
 
@@ -173,6 +205,7 @@ export async function fetchGeminiGeneratedText(
     model?: string;
     fetchImpl?: typeof fetch;
     maxOutputTokens?: number;
+    timeoutMs?: number;
   },
 ): Promise<GenerateTextResult> {
   const trimmedKey = apiKey.trim();
@@ -190,7 +223,8 @@ export async function fetchGeminiGeneratedText(
   const primary = options?.model ?? GEMINI_ASSISTANT_MODEL;
   const fetchImpl = options?.fetchImpl ?? fetch;
   // Keep outputs concise for faster chat latency.
-  const maxOutputTokens = options?.maxOutputTokens ?? 512;
+  const maxOutputTokens = options?.maxOutputTokens ?? 768;
+  const timeoutMs = options?.timeoutMs ?? GEMINI_GENERATE_TIMEOUT_MS;
   const models = [primary, ...FALLBACK_ASSISTANT_MODELS.filter((m) => m !== primary)];
 
   let lastFailure: GenerateTextResult = {
@@ -202,10 +236,10 @@ export async function fetchGeminiGeneratedText(
   for (let modelIndex = 0; modelIndex < models.length; modelIndex++) {
     const model = models[modelIndex]!;
     // One short backoff on 429 before trying the same model again, then fall through to fallback model.
-    let result = await generateOnce(text, trimmedKey, model, fetchImpl, maxOutputTokens);
+    let result = await generateOnce(text, trimmedKey, model, fetchImpl, maxOutputTokens, timeoutMs);
     if (!result.ok && result.category === "rate_limit" && modelIndex === 0) {
       await new Promise((r) => setTimeout(r, 1500));
-      result = await generateOnce(text, trimmedKey, model, fetchImpl, maxOutputTokens);
+      result = await generateOnce(text, trimmedKey, model, fetchImpl, maxOutputTokens, timeoutMs);
     }
     if (result.ok) {
       return { ok: true, text: result.text, model: result.model };

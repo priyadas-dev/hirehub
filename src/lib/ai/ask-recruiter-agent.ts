@@ -41,31 +41,43 @@ export const askRecruiterAgent = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((data: unknown) => recruiterAgentSchema.parse(data))
   .handler(async ({ data, context }) => {
-    const { data: profile, error: profileError } = await context.supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", context.userId)
-      .maybeSingle();
+    try {
+      const { data: profile, error: profileError } = await context.supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", context.userId)
+        .maybeSingle();
 
-    if (profileError || !profile) {
-      return { ok: false as const, code: "unauthorized" as const, message: "Could not verify profile." };
-    }
+      if (profileError || !profile) {
+        return { ok: false as const, code: "unauthorized" as const, message: "Could not verify profile." };
+      }
 
-    const role = mapDbRole(profile.role);
-    if (role !== "recruiter" && role !== "admin") {
+      const role = mapDbRole(profile.role);
+      if (role !== "recruiter" && role !== "admin") {
+        return {
+          ok: false as const,
+          code: "forbidden" as const,
+          message: "Recruiter tools are only available to recruiters and admins.",
+        };
+      }
+
+      return await invokeRecruiterAgentViaSupervisor(
+        {
+          supabase: context.supabase as never,
+          userId: context.userId,
+          role,
+        },
+        data,
+      );
+    } catch (err) {
+      console.error(
+        "[askRecruiterAgent] unhandled",
+        err instanceof Error ? err.name : "unknown",
+      );
       return {
         ok: false as const,
-        code: "forbidden" as const,
-        message: "Recruiter tools are only available to recruiters and admins.",
+        code: "unknown" as const,
+        message: "The recruiter agent hit an unexpected server error. Please try again.",
       };
     }
-
-    return invokeRecruiterAgentViaSupervisor(
-      {
-        supabase: context.supabase as never,
-        userId: context.userId,
-        role,
-      },
-      data,
-    );
   });

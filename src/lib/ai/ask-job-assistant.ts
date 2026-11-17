@@ -240,34 +240,48 @@ export const askJobAssistant = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((data: unknown) => askJobAssistantInputSchema.parse(data))
   .handler(async ({ data, context }): Promise<AskJobAssistantResult> => {
-    const rate = aiMatchGuard.checkRateLimit(context.userId);
-    if (!rate.allowed) {
+    try {
+      const rate = aiMatchGuard.checkRateLimit(context.userId);
+      if (!rate.allowed) {
+        return {
+          ok: false,
+          code: "rate_limited",
+          message: rateLimitedAssistantMessage(rate.retryAfterMs),
+        };
+      }
+
+      const { data: profile, error: profileError } = await context.supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", context.userId)
+        .maybeSingle();
+
+      if (profileError || !profile) {
+        return {
+          ok: false,
+          code: "unauthorized",
+          message: "Could not verify your HireHub profile. Sign in again and retry.",
+        };
+      }
+
+      const role = mapDbRole(profile.role);
+
+      return await runSeekerAskJobAssistantViaSupervisor(data, {
+        supabase: context.supabase as never,
+        userId: context.userId,
+        role,
+      });
+    } catch (err) {
+      // Never let uncaught errors become opaque SPA "Something went wrong" hangs.
+      console.error(
+        "[askJobAssistant] unhandled",
+        err instanceof Error ? err.name : "unknown",
+      );
       return {
         ok: false,
-        code: "rate_limited",
-        message: rateLimitedAssistantMessage(rate.retryAfterMs),
+        code: "unknown",
+        message:
+          "The assistant hit an unexpected server error. Please try again in a moment.",
       };
     }
-
-    const { data: profile, error: profileError } = await context.supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", context.userId)
-      .maybeSingle();
-
-    if (profileError || !profile) {
-      return {
-        ok: false,
-        code: "unauthorized",
-        message: "Could not verify your HireHub profile. Sign in again and retry.",
-      };
-    }
-
-    const role = mapDbRole(profile.role);
-
-    return runSeekerAskJobAssistantViaSupervisor(data, {
-      supabase: context.supabase as never,
-      userId: context.userId,
-      role,
-    });
   });

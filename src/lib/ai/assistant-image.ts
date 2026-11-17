@@ -4,7 +4,11 @@
  */
 
 import { ASSISTANT_ATTACHMENT_MAX_BYTES } from "@/lib/ai/assistant-attachments";
-import { fetchGeminiGeneratedText, readGeminiApiKey } from "@/lib/ai/gemini-generate";
+import {
+  fetchGeminiGeneratedText,
+  GEMINI_CHAT_THINKING_LEVEL,
+  readGeminiApiKey,
+} from "@/lib/ai/gemini-generate";
 import { GEMINI_SERVER_ENV } from "@/lib/ai/gemini";
 
 /** Same Flash family as the Job Assistant answers (avoid importing job-assistant). */
@@ -150,8 +154,10 @@ export async function analyzeImageWithGemini(input: {
           },
         ],
         generationConfig: {
-          temperature: 0.3,
           maxOutputTokens: 500,
+          thinkingConfig: {
+            thinkingLevel: GEMINI_CHAT_THINKING_LEVEL,
+          },
         },
       }),
     });
