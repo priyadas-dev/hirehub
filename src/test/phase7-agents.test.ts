@@ -3,6 +3,7 @@ import {
   extractApplyJobId,
   looksLikeApplyIntent,
   looksLikeConfirmApplyIntent,
+  looksLikeResumeDeliveryIntent,
   runApplicationAgent,
 } from "@/lib/ai/agents/application";
 import {
@@ -70,6 +71,11 @@ describe("Phase 7 application agent — confirm gate", () => {
     expect(looksLikeApplyIntent("Please apply to this job")).toBe(true);
     expect(looksLikeApplyIntent("apply Software Engineer")).toBe(true);
     expect(looksLikeApplyIntent("apply to the first job")).toBe(true);
+    expect(looksLikeApplyIntent("apply")).toBe(true);
+    expect(looksLikeApplyIntent("apply now")).toBe(true);
+    expect(looksLikeResumeDeliveryIntent("here is the resume.")).toBe(true);
+    expect(looksLikeApplyIntent("here is the resume.")).toBe(true);
+    expect(looksLikeApplyIntent("I attached my resume")).toBe(true);
     expect(looksLikeApplyIntent("What is React?")).toBe(false);
     expect(looksLikeApplyIntent("How do I apply in general?")).toBe(false);
   });

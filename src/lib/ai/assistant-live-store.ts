@@ -5,7 +5,11 @@
  */
 
 import type { AskJobAssistantResult } from "@/lib/ai/job-assistant";
-import { looksLikeConfirmApplyIntent } from "@/lib/ai/agents/application";
+import {
+  looksLikeApplyIntent,
+  looksLikeConfirmApplyIntent,
+  looksLikeResumeDeliveryIntent,
+} from "@/lib/ai/agents/application";
 import {
   createConversationId,
   readAssistantHistory,
@@ -22,6 +26,14 @@ export type LiveChatTurn = {
   pending?: boolean;
   attachment?: AssistantHistoryAttachmentMeta | null;
 };
+
+/** Keep last chat PDF so Confirm can re-send bytes after the paperclip is cleared. */
+type LastChatResume = {
+  base64: string;
+  meta: AssistantHistoryAttachmentMeta & { kind?: "pdf" | "image" | "docx" };
+};
+
+let lastChatResume: LastChatResume | null = null;
 
 const JOB_UUID_IN_TEXT_RE =
   /[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/i;
@@ -169,6 +181,7 @@ export function ensureAssistantLiveState(userId: string): AssistantLiveState {
 
 export function resetAssistantLiveConversation(userId: string): void {
   if (inflight) return;
+  lastChatResume = null;
   state = {
     userId,
     conversationId: createConversationId(),
@@ -332,15 +345,50 @@ export function runAssistantLiveAsk(userId: string, payload: AssistantAskPayload
 
   // Chat "confirm"/"yes" must finalize the pending apply — same as the Confirm button.
   const chatConfirm = looksLikeConfirmApplyIntent(trimmed);
-  const recoveredApplyJobId = chatConfirm
-    ? findApplyJobIdFromPriorTurns(contextSourceTurns)
-    : findPendingApplyJobId(contextSourceTurns);
+  const pendingJobId = findPendingApplyJobId(contextSourceTurns);
+  const priorJobId = findApplyJobIdFromPriorTurns(contextSourceTurns);
+  const attachKind = (attachmentMeta as { kind?: string } | null)?.kind;
+  const resumePdfThisTurn =
+    Boolean(payload.attachmentBase64) &&
+    (attachKind === "pdf" || /\.pdf$/i.test(attachmentMeta?.name ?? ""));
+  // Bare "apply", resume delivery, or PDF while a Confirm chip is open must carry applyJobId.
+  const applyFollowUp =
+    chatConfirm ||
+    looksLikeApplyIntent(trimmed) ||
+    looksLikeResumeDeliveryIntent(trimmed) ||
+    Boolean(payload.confirmApply) ||
+    (resumePdfThisTurn && Boolean(pendingJobId || priorJobId));
+  const recoveredApplyJobId = applyFollowUp
+    ? pendingJobId || priorJobId || null
+    : null;
   const effectiveApplyJobId =
     payload.applyJobId?.trim() ||
-    (chatConfirm && recoveredApplyJobId ? recoveredApplyJobId : undefined) ||
+    (recoveredApplyJobId ? recoveredApplyJobId : undefined) ||
     undefined;
   const effectiveConfirmApply =
     Boolean(payload.confirmApply) || Boolean(chatConfirm && effectiveApplyJobId);
+
+  // Remember chat PDF bytes for a later Confirm (UI clears the paperclip after send).
+  if (resumePdfThisTurn && payload.attachmentBase64 && attachmentMeta) {
+    lastChatResume = {
+      base64: payload.attachmentBase64,
+      meta: {
+        name: attachmentMeta.name,
+        mime: attachmentMeta.mime,
+        sizeBytes: attachmentMeta.sizeBytes,
+        kind: (attachmentMeta as { kind?: "pdf" | "image" | "docx" }).kind ?? "pdf",
+      },
+    };
+  }
+
+  // Confirm button often has no paperclip — reuse last chat PDF bytes.
+  const confirmResume =
+    effectiveConfirmApply && !payload.attachmentBase64 && lastChatResume
+      ? lastChatResume
+      : null;
+  const outboundAttachmentMeta = attachmentMeta ?? confirmResume?.meta ?? null;
+  const outboundAttachmentBase64 =
+    payload.attachmentBase64 ?? confirmResume?.base64 ?? undefined;
 
   // Keep prior-turn context short — long context + Gemini 3.8 was timing out on live follow-ups.
   const conversationContext = contextSourceTurns
@@ -364,17 +412,19 @@ export function runAssistantLiveAsk(userId: string, payload: AssistantAskPayload
         payload.ask({
           data: {
             question: trimmed,
-            ...(attachmentMeta
+            ...(outboundAttachmentMeta
               ? {
                   attachmentMeta: {
-                    name: attachmentMeta.name,
-                    mime: attachmentMeta.mime,
-                    sizeBytes: attachmentMeta.sizeBytes,
-                    kind: attachmentMeta.kind,
+                    name: outboundAttachmentMeta.name,
+                    mime: outboundAttachmentMeta.mime,
+                    sizeBytes: outboundAttachmentMeta.sizeBytes,
+                    kind: (outboundAttachmentMeta as { kind?: string }).kind,
                   },
                 }
               : {}),
-            ...(payload.attachmentBase64 ? { attachmentBase64: payload.attachmentBase64 } : {}),
+            ...(outboundAttachmentBase64
+              ? { attachmentBase64: outboundAttachmentBase64 }
+              : {}),
             ...(sessionSkills.length ? { sessionSkills } : {}),
             ...(recentJobs?.length ? { recentJobs } : {}),
             ...(conversationContext ? { conversationContext } : {}),
@@ -396,6 +446,9 @@ export function runAssistantLiveAsk(userId: string, payload: AssistantAskPayload
       let formError: string | null = null;
 
       if (result.ok) {
+        if (result.applyOutcome?.applicationId) {
+          lastChatResume = null;
+        }
         if (result.sessionSkills?.length) nextSkills = result.sessionSkills;
         if (result.resumeProcess?.status === "read") attachStatus = "Resume processed";
         else if (result.resumeProcess?.status === "processed")

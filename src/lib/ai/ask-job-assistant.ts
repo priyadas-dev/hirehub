@@ -248,6 +248,8 @@ export async function runSeekerAskJobAssistantViaSupervisor(
 
   // Persist chat PDF as soon as it is attached so a later "confirm" turn still has a resume
   // (the UI clears the paperclip attachment after each send).
+  let chatResumePersistError: string | null = null;
+  let chatResumePersisted = false;
   if (chatLooksLikeResumePdf && chatPdfBase64) {
     try {
       await persistChatResumePdfForSeeker({
@@ -256,8 +258,12 @@ export async function runSeekerAskJobAssistantViaSupervisor(
         chatPdfBase64,
         fileName: chatMeta?.name,
       });
-    } catch {
-      // Soft: Confirm-time ensureChatResume / validation will surface a clear error.
+      chatResumePersisted = true;
+    } catch (err) {
+      chatResumePersistError =
+        err instanceof Error
+          ? err.message
+          : "Could not save the resume from chat. Upload it in Profile, then Confirm again.";
     }
   }
 
@@ -285,8 +291,12 @@ export async function runSeekerAskJobAssistantViaSupervisor(
                 throw new Error("Resume storage path must belong to the signed-in seeker.");
               }
             },
-            hasChatResumeAttachment: chatLooksLikeResumePdf,
+            // Treat successful persist this turn as an attached resume even if bytes are re-used later.
+            hasChatResumeAttachment: chatLooksLikeResumePdf || chatResumePersisted,
             ensureChatResume: async () => {
+              if (chatResumePersistError) {
+                throw new Error(chatResumePersistError);
+              }
               if (!chatLooksLikeResumePdf || !chatPdfBase64) return null;
               return persistChatResumePdfForSeeker({
                 supabase: ctx.supabase,

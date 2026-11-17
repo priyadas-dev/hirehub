@@ -197,10 +197,34 @@ export function looksLikeConfirmApplyIntent(question: string): boolean {
   return false;
 }
 
+/**
+ * True when the seeker is delivering a resume/CV in chat (often with a PDF attachment).
+ * Must route to Application Agent when a pending apply exists — never Gemini inventing
+ * "file hasn't come through".
+ */
+export function looksLikeResumeDeliveryIntent(question: string): boolean {
+  const q = question.trim();
+  if (!q) return false;
+  return (
+    /\b(here\s+(is|are)\s+(my\s+|the\s+)?(resume|cv)|this\s+is\s+(my\s+|the\s+)?(resume|cv))\b/i.test(
+      q,
+    ) ||
+    /\b(resume|cv)\s+(is\s+)?(attached|uploaded|here|ready)\b/i.test(q) ||
+    /\b(attached|uploading|upload(ed)?|sending|sent)\b[\s\S]{0,24}\b(my\s+|the\s+)?(resume|cv)\b/i.test(
+      q,
+    ) ||
+    /\b(i\s+)?(attached|uploaded)\b[\s\S]{0,16}\b(my\s+|the\s+)?(resume|cv|pdf|file)\b/i.test(q) ||
+    /^\s*(my\s+|the\s+)?(resume|cv)([!.]?|\s+please)?\s*$/i.test(q)
+  );
+}
+
 /** True when the seeker is asking the Application Agent to apply (not general advice). */
 export function looksLikeApplyIntent(question: string): boolean {
   const q = question.trim();
   if (looksLikeConfirmApplyIntent(q)) return true;
+  if (looksLikeResumeDeliveryIntent(q)) return true;
+  // Bare "apply" / "apply now" / "please apply" — common after Confirm chip is shown.
+  if (/^\s*(please\s+)?appl(?:y|ied|ying)(\s+now)?\s*[!.]?\s*$/i.test(q)) return true;
   // Match apply / applied / applying — noisy chat often uses past tense.
   if (
     !/\b(appl(?:y|ied|ying)|submit\s+(an?\s+)?application|send\s+(my\s+)?(resume|cv))\b/i.test(

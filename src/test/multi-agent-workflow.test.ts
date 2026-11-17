@@ -96,6 +96,8 @@ describe("Multi-agent — conversational Save / Apply resolution", () => {
     expect(looksLikeApplyIntent("apply to the first job")).toBe(true);
     expect(looksLikeApplyIntent("now apply in software developtre")).toBe(true);
     expect(looksLikeApplyIntent("sudu resume ase now applied in the job")).toBe(true);
+    expect(looksLikeApplyIntent("apply")).toBe(true);
+    expect(looksLikeApplyIntent("here is the resume")).toBe(true);
     expect(looksLikeApplyIntent("How do I apply in general?")).toBe(false);
   });
 

@@ -38,6 +38,7 @@ import {
   looksLikeApplyIntent,
   looksLikeConfirmApplyIntent,
   looksLikeCheckStatusIntent,
+  looksLikeResumeDeliveryIntent,
   looksLikeSaveJobIntent,
   type CheckStatusAgentInput,
   type CheckStatusAgentResult,
@@ -589,7 +590,9 @@ export async function runSupervisor(
     (Boolean(input.confirmApply) ||
       Boolean(input.applyJobId) ||
       chatConfirmApply ||
-      looksLikeApplyIntent(questionForRoute));
+      looksLikeApplyIntent(questionForRoute) ||
+      // Resume delivery with an explicit applyJobId from the client (pending Confirm chip).
+      (looksLikeResumeDeliveryIntent(questionForRoute) && Boolean(input.applyJobId)));
 
   // Task 2: Save Job / Check Status — same Application Agent, after apply priority.
   const wantsSaveJob =
