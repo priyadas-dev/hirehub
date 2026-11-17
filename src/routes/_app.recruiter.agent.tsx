@@ -162,7 +162,10 @@ function RecruiterAgentPage() {
   const [draftSubject, setDraftSubject] = useState("");
   const [draftBody, setDraftBody] = useState("");
   const [pendingShortlistAppId, setPendingShortlistAppId] = useState<string | null>(null);
+  const [editingTurnId, setEditingTurnId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState("");
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  const editInputRef = useRef<HTMLTextAreaElement | null>(null);
   const persistTitleRef = useRef<string>("New conversation");
 
   const jobs = useQuery({
@@ -832,11 +835,36 @@ function RecruiterAgentPage() {
     });
   }
 
-  async function submitChat(raw: string) {
+  function beginEditTurn(turn: RecruiterChatTurn) {
+    if (busy || turn.role !== "user") return;
+    setEditingTurnId(turn.id);
+    setEditDraft(turn.text);
+    queueMicrotask(() => editInputRef.current?.focus());
+  }
+
+  function cancelEditTurn() {
+    setEditingTurnId(null);
+    setEditDraft("");
+  }
+
+  async function submitChat(raw: string, options?: { editTurnId?: string }) {
     const text = raw.trim();
     if (!text || busy || !id) return;
     setQuestion("");
-    appendTurns({ id: newTurnId(), role: "user", text });
+    setEditingTurnId(null);
+    setEditDraft("");
+    if (options?.editTurnId) {
+      setTurns((prev) => {
+        const idx = prev.findIndex((t) => t.id === options.editTurnId);
+        if (idx < 0) return prev;
+        return [
+          ...prev.slice(0, idx),
+          { id: options.editTurnId!, role: "user", text },
+        ];
+      });
+    } else {
+      appendTurns({ id: newTurnId(), role: "user", text });
+    }
     setBusy(true);
     try {
       const intent = detectRecruiterChatIntent(text);
@@ -1216,11 +1244,62 @@ function RecruiterAgentPage() {
               </div>
             )}
 
-            {turns.map((t) =>
-              t.role === "user" ? (
+            {turns.map((t, turnIndex) => {
+              const editIdx = editingTurnId
+                ? turns.findIndex((x) => x.id === editingTurnId)
+                : -1;
+              if (editIdx >= 0 && turnIndex > editIdx) return null;
+
+              return t.role === "user" ? (
                 <div key={t.id} className="flex justify-end">
-                  <div className="max-w-[85%] rounded-2xl rounded-tr-md bg-signal px-4 py-2.5 text-sm text-signal-foreground">
-                    {t.text}
+                  <div className="group relative max-w-[85%]">
+                    {editingTurnId === t.id ? (
+                      <div className="space-y-2 rounded-2xl rounded-tr-md border border-signal/30 bg-background px-3 py-2 shadow-sm">
+                        <textarea
+                          ref={editInputRef}
+                          value={editDraft}
+                          onChange={(e) => setEditDraft(e.target.value)}
+                          rows={3}
+                          disabled={busy}
+                          className="w-full resize-y rounded-md border bg-background px-2 py-1.5 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-signal/40"
+                          aria-label="Edit message"
+                        />
+                        <div className="flex flex-wrap justify-end gap-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            disabled={busy}
+                            onClick={cancelEditTurn}
+                          >
+                            Cancel
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="signal"
+                            disabled={busy || editDraft.trim().length < 3}
+                            onClick={() => void submitChat(editDraft, { editTurnId: t.id })}
+                          >
+                            Save & send
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="rounded-2xl rounded-tr-md bg-signal px-4 py-2.5 text-sm text-signal-foreground">
+                        {t.text}
+                        <button
+                          type="button"
+                          className="absolute -left-9 top-1 inline-flex size-7 items-center justify-center rounded-full border bg-background text-muted-foreground opacity-100 shadow-sm transition hover:text-foreground sm:opacity-0 sm:group-hover:opacity-100"
+                          aria-label="Edit message"
+                          title="Edit message"
+                          disabled={busy}
+                          onClick={() => beginEditTurn(t)}
+                        >
+                          <Pencil className="size-3.5" />
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
               ) : (
@@ -1326,8 +1405,8 @@ function RecruiterAgentPage() {
                     </div>
                   )}
                 </div>
-              ),
-            )}
+              );
+            })}
 
             {busy && <RecruiterAgentLoading label="Running via Supervisor…" />}
             <div ref={bottomRef} />

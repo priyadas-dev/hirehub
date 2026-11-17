@@ -5,6 +5,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   extractApplyJobId,
+  extractIdentityHintsFromQuestion,
   extractSaveJobId,
   looksLikeApplyIntent,
   looksLikeSaveJobIntent,
@@ -523,6 +524,74 @@ describe("Multi-agent — final workflow verification", () => {
       expect(result.message).toMatch(/portfolio is not required/i);
     }
     expect(db.rows.size).toBe(0);
+  });
+
+  it("parses name/email hints from an edited apply message", () => {
+    const hints = extractIdentityHintsFromQuestion(
+      "apply this job. my name is Priya Das email priya@example.com",
+    );
+    expect(hints.fullName).toMatch(/Priya Das/i);
+    expect(hints.email).toBe("priya@example.com");
+    expect(extractIdentityHintsFromQuestion("Dibyo Das.").fullName).toBe("Dibyo Das");
+    expect(
+      extractIdentityHintsFromQuestion("mail is my profile mail").preferAccountEmail,
+    ).toBe(true);
+  });
+
+  it("Confirm apply uses auth/profile email when chat only provided a name", async () => {
+    const db = createApplyDb();
+    const result = await runApplicationAgent(
+      {
+        jobId: JOB_B,
+        jobTitle: "Software Engineer",
+        confirm: true,
+        question: "Dibyo Das\nmail is my profile mail\nPlease confirm apply",
+        conversationContext: "User: Dibyo Das\nAssistant: need email",
+      },
+      {
+        seekerId: USER,
+        applyClient: db.client,
+        isDeadlinePassed: () => false,
+        assertResumeStoragePath: (path, id) => {
+          if (!path.startsWith(`${id}/`)) throw new Error("bad path");
+        },
+        loadSeekerResume: async () => ({
+          // Blank profile name, but account email available (auth fallback).
+          email: "seeker@example.com",
+          resumeStoragePath: `${USER}/cv.pdf`,
+          resumeFileName: "cv.pdf",
+        }),
+        persistSeekerIdentity: async () => undefined,
+      },
+    );
+    expect(result.ok && result.status === "created").toBe(true);
+    expect(db.rows.size).toBe(1);
+  });
+
+  it("Confirm apply accepts name/email from question when profile is blank", async () => {
+    const db = createApplyDb();
+    const result = await runApplicationAgent(
+      {
+        jobId: JOB_B,
+        jobTitle: "Software Engineer",
+        confirm: true,
+        question: "apply this job. my name is Priya Das email priya@example.com",
+      },
+      {
+        seekerId: USER,
+        applyClient: db.client,
+        isDeadlinePassed: () => false,
+        assertResumeStoragePath: (path, id) => {
+          if (!path.startsWith(`${id}/`)) throw new Error("bad path");
+        },
+        loadSeekerResume: async () => ({
+          resumeStoragePath: `${USER}/cv.pdf`,
+          resumeFileName: "cv.pdf",
+        }),
+      },
+    );
+    expect(result.ok && result.status === "created").toBe(true);
+    expect(db.rows.size).toBe(1);
   });
 
   it("4b) Chat resume alone is enough — propose mentions no portfolio; Confirm persists via ensureChatResume", async () => {

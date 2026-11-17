@@ -273,15 +273,37 @@ export async function runSeekerAskJobAssistantViaSupervisor(
                 )
                 .eq("id", seekerId)
                 .maybeSingle();
-              if (!row) return null;
+              const { data: authData } = await ctx.supabase.auth.getUser();
+              const authUser = authData.user;
+              const meta = (authUser?.user_metadata ?? {}) as Record<string, unknown>;
+              const metaName =
+                (typeof meta.full_name === "string" && meta.full_name.trim()) ||
+                (typeof meta.name === "string" && meta.name.trim()) ||
+                "";
+              const profileName = (row as { full_name?: string | null } | null)?.full_name?.trim() || "";
+              const profileEmail = (row as { email?: string | null } | null)?.email?.trim() || "";
+              const authEmail = authUser?.email?.trim() || "";
+              // Auth/session identity fills blank profile columns (common for OAuth seekers).
               return {
-                fullName: (row as { full_name?: string | null }).full_name,
-                email: (row as { email?: string | null }).email,
-                resumeStoragePath: (row as { resume_storage_path?: string | null }).resume_storage_path,
-                resumeFileName: (row as { resume_file_name?: string | null }).resume_file_name,
-                resumeUrl: (row as { resume_url?: string | null }).resume_url,
-                portfolioUrl: (row as { portfolio_url?: string | null }).portfolio_url,
+                fullName: profileName || metaName || null,
+                email: profileEmail || authEmail || null,
+                resumeStoragePath: (row as { resume_storage_path?: string | null } | null)
+                  ?.resume_storage_path,
+                resumeFileName: (row as { resume_file_name?: string | null } | null)?.resume_file_name,
+                resumeUrl: (row as { resume_url?: string | null } | null)?.resume_url,
+                portfolioUrl: (row as { portfolio_url?: string | null } | null)?.portfolio_url,
               };
+            },
+            persistSeekerIdentity: async ({ fullName, email }) => {
+              const patch: Record<string, string> = {};
+              if (fullName.trim()) patch.full_name = fullName.trim();
+              if (email.trim()) patch.email = email.trim();
+              if (!Object.keys(patch).length) return;
+              const { error } = await ctx.supabase
+                .from("profiles")
+                .update(patch)
+                .eq("id", seekerId);
+              if (error) throw error;
             },
           }),
         runSaveJobTool: (input) => runSaveJobTool(input, { seekerId, saveClient }),

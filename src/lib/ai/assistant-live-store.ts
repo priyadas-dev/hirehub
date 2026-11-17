@@ -182,6 +182,8 @@ export type AssistantAskPayload = {
   confirmApply?: boolean;
   ask: (args: { data: Record<string, unknown> }) => Promise<AskJobAssistantResult>;
   retryTurnId?: string;
+  /** ChatGPT-style edit: replace this turn's question and drop all later turns. */
+  editTurnId?: string;
 };
 
 /** Client ceiling — covers primary Gemini + lite fallbacks without infinite Thinking… */
@@ -210,20 +212,47 @@ function withClientAskTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
  */
 export function runAssistantLiveAsk(userId: string, payload: AssistantAskPayload): Promise<void> {
   const live = ensureAssistantLiveState(userId);
-  if (live.busy && !payload.retryTurnId) return inflight ?? Promise.resolve();
+  if (live.busy && !payload.retryTurnId && !payload.editTurnId) {
+    return inflight ?? Promise.resolve();
+  }
 
   const trimmed = payload.question.trim();
   if (trimmed.length < 3) return Promise.resolve();
 
-  const turnId = payload.retryTurnId ?? `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const turnId =
+    payload.editTurnId ??
+    payload.retryTurnId ??
+    `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const attachmentMeta = payload.attachmentMeta ?? null;
 
   const prevTurns = live.turns;
   let nextTurns: LiveChatTurn[];
-  if (payload.retryTurnId) {
+  let contextSourceTurns = prevTurns;
+
+  if (payload.editTurnId) {
+    const editIdx = prevTurns.findIndex((t) => t.id === payload.editTurnId);
+    if (editIdx < 0) return Promise.resolve();
+    contextSourceTurns = prevTurns.slice(0, editIdx);
+    nextTurns = [
+      ...contextSourceTurns,
+      {
+        id: turnId,
+        question: trimmed,
+        result: null,
+        pending: true,
+        attachment: attachmentMeta ?? prevTurns[editIdx]?.attachment ?? null,
+      },
+    ];
+  } else if (payload.retryTurnId) {
     nextTurns = prevTurns.map((t) =>
       t.id === payload.retryTurnId
-        ? { ...t, result: null, pending: true, attachment: attachmentMeta }
+        ? {
+            ...t,
+            question: trimmed,
+            result: null,
+            pending: true,
+            attachment: attachmentMeta ?? t.attachment,
+          }
         : t,
     );
   } else {
@@ -251,7 +280,7 @@ export function runAssistantLiveAsk(userId: string, payload: AssistantAskPayload
   const conversationId = state.conversationId;
   const sessionSkills = state.sessionSkills;
 
-  const lastJobs = [...prevTurns]
+  const lastJobs = [...contextSourceTurns]
     .reverse()
     .find((t) => t.result?.ok && t.result.liveCitations.length > 0)?.result;
   const recentJobs =
@@ -267,7 +296,7 @@ export function runAssistantLiveAsk(userId: string, payload: AssistantAskPayload
       : undefined;
 
   // Keep prior-turn context short — long context + Gemini 3.8 was timing out on live follow-ups.
-  const conversationContext = prevTurns
+  const conversationContext = contextSourceTurns
     .filter((t) => t.result && !t.pending)
     .slice(-1)
     .map((t) => {

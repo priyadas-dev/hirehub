@@ -93,6 +93,8 @@ function SeekerAssistantPage() {
 
   const [question, setQuestion] = useState("");
   const [conversations, setConversations] = useState<AssistantConversation[]>([]);
+  const [editingTurnId, setEditingTurnId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState("");
   const [attachment, setAttachment] = useState<{
     file: File;
     meta: AssistantHistoryAttachmentMeta & { kind: "pdf" | "image" | "docx" };
@@ -100,6 +102,7 @@ function SeekerAssistantPage() {
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
+  const editInputRef = useRef<HTMLTextAreaElement | null>(null);
 
   const busy = live?.busy ?? false;
   const turns = useMemo(() => live?.turns ?? [], [live?.turns]);
@@ -135,12 +138,19 @@ function SeekerAssistantPage() {
 
   async function submit(
     nextQuestion: string,
-    options?: { retryTurnId?: string; applyJobId?: string; confirmApply?: boolean },
+    options?: {
+      retryTurnId?: string;
+      editTurnId?: string;
+      applyJobId?: string;
+      confirmApply?: boolean;
+    },
   ) {
     const trimmed = nextQuestion.trim();
-    if (!trimmed || !userId || (busy && !options?.retryTurnId)) return;
+    if (!trimmed || !userId || (busy && !options?.retryTurnId && !options?.editTurnId)) return;
 
     setQuestion("");
+    setEditingTurnId(null);
+    setEditDraft("");
     let attachmentBase64: string | undefined;
     const attachmentMeta = attachment?.meta ?? undefined;
     if (attachment?.file) {
@@ -155,11 +165,24 @@ function SeekerAssistantPage() {
       applyJobId: options?.applyJobId,
       confirmApply: options?.confirmApply,
       retryTurnId: options?.retryTurnId,
+      editTurnId: options?.editTurnId,
       ask: async ({ data }) => ask({ data: data as AskJobAssistantInput }),
     });
 
     setAttachment(null);
     inputRef.current?.focus();
+  }
+
+  function beginEditTurn(turn: LiveChatTurn) {
+    if (busy) return;
+    setEditingTurnId(turn.id);
+    setEditDraft(turn.question);
+    queueMicrotask(() => editInputRef.current?.focus());
+  }
+
+  function cancelEditTurn() {
+    setEditingTurnId(null);
+    setEditDraft("");
   }
 
   function startNewConversation() {
@@ -346,52 +369,118 @@ function SeekerAssistantPage() {
                 </div>
               </div>
             ) : (
-              turns.map((turn) => (
+              turns.map((turn, turnIndex) => {
+                const editIdx = editingTurnId
+                  ? turns.findIndex((t) => t.id === editingTurnId)
+                  : -1;
+                if (editIdx >= 0 && turnIndex > editIdx) return null;
+
+                return (
                 <div key={turn.id} className="space-y-3">
                   <div className="flex justify-end">
-                    <div className="max-w-[85%] space-y-2 rounded-2xl rounded-br-md bg-signal/15 px-4 py-3 text-sm text-foreground">
-                      <p>{turn.question}</p>
-                      {turn.attachment && (
-                        <p className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
-                          <Paperclip className="size-3" />
-                          {turn.attachment.name}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-3">
-                    <div className="mt-1 flex size-8 shrink-0 items-center justify-center rounded-full bg-signal/10 text-signal">
-                      <Bot className="size-4" />
-                    </div>
-                    <div className="min-w-0 flex-1 space-y-3">
-                      {turn.pending || !turn.result ? (
-                        <div
-                          className="rounded-2xl rounded-tl-md border bg-muted/40 px-4 py-3 text-sm text-muted-foreground"
-                          aria-busy="true"
-                        >
-                          <span className="inline-flex items-center gap-2">
-                            <Loader2 className="size-4 animate-spin" /> Thinking…
-                          </span>
+                    <div className="group max-w-[85%] space-y-2">
+                      {editingTurnId === turn.id ? (
+                        <div className="space-y-2 rounded-2xl rounded-br-md border border-signal/30 bg-background px-3 py-2 shadow-sm">
+                          <textarea
+                            ref={editInputRef}
+                            value={editDraft}
+                            onChange={(e) => setEditDraft(e.target.value)}
+                            rows={3}
+                            disabled={busy}
+                            className="w-full resize-y rounded-md border bg-background px-2 py-1.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-signal/40"
+                            aria-label="Edit message"
+                          />
+                          <div className="flex flex-wrap justify-end gap-2">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              disabled={busy}
+                              onClick={cancelEditTurn}
+                            >
+                              Cancel
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="signal"
+                              disabled={busy || editDraft.trim().length < 3}
+                              onClick={() =>
+                                void submit(editDraft, { editTurnId: turn.id })
+                              }
+                            >
+                              Save & send
+                            </Button>
+                          </div>
                         </div>
                       ) : (
-                        <AssistantMessage
-                          result={turn.result}
-                          busy={busy}
-                          onRetry={() => void submit(turn.question, { retryTurnId: turn.id })}
-                          onConfirmApply={(jobId) =>
-                            void runAssistantLiveAsk(userId, {
-                              question: `Please apply to job ${jobId}`,
-                              applyJobId: jobId,
-                              confirmApply: true,
-                              ask: async ({ data }) => ask({ data: data as AskJobAssistantInput }),
-                            })
-                          }
-                        />
+                        <div className="relative space-y-2 rounded-2xl rounded-br-md bg-signal/15 px-4 py-3 text-sm text-foreground">
+                          <p>{turn.question}</p>
+                          {turn.attachment && (
+                            <p className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
+                              <Paperclip className="size-3" />
+                              {turn.attachment.name}
+                            </p>
+                          )}
+                          <button
+                            type="button"
+                            className="absolute -left-9 top-1 inline-flex size-7 items-center justify-center rounded-full border bg-background text-muted-foreground opacity-100 shadow-sm transition hover:text-foreground sm:opacity-0 sm:group-hover:opacity-100"
+                            aria-label="Edit message"
+                            title="Edit message"
+                            disabled={busy || turn.pending}
+                            onClick={() => beginEditTurn(turn)}
+                          >
+                            <Pencil className="size-3.5" />
+                          </button>
+                        </div>
                       )}
                     </div>
                   </div>
+                  {editingTurnId !== turn.id && (
+                    <div className="flex items-start gap-3">
+                      <div className="mt-1 flex size-8 shrink-0 items-center justify-center rounded-full bg-signal/10 text-signal">
+                        <Bot className="size-4" />
+                      </div>
+                      <div className="min-w-0 flex-1 space-y-3">
+                        {turn.pending || !turn.result ? (
+                          <div
+                            className="rounded-2xl rounded-tl-md border bg-muted/40 px-4 py-3 text-sm text-muted-foreground"
+                            aria-busy="true"
+                          >
+                            <span className="inline-flex items-center gap-2">
+                              <Loader2 className="size-4 animate-spin" /> Thinking…
+                            </span>
+                          </div>
+                        ) : (
+                          <AssistantMessage
+                            result={turn.result}
+                            busy={busy}
+                            onRetry={() => void submit(turn.question, { retryTurnId: turn.id })}
+                            onConfirmApply={(jobId) => {
+                              // Include recent user lines so name/email from earlier turns survive Confirm.
+                              const priorUserLines = turns
+                                .map((t) => t.question.trim())
+                                .filter(Boolean)
+                                .slice(-6)
+                                .join("\n");
+                              const confirmQuestion =
+                                `${priorUserLines}\nPlease confirm apply to job ${jobId}`.trim();
+                              void runAssistantLiveAsk(userId, {
+                                question: confirmQuestion.slice(0, 1400),
+                                applyJobId: jobId,
+                                confirmApply: true,
+                                ask: async ({ data }) =>
+                                  ask({ data: data as AskJobAssistantInput }),
+                              });
+                            }}
+                          />
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
-              ))
+              );
+              })
             )}
             <div ref={bottomRef} />
           </div>

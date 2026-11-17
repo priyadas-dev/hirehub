@@ -490,6 +490,7 @@ export function buildConversationalPrompt(input: {
     "7) Start with a direct answer. Do not apologize about missing job listings or empty context.",
     "8) For HireHub apply help: a resume/CV is enough. Do NOT say portfolio, GitHub, or cover letter are required. Keep steps short and easy.",
     "9) If the seeker asks to apply to a shown job, do not only give portal click instructions — acknowledge apply intent clearly.",
+    "10) NEVER claim you updated the seeker Profile, saved a name/email, or submitted an application unless a tool result confirms it. Chat notes are not Profile writes.",
     "",
     input.conversationContext
       ? `Recent conversation (may help follow-ups):\n${input.conversationContext}`

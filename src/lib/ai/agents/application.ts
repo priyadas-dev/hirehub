@@ -48,6 +48,14 @@ export type ApplicationAgentDeps = {
     resumeStoragePath: string;
     resumeFileName: string;
   } | null>;
+  /**
+   * Persist name/email onto profiles when chat/auth filled blanks (JWT update).
+   * Never invent values — only write what we already resolved for this apply.
+   */
+  persistSeekerIdentity?: (input: {
+    fullName: string;
+    email: string;
+  }) => Promise<void>;
   /** Save Job tool — JWT saved_jobs client. */
   saveClient?: SaveJobClient;
   /** Check Application Status tool — JWT applications client. */
@@ -62,7 +70,74 @@ export type ApplicationAgentInput = {
   confirm: boolean;
   coverNote?: string | null;
   recentJobs?: ApplicationAgentJobRef[];
+  /** Original seeker question — may include name/email when profile is incomplete. */
+  question?: string | null;
+  /** Recent conversation text — identity may appear in earlier turns. */
+  conversationContext?: string | null;
 };
+
+/** Pull optional name/email from chat text when profile fields are blank. */
+export function extractIdentityHintsFromQuestion(question: string): {
+  fullName?: string;
+  email?: string;
+  preferAccountEmail?: boolean;
+} {
+  const q = question.trim();
+  if (!q) return {};
+  const email = q.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0]?.trim();
+  const preferAccountEmail =
+    /\b(use\s+)?(my\s+)?(profile|account|login|registered)\s*(e-?mail|mail)\b/i.test(q) ||
+    /\bmail\s+is\s+my\s+profile\b/i.test(q) ||
+    /\b(same|existing)\s+(e-?mail|mail)\b/i.test(q);
+
+  const namePatterns = [
+    /\b(?:my\s+)?name\s*(?:is|=|:)\s*([A-Za-z][A-Za-z .'-]{1,60})/i,
+    /\bi\s+am\s+([A-Za-z][A-Za-z .'-]{1,60})/i,
+    /\bfull\s*name\s*(?:is|=|:)\s*([A-Za-z][A-Za-z .'-]{1,60})/i,
+  ];
+  let fullName: string | undefined;
+  for (const re of namePatterns) {
+    const m = q.match(re);
+    if (m?.[1]) {
+      fullName = m[1].replace(/\s+(email|mail|@).*$/i, "").trim();
+      break;
+    }
+  }
+  // Short reply that is only a person name (e.g. "Dibyo Das.")
+  if (!fullName) {
+    const bare = q
+      .replace(/[.?!,]+$/g, "")
+      .trim()
+      .match(/^([A-Za-z][A-Za-z'-]+)(?:\s+[A-Za-z][A-Za-z'-]+){0,3}$/);
+    if (bare?.[0] && !/^(yes|no|ok|okay|thanks|apply|job|resume|cv)$/i.test(bare[0])) {
+      fullName = bare[0].trim();
+    }
+  }
+  return {
+    ...(fullName ? { fullName } : {}),
+    ...(email ? { email } : {}),
+    ...(preferAccountEmail ? { preferAccountEmail: true } : {}),
+  };
+}
+
+/** Merge identity hints from the current question and prior conversation text. */
+export function extractIdentityHintsFromConversation(
+  question?: string | null,
+  conversationContext?: string | null,
+): ReturnType<typeof extractIdentityHintsFromQuestion> {
+  const chunks = [conversationContext ?? "", question ?? ""].filter((s) => s.trim());
+  const merged: ReturnType<typeof extractIdentityHintsFromQuestion> = {};
+  for (const chunk of chunks) {
+    // Scan line-by-line so a bare name turn is not drowned by long context.
+    for (const line of chunk.split(/\n+/)) {
+      const part = extractIdentityHintsFromQuestion(line.trim());
+      if (part.fullName && !merged.fullName) merged.fullName = part.fullName;
+      if (part.email && !merged.email) merged.email = part.email;
+      if (part.preferAccountEmail) merged.preferAccountEmail = true;
+    }
+  }
+  return merged;
+}
 
 export type ApplicationAgentResult =
   | {
@@ -517,8 +592,13 @@ export async function runApplicationAgent(
     "this job";
 
   const resume = (await deps.loadSeekerResume?.()) ?? {};
-  const fullName = resume.fullName?.trim() || "";
-  const email = resume.email?.trim() || "";
+  const fromChat = extractIdentityHintsFromConversation(
+    input.question,
+    input.conversationContext,
+  );
+  const fullName = resume.fullName?.trim() || fromChat.fullName?.trim() || "";
+  // Auth email is loaded in loadSeekerResume; chat may also include an explicit address.
+  const email = resume.email?.trim() || fromChat.email?.trim() || "";
   let storagePath = resume.resumeStoragePath?.trim() || null;
   let resumeFileName = resume.resumeFileName?.trim() || null;
   const resumeUrl = resume.resumeUrl?.trim() || null;
@@ -536,11 +616,15 @@ export async function runApplicationAgent(
       resumeHint =
         "Attach your resume here (PDF) or upload it in Profile, then tap Confirm. Portfolio is not required.";
     }
+    const identityHint =
+      !fullName || !email
+        ? " Your profile still needs a name and email — edit your message to add them (example: name Priya Das, email you@mail.com), say “use my profile email”, or update Profile, then Confirm."
+        : "";
     return {
       ok: true,
       status: "needs_confirm",
       pendingApply: { jobId, title, requiresConfirm: true },
-      message: `I can apply to “${title}” for you. ${resumeHint} Nothing is sent until you Confirm.`,
+      message: `I can apply to “${title}” for you. ${resumeHint}${identityHint} Nothing is sent until you Confirm.`,
       insertsAttempted: 0,
     };
   }
@@ -550,9 +634,21 @@ export async function runApplicationAgent(
       ok: false,
       code: "validation",
       message:
-        "Your profile needs a name and email first. Update Profile, then Confirm again — or apply from the job page.",
+        "I still need your name and email. Edit your message to include them (example: name Priya Das, email you@mail.com), say “use my profile email”, update Profile, then Confirm again — or apply from the job page.",
       insertsAttempted: 0,
     };
+  }
+
+  // Persist chat/auth-resolved identity so the next Confirm does not fail again.
+  if (
+    deps.persistSeekerIdentity &&
+    (!resume.fullName?.trim() || !resume.email?.trim())
+  ) {
+    try {
+      await deps.persistSeekerIdentity({ fullName, email });
+    } catch {
+      // Apply can still proceed with resolved values even if profile write fails.
+    }
   }
 
   if (!hasResumeFile && deps.ensureChatResume) {

@@ -735,6 +735,8 @@ export async function runSupervisor(
       jobTitle: recentJobs?.find((j) => j.id === jobId)?.title,
       confirm: Boolean(input.confirmApply),
       recentJobs,
+      question: questionForRoute,
+      conversationContext: input.conversationContext,
     });
 
     if (!applied.ok) {
