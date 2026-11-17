@@ -116,6 +116,27 @@ describe("Discovery agent empty / clarify / success paths", () => {
     if (result.ok) return;
     expect(result.code).toBe("low_confidence");
     expect(result.inventedJobs).toBe(false);
+    expect(result.message).toMatch(/couldn't find any approved jobs/i);
+  });
+
+  it("soft-falls back when skill ranking finds no literal skill hits", async () => {
+    const related = {
+      ...liveJob,
+      id: "job-php",
+      title: "Backend Engineer",
+      description: "PHP and Laravel APIs in Dhaka",
+    };
+    const result = await runDiscoveryAgent(
+      { question: "I know React, JavaScript and SQL. Find suitable job" },
+      {
+        listLiveJobs: async () => ({ ok: true, jobs: [related] }),
+        retrieveCorpus: async () => ({ ok: true, matches: [] }),
+      },
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.liveJobs.length).toBeGreaterThan(0);
+    expect(result.inventedJobs).toBe(false);
   });
 
   it("returns needs_clarification for vague empty job search", async () => {

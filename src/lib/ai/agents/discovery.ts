@@ -1,4 +1,7 @@
-import { classifyAssistantIntent } from "@/lib/ai/assistant-intent";
+import {
+  classifyAssistantIntent,
+  noLiveJobsMatchAnswer,
+} from "@/lib/ai/assistant-intent";
 import {
   evaluateFairnessBeforeRank,
   mustBlockJobRanking,
@@ -15,7 +18,7 @@ import { extractSkillsFromQuestion, mergeSkillLists } from "@/lib/ai/skill-extra
 export type DiscoveryAgentDeps = {
   listLiveJobs: (
     question: string,
-    opts?: { skillHint?: string | null },
+    opts?: { skillHint?: string | null; skillTerms?: string[] },
   ) => Promise<
     | { ok: true; jobs: LiveApprovedJob[] }
     | { ok: false; message: string }
@@ -96,17 +99,26 @@ export async function runDiscoveryAgent(
   );
 
   const hints = (input.memory?.searchHints ?? "").trim();
-  const questionForSearch = hints
-    ? `${questionUsed} ${hints}`.trim().slice(0, 240)
-    : questionUsed;
+  // Skill searches must put skills first so live ILIKE can find React/SQL/etc.
+  const questionForSearch = (
+    classified.useSkillRanking && skills.length
+      ? `${skills.join(" ")} ${questionUsed} ${hints}`
+      : hints
+        ? `${questionUsed} ${hints}`
+        : questionUsed
+  )
+    .trim()
+    .slice(0, 240);
 
   let liveJobs: Array<LiveApprovedJob | SkillMatchedJob> = [];
   let corpusMatches: CorpusMatch[] = [];
   let ragAvailable = true;
 
   if (classified.searchJobs || classified.useSkillRanking) {
-    const skillHint = skills[0] ?? null;
-    const live = await deps.listLiveJobs(questionForSearch, { skillHint });
+    let live = await deps.listLiveJobs(questionForSearch, {
+      skillHint: skills[0] ?? null,
+      skillTerms: skills,
+    });
     if (!live.ok) {
       return {
         ok: false,
@@ -117,9 +129,25 @@ export async function runDiscoveryAgent(
       };
     }
 
-    // Fairness already passed — safe to rank. Memory skills soft-rank; skill intent still requires hits.
-    if (classified.useSkillRanking) {
-      liveJobs = rankJobsBySkills(live.jobs, skills, { limit: 8, requireSkillHit: true });
+    // Retry with skills-only query when the natural-language ask returned an empty pool.
+    if (classified.useSkillRanking && live.jobs.length === 0 && skills.length > 0) {
+      const skillOnly = await deps.listLiveJobs(skills.join(" "), {
+        skillHint: skills[0] ?? null,
+        skillTerms: skills,
+      });
+      if (skillOnly.ok) live = skillOnly;
+    }
+
+    // Fairness already passed — safe to rank.
+    // Strict skill hits first; if none, soft-rank / show related approved jobs (never invent).
+    if (classified.useSkillRanking && skills.length > 0) {
+      const strict = rankJobsBySkills(live.jobs, skills, { limit: 8, requireSkillHit: true });
+      if (strict.length > 0) {
+        liveJobs = strict;
+      } else {
+        const soft = rankJobsBySkills(live.jobs, skills, { limit: 8, requireSkillHit: false });
+        liveJobs = soft.length > 0 ? soft : live.jobs.slice(0, 8);
+      }
     } else if (skills.length > 0) {
       const ranked = rankJobsBySkills(live.jobs, skills, { limit: 8, requireSkillHit: false });
       liveJobs = ranked.length > 0 ? ranked : live.jobs.slice(0, 8);
@@ -140,6 +168,7 @@ export async function runDiscoveryAgent(
   // Never fabricate rows. Empty job-seeking turns refuse or clarify — they must
   // not look like confident recommendations (heuristic score, not calibrated).
   const intentNeedsJobs = classified.searchJobs || classified.useSkillRanking;
+  const queryTooVague = isVagueJobSearchQuery(questionUsed);
   const assessment = assessDiscoveryConfidence({
     liveJobCount: liveJobs.length,
     corpusCount: corpusMatches.length,
@@ -149,7 +178,7 @@ export async function runDiscoveryAgent(
   const decision = decideDiscoveryConfidence({
     assessment,
     intentNeedsJobs,
-    queryTooVague: isVagueJobSearchQuery(questionUsed),
+    queryTooVague,
   });
 
   if (
@@ -158,10 +187,15 @@ export async function runDiscoveryAgent(
     corpusMatches.length === 0 &&
     decision.action !== "allow"
   ) {
+    const emptyMessage =
+      decision.action === "clarify"
+        ? decision.message
+        : // Specific empty asks (Atlantis / unmatched skills) get a clear no-match, not the vague grounding line.
+          noLiveJobsMatchAnswer();
     return {
       ok: false,
       code: decision.action === "clarify" ? "needs_clarification" : "low_confidence",
-      message: decision.message,
+      message: emptyMessage,
       inventedJobs: false,
       piiRedacted: pii.redacted,
       confidence: {

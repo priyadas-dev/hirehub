@@ -76,13 +76,16 @@ function isResumeImprovePattern(q: string): boolean {
   );
 }
 
+/** Common noisy spellings seekers type for "job(s)". */
+const JOB_NOUN =
+  /\b(jobs?|jubs?|jon|jpb|openings?|vacancies|positions?|roles?|opportunit(?:y|ies)?)\b/i;
+
 /**
  * "Tell me about an AI job" / "describe remote jobs" — vacancy seeking, not a concept essay.
  * These must not go to Gemini general_knowledge (slow/timeout on live); Discovery is faster.
  */
 function isJobTopicAskPattern(q: string): boolean {
-  const jobNoun = /\b(jobs?|openings?|vacancies|positions?|roles?|opportunit(?:y|ies)?)\b/i;
-  if (!jobNoun.test(q)) return false;
+  if (!JOB_NOUN.test(q)) return false;
   // Avoid stealing interview / learning questions that mention "job".
   if (isInterviewPattern(q) || isLearningPattern(q)) return false;
   if (
@@ -95,7 +98,7 @@ function isJobTopicAskPattern(q: string): boolean {
   // "what is/are … job(s)" when the topic is a role/vacancy, not a CS concept.
   if (
     /^(what\s+(is|are)|what'?s)\b/i.test(q) &&
-    /\b(a |an |the )?(ai|ml|software|frontend|backend|full[\s-]?stack|data|product|design|marketing|sales|remote|full[\s-]?time|part[\s-]?time)?.{0,40}\b(jobs?|roles?|openings?|positions?)\b/i.test(
+    /\b(a |an |the )?(ai|ml|software|frontend|backend|full[\s-]?stack|data|product|design|marketing|sales|remote|full[\s-]?time|part[\s-]?time)?.{0,40}\b(jobs?|jubs?|roles?|openings?|positions?)\b/i.test(
       q,
     )
   ) {
@@ -105,7 +108,7 @@ function isJobTopicAskPattern(q: string): boolean {
 }
 
 function isExplicitVacancyPattern(q: string): boolean {
-  const jobNoun = /\b(jobs?|openings?|vacancies|positions?|roles?|opportunit(?:y|ies)?)\b/i;
+  const jobNoun = JOB_NOUN;
   if (isJobTopicAskPattern(q)) return true;
   if (
     /\b(find|show|search|list|browse|get me|give me|gimme|looking for|recommend|are there|is there|do you have|have you got)\b/i.test(
@@ -117,16 +120,16 @@ function isExplicitVacancyPattern(q: string): boolean {
   }
   if (
     /\b(full[\s-]?time|part[\s-]?time|contract|remote|on[\s-]?site|hybrid)\b/i.test(q) &&
-    /\b(jobs?|openings?|positions?|roles?)\b/i.test(q)
+    jobNoun.test(q)
   ) {
     return true;
   }
-  if (/\b(want|need|looking for)\b.{0,40}\b(a |an )?(jobs?|roles?|positions?)\b/i.test(q)) {
+  if (/\b(want|need|looking for)\b.{0,40}\b(a |an )?(jobs?|jubs?|roles?|positions?)\b/i.test(q)) {
     return true;
   }
   // Location-led: "in sylhet gimme jobs", "jobs in Dhaka", "any job in Sylhet"
   if (
-    (jobNoun.test(q) || /\b(jpb|jon)\b/i.test(q)) &&
+    jobNoun.test(q) &&
     /\b(dhaka|sylhet|chittagong|chattogram|khulna|rajshahi|remote)\b/i.test(q)
   ) {
     return true;
@@ -377,10 +380,12 @@ export function classifyAssistantIntent(question: string): ClassifiedIntent {
 
   if (looksLikeJobSearch(q)) {
     // Skill ranking only when the user explicitly asks to match skills / listed skills for jobs
+    // (includes noisy spellings: suitble / jubs).
     const explicitSkillJob =
-      /\b(match(ing)? my skills|based on my skills|jobs? (matching|for|requiring|with)|requiring|suitable jobs?)\b/i.test(
+      /\b(match(ing)? my skills|based on my skills|jobs? (matching|for|requiring|with)|requiring|suit+a?ble jobs?|suitble j[ou]bs?)\b/i.test(
         q,
-      ) || /\bi know\b.+\b(find|show|search|suitable)\b.+\bjobs?\b/i.test(q);
+      ) ||
+      /\bi know\b.+\b(find|show|search|suit+a?ble|suitble)\b.+\b(jobs?|jubs?)\b/i.test(q);
     return {
       intent: "job_search",
       searchJobs: true,

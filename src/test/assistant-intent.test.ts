@@ -105,6 +105,18 @@ describe("classifyAssistantIntent routing table", () => {
       skillRank: true,
     },
     {
+      q: "I know React, JavaScript and SQL. Find suitable job",
+      intent: "job_search",
+      searchJobs: true,
+      skillRank: true,
+    },
+    {
+      q: "I know React. Find suitble jubs",
+      intent: "job_search",
+      searchJobs: true,
+      skillRank: true,
+    },
+    {
       q: "What skills should I learn for this role?",
       intent: "learning_guidance",
       searchJobs: false,

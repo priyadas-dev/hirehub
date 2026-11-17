@@ -825,10 +825,13 @@ export async function runSupervisor(
       },
       {
         listLiveJobs: async (question, opts) => {
-          const skillHint = opts?.skillHint;
+          const skillTerms =
+            opts?.skillTerms?.filter((s) => s.trim().length > 0) ??
+            (opts?.skillHint?.trim() ? [opts.skillHint.trim()] : undefined);
           return deps.listLiveJobs(question, {
-            skillTerms: skillHint ? [skillHint] : undefined,
-            limit: 8,
+            skillTerms,
+            // Wider pool so skill ranking has something to score on live.
+            limit: skillTerms?.length ? 20 : 8,
           });
         },
         retrieveCorpus: async (question) => {
