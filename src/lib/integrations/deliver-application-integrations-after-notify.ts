@@ -99,6 +99,8 @@ export const deliverApplicationIntegrationsAfterNotify = createServerFn({ method
         companyName = company?.name ?? null;
       }
 
+      // Status Resend mail is owned by notify-application-status EF (reliable host secrets).
+      // This server fn keeps HubSpot soft-sync only to avoid duplicate emails.
       const result = await deliverApplicationIntegrations({
         applicationId: application.id,
         status: data.status,
@@ -106,6 +108,7 @@ export const deliverApplicationIntegrationsAfterNotify = createServerFn({ method
         seekerFullName: seeker?.full_name?.trim() || "Candidate",
         jobTitle: job.title || "a job",
         companyName,
+        skipEmail: true,
       });
 
       return {

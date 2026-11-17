@@ -476,4 +476,33 @@ describe("deliverApplicationIntegrations", () => {
     expect(result.email).toMatchObject({ ok: true, skipped: true });
     expect(result.hubspot).toMatchObject({ ok: true, skipped: true });
   });
+
+  it("skipEmail avoids Resend when notify EF already owns status mail", async () => {
+    const fetchImpl = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ id: "should_not_call" }),
+    })) as unknown as typeof fetch;
+
+    const result = await deliverApplicationIntegrations({
+      applicationId: "11111111-1111-4111-8111-111111111111",
+      status: "shortlisted",
+      seekerEmail: "a@b.com",
+      seekerFullName: "A",
+      jobTitle: "Role",
+      env: {
+        RESEND_API_KEY: "re_test",
+        CONTACT_FROM_EMAIL: "HireHub <onboarding@resend.dev>",
+      },
+      fetchImpl,
+      skipEmail: true,
+    });
+
+    expect(result.email).toMatchObject({
+      ok: true,
+      skipped: true,
+      reason: "handled_by_notify_edge_function",
+    });
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
 });

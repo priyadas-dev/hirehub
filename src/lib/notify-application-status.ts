@@ -23,11 +23,20 @@ export type NotifyApplicationStatusBody = {
 
 export type NotifyDeliveryStatus = "pending_provider" | "delivered" | "skipped";
 
+export type NotifyEmailDelivery = {
+  sent: boolean;
+  skipped?: boolean;
+  reason?: string;
+  messageId?: string;
+};
+
 export type NotifyApplicationStatusResult = {
   ok: boolean;
   delivered: boolean;
   deliveryStatus: NotifyDeliveryStatus;
   reason: string;
+  /** Soft Resend attempt from notify-application-status EF (optional). */
+  emailDelivery?: NotifyEmailDelivery;
   notification?: {
     applicationId: string;
     status: ApplicationStatus;

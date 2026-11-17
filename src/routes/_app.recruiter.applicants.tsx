@@ -142,8 +142,19 @@ function ApplicantsPage() {
       from: ApplicationStatus;
       status: ApplicationStatus;
     }) => updateApplicationStatusWithNotification(input),
-    onSuccess: async () => {
-      toast.success("Application status updated");
+    onSuccess: async (result) => {
+      const email = result.emailDelivery;
+      if (email?.sent) {
+        toast.success("Application status updated", {
+          description: "Seeker notified in-app and by email.",
+        });
+      } else if (email?.skipped || email?.reason) {
+        toast.success("Application status updated", {
+          description: `In-app notify OK. Email: ${email.reason ?? "skipped"}.`,
+        });
+      } else {
+        toast.success("Application status updated");
+      }
       await qc.invalidateQueries({ queryKey: ["recruiter-applicants"] });
       await qc.invalidateQueries({ queryKey: ["recruiter-pipeline-counts"] });
       await qc.invalidateQueries({ queryKey: ["dash-counts"] });

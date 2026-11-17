@@ -4,8 +4,12 @@
  * Accepts { applicationId, status } only.
  * Identity / ownership are resolved from the caller's JWT + database — never from the body.
  *
- * Delivery: inserts an in-app notification for the seeker (idempotent via dedupe_key).
- * DB triggers may already create the same row; ON CONFLICT keeps this safe.
+ * Delivery:
+ * 1) In-app notification for the seeker (idempotent via dedupe_key).
+ * 2) Soft Resend status email after AuthZ (never fails the in-app notify path).
+ *
+ * Resend secrets (Edge Function secrets, not Vercel alone):
+ *   RESEND_API_KEY + RESEND_FROM_EMAIL (or CONTACT_FROM_EMAIL fallback)
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 
@@ -32,6 +36,85 @@ function json(status: number, body: Record<string, unknown>) {
     status,
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+/** Soft outbound Resend — never throws; never logs secret values. */
+async function sendStatusEmailViaResend(input: {
+  applicationId: string;
+  status: ApplicationStatus;
+  seekerEmail: string;
+  jobTitle: string;
+}): Promise<{ sent: boolean; skipped?: boolean; reason?: string; messageId?: string }> {
+  const apiKey = (Deno.env.get("RESEND_API_KEY") ?? "").trim();
+  const from =
+    (Deno.env.get("RESEND_FROM_EMAIL") ?? "").trim() ||
+    (Deno.env.get("CONTACT_FROM_EMAIL") ?? "").trim();
+  const to = input.seekerEmail.trim();
+
+  if (!apiKey || !from) {
+    return { sent: false, skipped: true, reason: "provider_not_configured" };
+  }
+  if (!to || !to.includes("@")) {
+    return { sent: false, skipped: true, reason: "missing_seeker_email" };
+  }
+
+  const title = input.jobTitle.trim() || "a job";
+  try {
+    const res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from,
+        to: [to],
+        subject: `HireHub: application update — ${title}`,
+        html:
+          `<p>Your application for <strong>${escapeHtml(title)}</strong> is now ` +
+          `<strong>${escapeHtml(input.status)}</strong>.</p>` +
+          `<p>Sign in to HireHub to view details.</p>`,
+        headers: {
+          "X-HireHub-Application-Id": input.applicationId,
+          "X-HireHub-Status": input.status,
+        },
+        tags: [
+          { name: "hirehub_kind", value: "application_status" },
+          { name: "application_id", value: input.applicationId },
+        ],
+      }),
+    });
+
+    let body: unknown = null;
+    try {
+      body = await res.json();
+    } catch {
+      body = null;
+    }
+
+    if (!res.ok) {
+      return {
+        sent: false,
+        reason: `resend_http_${res.status}`,
+      };
+    }
+
+    const messageId =
+      body && typeof body === "object" && "id" in body && typeof (body as { id: unknown }).id === "string"
+        ? (body as { id: string }).id
+        : "unknown";
+    return { sent: true, messageId };
+  } catch {
+    return { sent: false, reason: "resend_network_error" };
+  }
 }
 
 function parseBody(
@@ -173,11 +256,35 @@ Deno.serve(async (req) => {
     });
   }
 
+  // Soft Resend after in-app notify — same JWT AuthZ + service role seeker email load.
+  let emailDelivery: {
+    sent: boolean;
+    skipped?: boolean;
+    reason?: string;
+    messageId?: string;
+  } = { sent: false, skipped: true, reason: "not_attempted" };
+  try {
+    const { data: seeker } = await admin
+      .from("profiles")
+      .select("email")
+      .eq("id", application.seeker_id)
+      .maybeSingle();
+    emailDelivery = await sendStatusEmailViaResend({
+      applicationId: application.id,
+      status: application.status as ApplicationStatus,
+      seekerEmail: typeof seeker?.email === "string" ? seeker.email : "",
+      jobTitle,
+    });
+  } catch {
+    emailDelivery = { sent: false, reason: "soft_fail" };
+  }
+
   return json(200, {
     ok: true,
     delivered: true,
     deliveryStatus: "delivered",
     reason: "In-app notification recorded for the seeker",
+    emailDelivery,
     notification: {
       applicationId: application.id,
       status: application.status,

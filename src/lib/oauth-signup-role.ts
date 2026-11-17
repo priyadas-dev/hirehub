@@ -354,7 +354,18 @@ export function isSupabaseServiceRoleConfigured(env: {
   SUPABASE_URL?: string | undefined;
   SUPABASE_SERVICE_ROLE_KEY?: string | undefined;
 } = typeof process !== "undefined" ? process.env : {}): boolean {
-  return Boolean(env.SUPABASE_URL?.trim() && env.SUPABASE_SERVICE_ROLE_KEY?.trim());
+  // Lazy import avoided — normalize inline so quoted Vercel values still count as set.
+  const normalize = (v: string | undefined) => {
+    let s = (v ?? "").trim();
+    if (
+      (s.startsWith('"') && s.endsWith('"')) ||
+      (s.startsWith("'") && s.endsWith("'"))
+    ) {
+      s = s.slice(1, -1).trim();
+    }
+    return s;
+  };
+  return Boolean(normalize(env.SUPABASE_URL) && normalize(env.SUPABASE_SERVICE_ROLE_KEY));
 }
 
 /** Loading-flag cleanup contract for Google OAuth UI states. */

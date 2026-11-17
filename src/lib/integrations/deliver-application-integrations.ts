@@ -11,6 +11,11 @@ export type DeliverApplicationIntegrationsInput = {
   companyName?: string | null;
   env?: NodeJS.ProcessEnv;
   fetchImpl?: typeof fetch;
+  /**
+   * When true, skip Resend status mail (used after notify-application-status EF
+   * already attempted outbound email — avoids duplicate sends).
+   */
+  skipEmail?: boolean;
 };
 
 /**
@@ -23,14 +28,21 @@ export async function deliverApplicationIntegrations(
   email: Awaited<ReturnType<typeof sendApplicationStatusMail>>;
   hubspot: Awaited<ReturnType<typeof syncApplicationToHubSpot>>;
 }> {
-  const email = await sendApplicationStatusMail({
-    applicationId: input.applicationId,
-    status: input.status,
-    seekerEmail: input.seekerEmail,
-    jobTitle: input.jobTitle,
-    env: input.env,
-    fetchImpl: input.fetchImpl,
-  });
+  const email = input.skipEmail
+    ? ({
+        ok: true as const,
+        skipped: true as const,
+        reason: "handled_by_notify_edge_function",
+        idempotencyKey: `email:application_status:${input.applicationId}:${input.status}`,
+      } satisfies Awaited<ReturnType<typeof sendApplicationStatusMail>>)
+    : await sendApplicationStatusMail({
+        applicationId: input.applicationId,
+        status: input.status,
+        seekerEmail: input.seekerEmail,
+        jobTitle: input.jobTitle,
+        env: input.env,
+        fetchImpl: input.fetchImpl,
+      });
 
   const hubspot = await syncApplicationToHubSpot({
     applicationId: input.applicationId,
