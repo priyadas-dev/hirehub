@@ -22,6 +22,7 @@ import {
   isOfferDraftishQuestion,
   isOutreachDraftishQuestion,
   isProcessHelpQuestion,
+  isSelectApplicantByNameQuestion,
   isShortlistishQuestion,
   isShortlistableApplicationStatus,
   matchApplicantsByNameHint,
@@ -216,6 +217,22 @@ describe("detectRecruiterChatIntent", () => {
     expect(
       resolveApplicantChoiceFromRef(choices, { kind: "pronoun" }, "a3")?.applicationId,
     ).toBe("a3");
+  });
+
+  it("routes select <name> to shortlist instead of owned-job browse dump", () => {
+    expect(isSelectApplicantByNameQuestion("select priya")).toBe(true);
+    expect(detectRecruiterChatIntent("select priya")).toBe("shortlist");
+    expect(extractApplicantNameHint("select priya")).toBe("priya");
+    expect(extractApplicantNameHint("select select priya")).toBe("priya");
+    const hits = matchApplicantsByNameHint(
+      [
+        { id: "1", profiles: { full_name: "Koushik Roy", email: "k@x.com" } },
+        { id: "2", profiles: { full_name: "Priya Das", email: "p@x.com" } },
+      ],
+      "priya",
+    );
+    expect(hits).toHaveLength(1);
+    expect(hits[0]?.id).toBe("2");
   });
 
   it("routes confirm typos to confirm_shortlist instead of owned-job browse dump", () => {

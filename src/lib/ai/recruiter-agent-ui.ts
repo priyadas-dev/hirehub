@@ -327,6 +327,15 @@ export function applyApplicantStatusFilter<T extends { status: string }>(
   return applicants.filter((a) => !wanted.has(String(a.status).toLowerCase()));
 }
 
+/** "select priya" / "pick rajon" — retarget shortlist by name (not browse → owned-jobs dump). */
+export function isSelectApplicantByNameQuestion(question: string): boolean {
+  const q = question.trim();
+  if (!q || isProcessHelpQuestion(q)) return false;
+  if (/\bselect\s+(?:the\s+)?job\b/i.test(q)) return false;
+  if (!/\b(select|pick|choose)\b/i.test(q)) return false;
+  return extractApplicantNameHints(q).length > 0;
+}
+
 export function isShortlistishQuestion(question: string): boolean {
   const q = question.trim();
   if (isProcessHelpQuestion(q)) return false;
@@ -334,6 +343,8 @@ export function isShortlistishQuestion(question: string): boolean {
   if (isOfferDraftishQuestion(q)) return false;
   // Status filters like "not shortlisted" are list asks, not shortlist actions.
   if (isApplicantStatusFilterQuestion(q)) return false;
+  // "select priya" must shortlist-route, not fall through to browse.
+  if (isSelectApplicantByNameQuestion(q)) return true;
   // Accept "shortlist", "short list", "short-list", typos (shortlis), and common candidate typos.
   return (
     SHORTLIST_WORD_RE.test(q) ||
@@ -554,7 +565,7 @@ export type OwnedJobForReply = {
 /** Format owned jobs for chat; optionally include applicant counts. */
 export function formatOwnedJobsReply(
   list: OwnedJobForReply[],
-  options?: { includeApplicantCounts?: boolean },
+  options?: { includeApplicantCounts?: boolean; plain?: boolean },
 ): string {
   if (list.length === 0) return "You have no owned jobs yet. Post a job first.";
   const withCounts = Boolean(options?.includeApplicantCounts);
@@ -567,6 +578,8 @@ export function formatOwnedJobsReply(
       return `${base} — ${n} applicant${n === 1 ? "" : "s"}`;
     })
     .join("\n");
+  // Plain list for error / clarify fallbacks — avoid "Yes — these are jobs you own…" spam.
+  if (options?.plain) return lines;
   return withCounts
     ? `Yes — these are jobs you own (JWT recruiter_id), with applicant counts:\n${lines}\n\nSelect a job above or say e.g. “shortlist from AI engineers”.`
     : `Yes — these are jobs you own (JWT recruiter_id):\n${lines}\n\nSelect a job above or say e.g. “shortlist from AI engineers”.`;
@@ -769,12 +782,16 @@ export function extractApplicantNameHints(question: string): string[] {
     .trim();
   const parts = cleaned
     .split(/\s*(?:,|&|\/|\band\b|\bor\b)\s*/i)
-    .map((p) => p.trim())
+    .map((p) =>
+      p
+        .replace(/^(?:select|pick|choose|confirm|conifrm|short[\s-]?list(?:ed|ing|e)?)\s+/i, "")
+        .trim(),
+    )
     .filter((p) => {
       if (p.length < 2) return false;
       if (STOPWORDS.has(p.toLowerCase())) return false;
       if (
-        /^(from|for|on|the|this|that|him|her|my|job|applicant|candidate|please|and|or)$/i.test(
+        /^(from|for|on|the|this|that|him|her|my|job|applicant|candidate|please|and|or|select|pick|choose)$/i.test(
           p,
         )
       ) {

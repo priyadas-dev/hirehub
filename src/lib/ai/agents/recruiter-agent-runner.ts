@@ -94,10 +94,30 @@ export async function runRecruiterSpecialistFromSupervisor(
         message: `Application updated to ${plan.plannedStatus}.`,
       };
     } catch (err) {
+      // Concurrent confirm / stale UI: if DB already has the target status, treat as success.
+      const { data: fresh } = await ctx.supabase
+        .from("applications")
+        .select("status")
+        .eq("id", applicationId)
+        .maybeSingle();
+      const freshStatus = typeof fresh?.status === "string" ? fresh.status : null;
+      if (freshStatus === plan.plannedStatus) {
+        return {
+          ok: true,
+          status: "updated",
+          applicationId,
+          plannedStatus: plan.plannedStatus,
+          message: `This applicant is already ${plan.plannedStatus}. No further change needed.`,
+        };
+      }
+      const raw = err instanceof Error ? err.message : "Failed to update application status.";
+      const message = /already changed/i.test(raw)
+        ? `Could not shortlist — status is now “${freshStatus ?? "unknown"}” (expected from “${application.status}”). Refresh applicants, then try again or move them to the next pipeline step.`
+        : raw;
       return {
         ok: false,
         code: "db",
-        message: err instanceof Error ? err.message : "Failed to update application status.",
+        message,
       };
     }
   }

@@ -293,6 +293,29 @@ function RecruiterAgentPage() {
     return appsAcrossOwned.data?.find((a) => a.id === selectedAppId) ?? null;
   }, [appsForJob.data, appsAcrossOwned.data, selectedAppId]);
 
+  const pendingShortlistApp = useMemo(() => {
+    if (!pendingShortlistAppId) return null;
+    return (
+      appsForJob.data?.find((a) => a.id === pendingShortlistAppId) ||
+      appsAcrossOwned.data?.find((a) => a.id === pendingShortlistAppId) ||
+      null
+    );
+  }, [pendingShortlistAppId, appsForJob.data, appsAcrossOwned.data]);
+
+  /** Hide Confirm once the candidate is already shortlisted (or past applied). */
+  const showConfirmShortlistBar = Boolean(
+    pendingShortlistAppId &&
+      (!pendingShortlistApp || isShortlistableApplicationStatus(pendingShortlistApp.status)),
+  );
+
+  const latestDraftTurnId = useMemo(() => {
+    for (let i = turns.length - 1; i >= 0; i -= 1) {
+      const t = turns[i];
+      if (t?.role === "assistant" && t.draft) return t.id;
+    }
+    return null;
+  }, [turns]);
+
   useEffect(() => {
     if (!id) return;
     setConversations(readRecruiterAgentHistory(id).conversations);
@@ -301,6 +324,15 @@ function RecruiterAgentPage() {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [turns, busy]);
+
+  // Auto-dismiss Confirm chip when applicant is already shortlisted in live data.
+  useEffect(() => {
+    if (!pendingShortlistAppId || !pendingShortlistApp) return;
+    if (!isShortlistableApplicationStatus(pendingShortlistApp.status)) {
+      setPendingShortlistAppId(null);
+      setTurns((prev) => scrubPendingShortlistFromTurns(prev));
+    }
+  }, [pendingShortlistAppId, pendingShortlistApp]);
 
   useEffect(() => {
     if (!id || turns.length === 0) return;
@@ -350,18 +382,46 @@ function RecruiterAgentPage() {
     persistTitleRef.current = "New conversation";
   }
 
+  function scrubPendingShortlistFromTurns(list: RecruiterChatTurn[]): RecruiterChatTurn[] {
+    return list.map((t) =>
+      t.role === "assistant" && t.pendingShortlistApplicationId
+        ? { ...t, pendingShortlistApplicationId: undefined }
+        : t,
+    );
+  }
+
+  function scrubDraftsFromTurns(list: RecruiterChatTurn[]): RecruiterChatTurn[] {
+    return list.map((t) =>
+      t.role === "assistant" && t.draft ? { ...t, draft: undefined } : t,
+    );
+  }
+
   function openConversation(conversation: RecruiterAgentConversation) {
     if (busy) return;
     setConversationId(conversation.id);
     const normalized = conversation.turns.map(normalizeRecruiterChatTurn);
-    setTurns(normalized);
-    setPendingShortlistAppId(
+    const pendingId =
       [...normalized]
         .reverse()
         .find((t) => t.role === "assistant" && t.pendingShortlistApplicationId)
-        ?.pendingShortlistApplicationId ?? null,
-    );
-    const lastDraft = [...normalized]
+        ?.pendingShortlistApplicationId ?? null;
+    // Never restore Confirm for someone already shortlisted / past applied.
+    const pendingRow =
+      (pendingId &&
+        (appsAcrossOwned.data?.find((a) => a.id === pendingId) ||
+          appsForJob.data?.find((a) => a.id === pendingId))) ||
+      null;
+    const restorePending =
+      Boolean(pendingId) &&
+      (!pendingRow || isShortlistableApplicationStatus(pendingRow.status));
+    setPendingShortlistAppId(restorePending ? pendingId : null);
+    // Persist scrub so Confirm does not revive on every reopen after shortlist.
+    const turnsForUi =
+      restorePending || !pendingId
+        ? normalized
+        : scrubPendingShortlistFromTurns(normalized);
+    setTurns(turnsForUi);
+    const lastDraft = [...turnsForUi]
       .reverse()
       .find((t) => t.role === "assistant" && t.draft)?.draft;
     setDraftSubject(lastDraft?.subject ?? "");
@@ -407,6 +467,10 @@ function RecruiterAgentPage() {
     });
     const parsed = parseShortlistAgentResult(result);
     if (parsed.kind === "error") {
+      // Stale Confirm chip after a failed/already-moved status — don't keep proposing forever.
+      if (confirm || /already|refresh|pipeline/i.test(parsed.message)) {
+        setPendingShortlistAppId(null);
+      }
       if (!options?.quiet) {
         appendTurns({
           id: newTurnId(),
@@ -417,6 +481,8 @@ function RecruiterAgentPage() {
         });
       }
       toast.error("Shortlist failed", { description: parsed.message });
+      await qc.invalidateQueries({ queryKey: ["recruiter-agent-applicants"] });
+      await qc.invalidateQueries({ queryKey: ["recruiter-agent-applicants-all-owned"] });
       return parsed;
     }
     if (parsed.needsConfirm) {
@@ -431,12 +497,16 @@ function RecruiterAgentPage() {
       return parsed;
     }
     setPendingShortlistAppId(null);
-    appendTurns({
-      id: newTurnId(),
-      role: "assistant",
-      text: `${parsed.message} Status: ${parsed.plannedStatus}.`,
-      source: "supervisor",
-    });
+    // Drop stale Confirm markers from history so reopening chat does not revive the chip.
+    setTurns((prev) => [
+      ...scrubPendingShortlistFromTurns(prev),
+      {
+        id: newTurnId(),
+        role: "assistant" as const,
+        text: `${parsed.message} Status: ${parsed.plannedStatus}.`,
+        source: "supervisor" as const,
+      },
+    ]);
     toast.success("Applicant shortlisted", { duration: AGENT_TOAST_MS });
     await qc.invalidateQueries({ queryKey: ["recruiter-agent-applicants"] });
     await qc.invalidateQueries({ queryKey: ["recruiter-agent-applicants-all-owned"] });
@@ -452,6 +522,8 @@ function RecruiterAgentPage() {
     options?: {
       applicationId?: string | null;
       draftKind?: "outreach" | "offer";
+      /** Skip adding a user-visible chat bubble (editor Redraft). */
+      quietUser?: boolean;
     },
   ) {
     const draftKind = options?.draftKind ?? "outreach";
@@ -480,13 +552,17 @@ function RecruiterAgentPage() {
     const body = htmlToEditablePlain(parsed.htmlBody);
     setDraftSubject(parsed.subject);
     setDraftBody(body);
-    appendTurns({
-      id: newTurnId(),
-      role: "assistant",
-      text: parsed.message,
-      source: "supervisor",
-      draft: { subject: parsed.subject, body },
-    });
+    // Keep a single live draft in chat — replace older draft cards so they do not stack.
+    setTurns((prev) => [
+      ...scrubDraftsFromTurns(prev),
+      {
+        id: newTurnId(),
+        role: "assistant" as const,
+        text: parsed.message,
+        source: "supervisor" as const,
+        draft: { subject: parsed.subject, body },
+      },
+    ]);
     toast.success(draftKind === "offer" ? "Offer draft ready" : "Outreach draft ready", {
       duration: AGENT_TOAST_MS,
     });
@@ -546,13 +622,16 @@ function RecruiterAgentPage() {
       const body = htmlToEditablePlain(asOutreach.htmlBody);
       setDraftSubject(asOutreach.subject);
       setDraftBody(body);
-      appendTurns({
-        id: newTurnId(),
-        role: "assistant",
-        text: asOutreach.message,
-        source: "supervisor",
-        draft: { subject: asOutreach.subject, body },
-      });
+      setTurns((prev) => [
+        ...scrubDraftsFromTurns(prev),
+        {
+          id: newTurnId(),
+          role: "assistant" as const,
+          text: asOutreach.message,
+          source: "supervisor" as const,
+          draft: { subject: asOutreach.subject, body },
+        },
+      ]);
       return;
     }
     const okFlag = (result as { ok?: boolean } | null)?.ok;
@@ -973,7 +1052,7 @@ function RecruiterAgentPage() {
     appendTurns({
       id: newTurnId(),
       role: "assistant",
-      text: `I couldn’t tell which owned job you mean. Here are jobs under your account:\n${formatOwnedJobsChatReply(jobs.data ?? [])}`,
+      text: `I couldn’t tell which owned job you mean. Here are jobs under your account:\n${formatOwnedJobsChatReply(jobs.data ?? [], { plain: true })}`,
       source: "local" as const,
     });
   }
@@ -1103,7 +1182,10 @@ function RecruiterAgentPage() {
           pool = [];
         }
       }
-      const nameGuess = extractApplicantNameHint(`select ${text}`) ?? text.trim();
+      // Avoid "select select priya" — text may already include select/pick.
+      const nameGuess =
+        extractApplicantNameHint(/\b(select|pick|choose)\b/i.test(text) ? text : `select ${text}`) ??
+        text.replace(/^\s*(select|pick|choose)\s+/i, "").trim();
       const byName = nameGuess ? matchApplicantsByNameHint(pool, nameGuess) : [];
       if (byName.length === 1) {
         await selectAndProposeShortlist(byName[0]!.id, { alreadyBusy: true });
@@ -1127,7 +1209,7 @@ function RecruiterAgentPage() {
       appendTurns({
         id: newTurnId(),
         role: "assistant",
-        text: `I only search jobs you own. I couldn’t match that phrase to a job or applicant. Try a job title, “show all applicants”, or “confirm <name>”.\n\nOwned jobs:\n${formatOwnedJobsChatReply(owned)}`,
+        text: `I couldn’t match that to a job or applicant. Try “select <name>”, “show all applicants”, or “shortlist from <job title>”.\n\nYour owned jobs:\n${formatOwnedJobsChatReply(owned, { plain: true })}`,
         source: "local" as const,
       });
       return;
@@ -1787,7 +1869,8 @@ function RecruiterAgentPage() {
                     </div>
                   )}
 
-                  {t.draft && (
+                  {/* Only the latest outreach draft card — older ones are scrubbed / hidden. */}
+                  {t.draft && t.id === latestDraftTurnId && (
                     <div className="max-w-xl space-y-2 rounded-2xl border bg-card p-4">
                       <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground">
                         <Mail className="size-3.5" aria-hidden />
@@ -1795,8 +1878,11 @@ function RecruiterAgentPage() {
                       </div>
                       <p className="text-sm font-medium">{t.draft.subject}</p>
                       <p className="whitespace-pre-wrap font-mono text-xs text-muted-foreground">
-                        {t.draft.body.slice(0, 400)}
-                        {t.draft.body.length > 400 ? "…" : ""}
+                        {t.draft.body.slice(0, 280)}
+                        {t.draft.body.length > 280 ? "…" : ""}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground">
+                        Edit the full draft in the editor below the chat.
                       </p>
                     </div>
                   )}
@@ -1808,7 +1894,7 @@ function RecruiterAgentPage() {
             <div ref={bottomRef} />
           </div>
 
-          {pendingShortlistAppId && (
+          {showConfirmShortlistBar && pendingShortlistAppId && (
             <div className="space-y-2 border-t border-signal/20 bg-signal/5 px-4 py-3">
               <p className="text-xs font-semibold uppercase tracking-wide text-signal">
                 Step: confirm shortlist
@@ -1817,10 +1903,11 @@ function RecruiterAgentPage() {
                 <p className="text-sm">
                   Proposed:{" "}
                   <span className="font-medium">
-                    {selectedApp
+                    {pendingShortlistApp || selectedApp
                       ? applicantDisplayName({
-                          full_name: selectedApp.profiles?.full_name,
-                          email: selectedApp.profiles?.email,
+                          full_name:
+                            (pendingShortlistApp ?? selectedApp)?.profiles?.full_name,
+                          email: (pendingShortlistApp ?? selectedApp)?.profiles?.email,
                         })
                       : "Selected applicant"}
                   </span>
@@ -1847,19 +1934,121 @@ function RecruiterAgentPage() {
                     size="sm"
                     variant="outline"
                     disabled={busy || confirmShortlist.isPending}
-                    onClick={() => setPendingShortlistAppId(null)}
+                    onClick={() => {
+                      setPendingShortlistAppId(null);
+                      setTurns((prev) => scrubPendingShortlistFromTurns(prev));
+                    }}
                   >
                     Cancel
                   </Button>
                 </div>
               </div>
-              {(selectedApp?.resume_storage_path || selectedApp?.resume_url) && (
+              {((pendingShortlistApp ?? selectedApp)?.resume_storage_path ||
+                (pendingShortlistApp ?? selectedApp)?.resume_url) && (
                 <ResumeOpenLink
-                  storagePath={selectedApp.resume_storage_path}
-                  legacyUrl={selectedApp.resume_url}
-                  fileName={selectedApp.resume_file_name || "View resume"}
+                  storagePath={(pendingShortlistApp ?? selectedApp)?.resume_storage_path}
+                  legacyUrl={(pendingShortlistApp ?? selectedApp)?.resume_url}
+                  fileName={
+                    (pendingShortlistApp ?? selectedApp)?.resume_file_name || "View resume"
+                  }
                 />
               )}
+            </div>
+          )}
+
+          {/* Draft editor lives inside the agent column (not a disconnected block below). */}
+          {(draftSubject || draftBody) && (
+            <div className="space-y-3 border-t bg-muted/20 px-4 py-3">
+              <div className="space-y-1">
+                <h2 className="flex items-center gap-2 text-sm font-semibold tracking-tight">
+                  <Mail className="size-4 text-signal" aria-hidden />
+                  Outreach draft editor
+                </h2>
+                <p className="text-xs text-muted-foreground">
+                  Draft only — nothing is emailed from this page.
+                </p>
+              </div>
+              <div className="space-y-1.5">
+                <label
+                  className="text-xs font-medium text-muted-foreground"
+                  htmlFor="outreach-subject"
+                >
+                  Subject
+                </label>
+                <Input
+                  id="outreach-subject"
+                  value={draftSubject}
+                  onChange={(e) => setDraftSubject(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label
+                  className="text-xs font-medium text-muted-foreground"
+                  htmlFor="outreach-body"
+                >
+                  Body (editable)
+                </label>
+                <Textarea
+                  id="outreach-body"
+                  rows={6}
+                  value={draftBody}
+                  onChange={(e) => setDraftBody(e.target.value)}
+                  className="font-mono text-xs"
+                />
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard.writeText(`${draftSubject}\n\n${draftBody}`);
+                      toast.success("Draft copied");
+                    } catch {
+                      toast.error("Could not copy draft");
+                    }
+                  }}
+                >
+                  <Copy /> Copy draft
+                </Button>
+                {jobId && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="signal"
+                    disabled={busy}
+                    onClick={() => {
+                      void (async () => {
+                        setBusy(true);
+                        try {
+                          await runOutreach(jobId, {
+                            applicationId: selectedAppId || pendingShortlistAppId,
+                            quietUser: true,
+                          });
+                        } finally {
+                          setBusy(false);
+                        }
+                      })();
+                    }}
+                  >
+                    Redraft via Supervisor
+                  </Button>
+                )}
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  disabled={busy}
+                  onClick={() => {
+                    setDraftSubject("");
+                    setDraftBody("");
+                    setTurns((prev) => scrubDraftsFromTurns(prev));
+                  }}
+                >
+                  Dismiss draft
+                </Button>
+              </div>
             </div>
           )}
 
@@ -1888,72 +2077,6 @@ function RecruiterAgentPage() {
             </Button>
           </form>
         </section>
-
-        {/* Persistent draft editor */}
-        {(draftSubject || draftBody) && (
-          <section className="space-y-3 rounded-2xl border bg-card p-5 shadow-sm">
-            <div className="space-y-1">
-              <h2 className="flex items-center gap-2 text-sm font-semibold tracking-tight">
-                <Mail className="size-4 text-signal" aria-hidden />
-                Outreach draft editor
-              </h2>
-              <p className="text-xs text-muted-foreground">
-                Draft only — <code className="text-[11px]">confirmSend: false</code>. Nothing is
-                emailed from this page.
-              </p>
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-muted-foreground" htmlFor="outreach-subject">
-                Subject
-              </label>
-              <Input
-                id="outreach-subject"
-                value={draftSubject}
-                onChange={(e) => setDraftSubject(e.target.value)}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-muted-foreground" htmlFor="outreach-body">
-                Body (editable)
-              </label>
-              <Textarea
-                id="outreach-body"
-                rows={8}
-                value={draftBody}
-                onChange={(e) => setDraftBody(e.target.value)}
-                className="font-mono text-xs"
-              />
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={async () => {
-                  try {
-                    await navigator.clipboard.writeText(`${draftSubject}\n\n${draftBody}`);
-                    toast.success("Draft copied");
-                  } catch {
-                    toast.error("Could not copy draft");
-                  }
-                }}
-              >
-                <Copy /> Copy draft
-              </Button>
-              {jobId && (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="signal"
-                  disabled={busy}
-                  onClick={() => void submitChat("Draft outreach for this job")}
-                >
-                  Redraft via Supervisor
-                </Button>
-              )}
-            </div>
-          </section>
-        )}
       </div>
     </div>
   );
