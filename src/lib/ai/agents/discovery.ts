@@ -148,6 +148,13 @@ export async function runDiscoveryAgent(
         const soft = rankJobsBySkills(live.jobs, skills, { limit: 8, requireSkillHit: false });
         liveJobs = soft.length > 0 ? soft : live.jobs.slice(0, 8);
       }
+      // Last resort: if the skill pool is empty but HireHub has approved jobs, show recent ones.
+      if (liveJobs.length === 0) {
+        const recent = await deps.listLiveJobs("approved openings", { skillTerms: [] });
+        if (recent.ok && recent.jobs.length > 0) {
+          liveJobs = recent.jobs.slice(0, 8);
+        }
+      }
     } else if (skills.length > 0) {
       const ranked = rankJobsBySkills(live.jobs, skills, { limit: 8, requireSkillHit: false });
       liveJobs = ranked.length > 0 ? ranked : live.jobs.slice(0, 8);

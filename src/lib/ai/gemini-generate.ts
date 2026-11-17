@@ -6,7 +6,7 @@ export type GenerateTextResult =
   | {
       ok: false;
       message: string;
-      category?: "config" | "unavailable" | "rate_limit" | "empty" | "other";
+      category?: "config" | "unavailable" | "rate_limit" | "timeout" | "empty" | "other";
     };
 
 function extractGeneratedText(body: unknown): {
@@ -44,7 +44,14 @@ export function looksLikeTruncatedAssistantAnswer(text: string): boolean {
   return false;
 }
 
-const FALLBACK_ASSISTANT_MODELS = ["gemini-flash-latest"] as const;
+/**
+ * Fast lite models after primary Flash. Keep this list short so total wait stays
+ * under the client Thinking… ceiling on Vercel.
+ */
+export const FALLBACK_ASSISTANT_MODELS = [
+  "gemini-flash-lite-latest",
+  "gemini-3.5-flash-lite",
+] as const;
 
 /**
  * Gemini 3.8 Flash defaults to medium thinking — that makes seeker chat feel hung
@@ -53,7 +60,10 @@ const FALLBACK_ASSISTANT_MODELS = ["gemini-flash-latest"] as const;
 export const GEMINI_CHAT_THINKING_LEVEL = "low" as const;
 
 /** Hard cap so a slow Gemini call cannot pin the Vercel function / UI forever. */
-export const GEMINI_GENERATE_TIMEOUT_MS = 28_000 as const;
+export const GEMINI_GENERATE_TIMEOUT_MS = 16_000 as const;
+
+/** Shorter budget for fallback lite models after a primary timeout/503. */
+export const GEMINI_FALLBACK_TIMEOUT_MS = 12_000 as const;
 
 /** Prefer AbortSignal.timeout; fall back to AbortController when unavailable. */
 export function createGeminiAbortSignal(timeoutMs: number): AbortSignal {
@@ -106,8 +116,8 @@ async function generateOnce(
       message: timedOut
         ? "The assistant took too long to respond. Please try again."
         : "The assistant could not reach Gemini. Try again shortly.",
-      // Timeouts are not retryable — another model would double the wait.
-      category: timedOut ? "other" : "unavailable",
+      // Timeout → try a lite fallback (shorter budget) instead of failing the whole ask.
+      category: timedOut ? "timeout" : "unavailable",
     };
   }
 
@@ -224,7 +234,7 @@ export async function fetchGeminiGeneratedText(
   const fetchImpl = options?.fetchImpl ?? fetch;
   // Keep outputs concise for faster chat latency.
   const maxOutputTokens = options?.maxOutputTokens ?? 768;
-  const timeoutMs = options?.timeoutMs ?? GEMINI_GENERATE_TIMEOUT_MS;
+  const primaryTimeoutMs = options?.timeoutMs ?? GEMINI_GENERATE_TIMEOUT_MS;
   const models = [primary, ...FALLBACK_ASSISTANT_MODELS.filter((m) => m !== primary)];
 
   let lastFailure: GenerateTextResult = {
@@ -235,11 +245,29 @@ export async function fetchGeminiGeneratedText(
 
   for (let modelIndex = 0; modelIndex < models.length; modelIndex++) {
     const model = models[modelIndex]!;
+    const attemptTimeout =
+      modelIndex === 0
+        ? primaryTimeoutMs
+        : Math.min(primaryTimeoutMs, GEMINI_FALLBACK_TIMEOUT_MS);
     // One short backoff on 429 before trying the same model again, then fall through to fallback model.
-    let result = await generateOnce(text, trimmedKey, model, fetchImpl, maxOutputTokens, timeoutMs);
+    let result = await generateOnce(
+      text,
+      trimmedKey,
+      model,
+      fetchImpl,
+      maxOutputTokens,
+      attemptTimeout,
+    );
     if (!result.ok && result.category === "rate_limit" && modelIndex === 0) {
       await new Promise((r) => setTimeout(r, 1500));
-      result = await generateOnce(text, trimmedKey, model, fetchImpl, maxOutputTokens, timeoutMs);
+      result = await generateOnce(
+        text,
+        trimmedKey,
+        model,
+        fetchImpl,
+        maxOutputTokens,
+        attemptTimeout,
+      );
     }
     if (result.ok) {
       return { ok: true, text: result.text, model: result.model };
@@ -252,6 +280,7 @@ export async function fetchGeminiGeneratedText(
     const retryable =
       result.category === "unavailable" ||
       result.category === "rate_limit" ||
+      result.category === "timeout" ||
       result.category === "empty" ||
       result.http === 503 ||
       result.providerStatus === "UNAVAILABLE";
@@ -262,5 +291,15 @@ export async function fetchGeminiGeneratedText(
 }
 
 export function readGeminiApiKey(env: NodeJS.ProcessEnv = process.env): string {
+  // Server-only: hydrate GEMINI_API_KEY from .env without pulling node:fs into the browser graph.
+  if (env === process.env && typeof window === "undefined") {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { ensureProcessEnvFromDotenv } = require("@/lib/server-process-env") as typeof import("@/lib/server-process-env");
+      ensureProcessEnvFromDotenv();
+    } catch {
+      /* ignore — hosted runtimes inject secrets */
+    }
+  }
   return env[GEMINI_SERVER_ENV.apiKey]?.trim() ?? "";
 }

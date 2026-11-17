@@ -184,8 +184,8 @@ export type AssistantAskPayload = {
   retryTurnId?: string;
 };
 
-/** Client ceiling — if the server fn never resolves (Vercel hang), clear Thinking… */
-export const ASSISTANT_CLIENT_TIMEOUT_MS = 35_000 as const;
+/** Client ceiling — covers primary Gemini + lite fallbacks without infinite Thinking… */
+export const ASSISTANT_CLIENT_TIMEOUT_MS = 50_000 as const;
 
 function withClientAskTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return new Promise<T>((resolve, reject) => {

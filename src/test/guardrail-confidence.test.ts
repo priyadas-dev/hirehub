@@ -139,6 +139,28 @@ describe("Discovery agent empty / clarify / success paths", () => {
     expect(result.inventedJobs).toBe(false);
   });
 
+  it("falls back to recent approved jobs when skill search pool is empty", async () => {
+    const recent = {
+      ...liveJob,
+      id: "job-recent",
+      title: "Software Developer",
+      description: "General software role",
+    };
+    const result = await runDiscoveryAgent(
+      { question: "I know React, JavaScript and SQL. Find suitable jobs" },
+      {
+        listLiveJobs: async (q) => {
+          if (/approved openings/i.test(q)) return { ok: true, jobs: [recent] };
+          return { ok: true, jobs: [] };
+        },
+        retrieveCorpus: async () => ({ ok: true, matches: [] }),
+      },
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.liveJobs.map((j) => j.id)).toContain("job-recent");
+  });
+
   it("returns needs_clarification for vague empty job search", async () => {
     const result = await runDiscoveryAgent(
       { question: "Find jobs" },

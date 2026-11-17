@@ -63,6 +63,34 @@ describe("fetchGeminiGeneratedText", () => {
     expect(fetchImpl).toHaveBeenCalledTimes(2);
   });
 
+  it("falls through to a lite model after primary timeout", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockImplementationOnce(async () => {
+        const err = new Error("The operation was aborted due to timeout");
+        err.name = "TimeoutError";
+        throw err;
+      })
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            candidates: [{ content: { parts: [{ text: "Lite fallback answer." }] } }],
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      );
+
+    const result = await fetchGeminiGeneratedText("What is React?", "test-key", {
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      model: "gemini-3.8-flash",
+      timeoutMs: 50,
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.text).toBe("Lite fallback answer.");
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
   it("returns generated text on success without echoing the api key", async () => {
     const fetchImpl = vi.fn(
       async () =>
@@ -96,7 +124,7 @@ describe("fetchGeminiGeneratedText", () => {
     expect(body.generationConfig?.temperature).toBeUndefined();
   });
 
-  it("maps AbortSignal timeout to a clear unavailable message", async () => {
+  it("maps AbortSignal timeout to timeout category and tries lite fallbacks", async () => {
     const fetchImpl = vi.fn(async () => {
       const err = new Error("The operation was aborted due to timeout");
       err.name = "TimeoutError";
@@ -110,10 +138,10 @@ describe("fetchGeminiGeneratedText", () => {
 
     expect(result.ok).toBe(false);
     if (result.ok) return;
-    // Timeout must not cascade into fallback-model retries (would double wait).
-    expect(result.category).toBe("other");
+    expect(result.category).toBe("timeout");
     expect(result.message).toMatch(/took too long/i);
-    expect(fetchImpl).toHaveBeenCalledOnce();
+    // Primary + lite fallbacks all timed out.
+    expect(fetchImpl.mock.calls.length).toBeGreaterThan(1);
   });
 
   it("accepts complete answers even when finishReason is MAX_TOKENS", async () => {
