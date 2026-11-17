@@ -2,15 +2,18 @@ import { describe, expect, it } from "vitest";
 import {
   applicantDisplayName,
   detectRecruiterChatIntent,
+  extractApplicantNameHint,
   extractJobTitleHint,
   extractSearchTokens,
   formatOwnedJobsReply,
   formatRankedApplicantsReply,
   htmlToEditablePlain,
+  isConfirmShortlistQuestion,
   isListJobsWithApplicantsQuestion,
   isListOwnedJobsQuestion,
   isProcessHelpQuestion,
   isShortlistishQuestion,
+  matchApplicantsByNameHint,
   matchOwnedJobByTitle,
   normalizeRecruiterChatTurn,
   parseOutreachAgentResult,
@@ -147,10 +150,25 @@ describe("detectRecruiterChatIntent", () => {
     expect(isShortlistishQuestion("how do you shortlist?")).toBe(false);
   });
 
-  it("extracts applicant names from typo shortlist asks", async () => {
-    const { extractApplicantNameHint, matchApplicantsByNameHint } = await import(
-      "@/lib/ai/recruiter-agent-ui"
+  it("routes confirm typos to confirm_shortlist instead of owned-job browse dump", () => {
+    expect(isConfirmShortlistQuestion("conifrm rajon")).toBe(true);
+    expect(detectRecruiterChatIntent("conifrm rajon")).toBe("confirm_shortlist");
+    expect(detectRecruiterChatIntent("confirm")).toBe("confirm_shortlist");
+    expect(detectRecruiterChatIntent("yes")).toBe("confirm_shortlist");
+    expect(extractApplicantNameHint("conifrm rajon")).toMatch(/rajon/i);
+    expect(extractApplicantNameHint("confirm Rajon Dey")).toMatch(/Rajon/i);
+    const hits = matchApplicantsByNameHint(
+      [
+        { id: "1", profiles: { full_name: "Dibyo Das", email: "d@x.com" } },
+        { id: "3", profiles: { full_name: "Rajon Dey", email: "r@x.com" } },
+      ],
+      "rajon",
     );
+    expect(hits).toHaveLength(1);
+    expect(hits[0]?.id).toBe("3");
+  });
+
+  it("extracts applicant names from typo shortlist asks", () => {
     expect(extractApplicantNameHint("shortlis koushik Roy")).toMatch(/koushik/i);
     expect(extractApplicantNameHint("shortlist Dibyo Das")).toMatch(/Dibyo/i);
     const hits = matchApplicantsByNameHint(

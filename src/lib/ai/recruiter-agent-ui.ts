@@ -191,6 +191,7 @@ export function parseSupervisedAgentMessage(result: unknown): string {
 export type RecruiterChatIntent =
   | "help"
   | "shortlist"
+  | "confirm_shortlist"
   | "draft_outreach"
   | "list_jobs"
   | "list_applicants"
@@ -208,6 +209,8 @@ export function detectRecruiterChatIntent(question: string): RecruiterChatIntent
   // "List my jobs with applicants" must hit list_jobs before list_applicants.
   if (isListJobsWithApplicantsQuestion(q) || isListOwnedJobsQuestion(q)) return "list_jobs";
   if (isListApplicantsQuestion(q)) return "list_applicants";
+  // "conifrm rajon" / bare "confirm" must not fall through to owned-job dump.
+  if (isConfirmShortlistQuestion(q)) return "confirm_shortlist";
   if (isShortlistishQuestion(q)) return "shortlist";
   if (isOutreachDraftishQuestion(q)) return "draft_outreach";
   // Noisy / incomplete: any leftover tokens → browse owned jobs + applicants locally.
@@ -239,9 +242,24 @@ export function isProcessHelpQuestion(question: string): boolean {
 /** shortlist / short list / shortlis / shorlist / shortlst */
 const SHORTLIST_WORD_RE = /\bshort[\s-]?(?:list|lis|lst|lsit)\b/i;
 
+/** confirm / conifrm / confrm — chat confirmation of a shortlist proposal */
+const CONFIRM_WORD_RE = /\b(confirm|conifrm|confrm|confirn|comfirm|confim)\b/i;
+
+/**
+ * "confirm", "conifrm rajon", "yes", "ok" — execute or retarget pending shortlist.
+ * Must win over browse so typos do not dump the owned-jobs list again.
+ */
+export function isConfirmShortlistQuestion(question: string): boolean {
+  const q = question.trim();
+  if (!q || isProcessHelpQuestion(q)) return false;
+  if (/^\s*(y|yes|ok|okay|sure)\s*[!.]?\s*$/i.test(q)) return true;
+  return CONFIRM_WORD_RE.test(q);
+}
+
 export function isShortlistishQuestion(question: string): boolean {
   const q = question.trim();
   if (isProcessHelpQuestion(q)) return false;
+  if (isConfirmShortlistQuestion(q)) return false;
   // Accept "shortlist", "short list", "short-list", typos (shortlis), and common candidate typos.
   return (
     SHORTLIST_WORD_RE.test(q) ||
@@ -444,6 +462,15 @@ const STOPWORDS = new Set([
   "person",
   "hire",
   "interview",
+  "confirm",
+  "conifrm",
+  "confrm",
+  "confirn",
+  "comfirm",
+  "confim",
+  "yes",
+  "okay",
+  "sure",
 ]);
 
 /** Tokenize noisy recruiter questions into searchable keywords. */
@@ -481,10 +508,12 @@ export function extractJobTitleHint(question: string): string | null {
   return null;
 }
 
-/** Best-effort person name hint: "shortlist Priya", "shortlis koushik Roy". */
+/** Best-effort person name hint: "shortlist Priya", "shortlis koushik Roy", "conifrm rajon". */
 export function extractApplicantNameHint(question: string): string | null {
   const q = question.trim();
   const patterns = [
+    // Confirm + name (typos included): "confirm Rajon", "conifrm rajon dey"
+    /\b(?:confirm|conifrm|confrm|confirn|comfirm|confim)\s+([A-Za-z][A-Za-z'-]+(?:\s+[A-Za-z][A-Za-z'-]+)?)\b/i,
     // Allow typos of shortlist + any casing for the name.
     /\b(?:short[\s-]?(?:list|lis|lst|lsit)|select|pick|choose)\s+([A-Za-z][A-Za-z'-]+(?:\s+[A-Za-z][A-Za-z'-]+)?)\b/i,
     /\b(?:named|name)\s+([A-Za-z][A-Za-z'-]+(?:\s+[A-Za-z][A-Za-z'-]+)?)\b/i,

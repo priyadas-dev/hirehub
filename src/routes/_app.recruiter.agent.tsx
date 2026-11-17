@@ -792,16 +792,120 @@ function RecruiterAgentPage() {
     });
   }
 
+  /**
+   * "confirm" / "conifrm rajon" / "yes" — retarget or execute pending shortlist.
+   * Prevents the owned-jobs dump loop when confirm typos are not recognized.
+   */
+  async function handleConfirmShortlistIntent(text: string) {
+    const nameHint = extractApplicantNameHint(text);
+    if (nameHint) {
+      let pool = applicantPool;
+      if (pool.length === 0) {
+        try {
+          const refreshed = await appsAcrossOwned.refetch();
+          pool = refreshed.data ?? [];
+        } catch {
+          pool = [];
+        }
+      }
+      const byName = matchApplicantsByNameHint(pool, nameHint);
+      if (byName.length === 1) {
+        const app = byName[0]!;
+        selectApplicant(app);
+        // Retarget sticky Confirm bar away from a stale proposal (e.g. Dibyo → Rajon).
+        await runShortlist(app.id, false, { quiet: true });
+        const label = applicantDisplayName({
+          full_name: app.profiles?.full_name,
+          email: app.profiles?.email,
+        });
+        appendTurns({
+          id: newTurnId(),
+          role: "assistant",
+          text: `Proposed shortlist for ${label}. Status changes only after you confirm — click Confirm shortlist below, or say “confirm”.`,
+          source: "local" as const,
+          pendingShortlistApplicationId: app.id,
+        });
+        return;
+      }
+      if (byName.length > 1) {
+        const ranked = byName.map((applicant) => ({
+          applicant,
+          score: 50,
+          reasons: [`name matches “${nameHint}”`],
+        }));
+        appendTurns({
+          id: newTurnId(),
+          role: "assistant",
+          text: `I found ${byName.length} applicants matching “${nameHint}”. Select the right person below, then Confirm shortlist.`,
+          source: "local" as const,
+          applicantChoices: toApplicantChoices(ranked as never),
+        });
+        return;
+      }
+      appendTurns({
+        id: newTurnId(),
+        role: "assistant",
+        text: `I couldn’t find “${nameHint}” among applicants on jobs you own. Say “show all applicants”, Select a card, then Confirm shortlist.`,
+        source: "local" as const,
+      });
+      return;
+    }
+
+    const appId = selectedAppId || pendingShortlistAppId;
+    if (appId) {
+      await runShortlist(appId, true);
+      return;
+    }
+
+    appendTurns({
+      id: newTurnId(),
+      role: "assistant",
+      text: `Nothing is pending to confirm yet. Select an applicant (or say “confirm <name>”), then Confirm shortlist.`,
+      source: "local" as const,
+    });
+  }
+
   /** Noisy / incomplete questions: browse owned jobs first, then applicants. */
   async function handleBrowseIntent(text: string) {
     const owned = jobs.data ?? [];
     const rankedJobs = rankOwnedJobsByQuery(owned, text);
 
     if (rankedJobs.length === 0) {
+      // Name-like leftovers (e.g. "rajon") should retarget applicants — not dump jobs again.
+      let pool = applicantPool;
+      if (pool.length === 0) {
+        try {
+          const refreshed = await appsAcrossOwned.refetch();
+          pool = refreshed.data ?? [];
+        } catch {
+          pool = [];
+        }
+      }
+      const nameGuess = extractApplicantNameHint(`select ${text}`) ?? text.trim();
+      const byName = nameGuess ? matchApplicantsByNameHint(pool, nameGuess) : [];
+      if (byName.length === 1) {
+        await selectAndProposeShortlist(byName[0]!.id, { alreadyBusy: true });
+        return;
+      }
+      if (byName.length > 1) {
+        const ranked = byName.map((applicant) => ({
+          applicant,
+          score: 50,
+          reasons: [`name matches “${nameGuess}”`],
+        }));
+        appendTurns({
+          id: newTurnId(),
+          role: "assistant",
+          text: `I couldn’t match a job title, but found ${byName.length} applicants for “${nameGuess}”. Select one below.`,
+          source: "local" as const,
+          applicantChoices: toApplicantChoices(ranked as never),
+        });
+        return;
+      }
       appendTurns({
         id: newTurnId(),
         role: "assistant",
-        text: `I only search jobs you own. I couldn’t match that phrase, so here’s your full owned list:\n${formatOwnedJobsChatReply(owned)}\n\nTry a job title fragment, or “best applicant for <job>”.`,
+        text: `I only search jobs you own. I couldn’t match that phrase to a job or applicant. Try a job title, “show all applicants”, or “confirm <name>”.\n\nOwned jobs:\n${formatOwnedJobsChatReply(owned)}`,
         source: "local" as const,
       });
       return;
@@ -887,6 +991,10 @@ function RecruiterAgentPage() {
       }
       if (intent === "shortlist") {
         await handleShortlistIntent(text);
+        return;
+      }
+      if (intent === "confirm_shortlist") {
+        await handleConfirmShortlistIntent(text);
         return;
       }
       if (intent === "draft_outreach") {
