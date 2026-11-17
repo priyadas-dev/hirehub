@@ -2,8 +2,11 @@
  * Per-message intent classification for the AI Job Assistant.
  *
  * Priority: explicit vacancy seeking vs learning/general knowledge must not
- * collide. Mentioning a skill or the word "developer" alone is NOT a job search.
+ * collide. Mentioning a skill alone for learning advice is NOT a job search,
+ * but bare industry/role asks ("IT", "Finance", "finace jobs") ARE.
  */
+
+import { looksLikeIndustryOrRoleJobAsk } from "@/lib/ai/live-query-understand";
 
 export type AssistantIntent =
   | "attachment_inspect"
@@ -110,6 +113,8 @@ function isJobTopicAskPattern(q: string): boolean {
 function isExplicitVacancyPattern(q: string): boolean {
   const jobNoun = JOB_NOUN;
   if (isJobTopicAskPattern(q)) return true;
+  // Industry / abbreviation / typo-tolerant job asks ("IT", "finance jobs", "any job it").
+  if (looksLikeIndustryOrRoleJobAsk(q)) return true;
   if (
     /\b(find|show|search|list|browse|get me|give me|gimme|looking for|recommend|are there|is there|do you have|have you got)\b/i.test(
       q,
@@ -141,11 +146,19 @@ function isExplicitVacancyPattern(q: string): boolean {
   ) {
     return true;
   }
-  // Title-led listing: "software developer jobs in Sylhet"
+  // Title-led listing: "software developer jobs in Sylhet" (also without location cue)
   if (
     /\b(developer|engineer|designer|analyst|manager|intern)\b/i.test(q) &&
-    /\b(jobs?|openings?|positions?)\b/i.test(q) &&
-    /\b(in|at|near|for|with|remote|full|part|contract)\b/i.test(q)
+    /\b(jobs?|openings?|positions?)\b/i.test(q)
+  ) {
+    return true;
+  }
+  // "<role> jobs" without find/show — e.g. "software engineer jobs", "finance jobs"
+  if (
+    jobNoun.test(q) &&
+    /\b(software|engineer|developer|finance|financial|banking|accounting|marketing|sales|design|hr|qa|devops|frontend|backend|fullstack|full[\s-]?stack|programming|coding|tech|technology|it)\b/i.test(
+      q,
+    )
   ) {
     return true;
   }
@@ -226,6 +239,10 @@ export function looksLikeDefinitionalQuestion(question: string): boolean {
 
 export function looksLikeFollowupJobs(question: string): boolean {
   const q = norm(question);
+  // Topic switch to a new industry/role is a fresh job search, not a card follow-up.
+  if (looksLikeIndustryOrRoleJobAsk(q) && /^(what|how) about\b/i.test(q)) {
+    return false;
+  }
   return (
     /\b(which of (these|those|them)|compare (these|those|the) (two )?jobs?|why (did you )?(recommend|suggest)|show (only |me )?(more|another)|what about (remote|full|part|contract)|only show|filter (to|by)|are (any|there) of (these|those))\b/i.test(
       q,

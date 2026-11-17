@@ -1,9 +1,19 @@
 import { z } from "zod";
+import {
+  expandLiveSearchToken,
+  LIVE_TERM_ALIASES,
+  normalizeLiveJobQuestion,
+  SHORT_ABBREV_TOKENS,
+} from "@/lib/ai/live-query-understand";
 
 /**
  * Live HireHub recommendations — completely separate from corpus RAG.
  * Queries only genuine `public.jobs` with status = approved via the caller's
  * authenticated Supabase client (RLS applies). Never reads job_corpus.
+ *
+ * Query understanding (typos / IT / finance synonyms) lives in
+ * `live-query-understand.ts`. Corpus RAG may expand empty searches in Discovery
+ * but never supplies applyable job cards.
  */
 
 export type LiveApprovedJob = {
@@ -16,6 +26,8 @@ export type LiveApprovedJob = {
   created_at: string;
   job_type: string | null;
   company_name: string | null;
+  /** Optional catalog category name when the join is available. */
+  category_name?: string | null;
 };
 
 export type ParsedLiveJobQuery = {
@@ -58,7 +70,7 @@ export type LiveRecommendResult =
   | { ok: false; message: string };
 
 const LIVE_JOB_SELECT =
-  "id,title,description,location,status,company_id,created_at,job_type,companies(name)";
+  "id,title,description,location,status,company_id,created_at,job_type,companies(name),job_categories(name)";
 
 const LIVE_SEARCH_STOP_WORDS = new Set([
   "a",
@@ -181,18 +193,8 @@ const LIVE_SEARCH_STOP_WORDS = new Set([
   "preferred",
 ]);
 
-/** Expand informal skill words into title/description-friendly tokens. */
-const TERM_ALIASES: Record<string, string[]> = {
-  coding: ["software", "developer", "engineer", "programming"],
-  code: ["software", "developer", "engineer"],
-  programming: ["software", "developer", "engineer"],
-  engineering: ["engineer", "software"],
-  frontend: ["frontend", "front-end", "react", "ui"],
-  backend: ["backend", "back-end", "api", "server"],
-  fullstack: ["full-stack", "fullstack", "full", "stack"],
-  "full-stack": ["full-stack", "fullstack", "software", "developer"],
-  devops: ["devops", "sre", "infrastructure"],
-};
+/** @deprecated Prefer LIVE_TERM_ALIASES from live-query-understand. */
+const TERM_ALIASES: Record<string, string[]> = LIVE_TERM_ALIASES;
 
 /** Career-role tokens that must hit the job TITLE (not description-only noise). */
 const ROLE_TITLE_TERMS = new Set([
@@ -211,10 +213,43 @@ const ROLE_TITLE_TERMS = new Set([
   "testing",
   "test",
   "sre",
+  "programming",
+  "programmer",
+  "technology",
+]);
+
+/**
+ * Experience-level tokens may appear in ROLE_TITLE_TERMS (e.g. intern) but alone must
+ * not force title-only filtering — "freshers in Sylhet" should still surface software roles.
+ */
+const EXPERIENCE_LEVEL_TERMS = new Set([
+  "intern",
+  "junior",
+  "senior",
+  "entry",
+  "fresher",
+  "graduate",
+]);
+
+/** Industry terms that must not match only via company name substring (e.g. Manor IT). */
+const TITLE_OR_CATEGORY_PREFERRED = new Set([
+  "finance",
+  "financial",
+  "banking",
+  "accounting",
+  "accountant",
+  "marketing",
+  "sales",
+  "hr",
+  "design",
+  "designer",
 ]);
 
 export function isRoleHeavyLiveQuery(parsed: ParsedLiveJobQuery): boolean {
-  return parsed.terms.some((t) => ROLE_TITLE_TERMS.has(t.toLowerCase()));
+  return parsed.terms.some((t) => {
+    const lower = t.toLowerCase();
+    return ROLE_TITLE_TERMS.has(lower) && !EXPERIENCE_LEVEL_TERMS.has(lower);
+  });
 }
 
 export function escapeIlikePattern(value: string): string {
@@ -223,10 +258,12 @@ export function escapeIlikePattern(value: string): string {
 
 /**
  * Parse NL filters without treating the whole sentence as a title.
- * Supports full-time / part-time / contract, remote, and location/skill tokens.
+ * Supports full-time / part-time / contract, remote, location, industry aliases,
+ * abbreviations (IT/HR/QA), and common typos (finace → finance).
  */
 export function parseLiveJobQuery(query: string): ParsedLiveJobQuery {
-  const normalized = query
+  const understood = normalizeLiveJobQuestion(query);
+  const normalized = understood
     .toLowerCase()
     .replace(/full[\s-]?time/g, " full_time ")
     .replace(/part[\s-]?time/g, " part_time ")
@@ -256,19 +293,26 @@ export function parseLiveJobQuery(query: string): ParsedLiveJobQuery {
   const terms: string[] = [];
   const pushTerm = (token: string) => {
     if (!token || terms.includes(token)) return;
+    // Keep short abbrevs only when explicitly allow-listed (after expansion most are longer).
+    if (token.length < 3 && !SHORT_ABBREV_TOKENS.has(token)) return;
     terms.push(token);
   };
   for (const token of raw) {
-    if (token.length < 3) continue;
     if (LIVE_SEARCH_STOP_WORDS.has(token)) continue;
     if (locations.includes(token)) continue;
-    const aliases = TERM_ALIASES[token];
-    if (aliases) {
-      for (const alias of aliases) pushTerm(alias);
-    } else {
-      pushTerm(token);
+    // Min length: allow 2-char abbrevs through expandLiveSearchToken.
+    if (token.length < 2) continue;
+    if (token.length < 3 && !SHORT_ABBREV_TOKENS.has(token)) continue;
+
+    const expanded = expandLiveSearchToken(token);
+    for (const alias of expanded) pushTerm(alias);
+    // Also keep legacy alias table coverage if expand returned empty.
+    if (!expanded.length) {
+      const aliases = TERM_ALIASES[token];
+      if (aliases) for (const alias of aliases) pushTerm(alias);
+      else pushTerm(token);
     }
-    if (terms.length >= 8) break;
+    if (terms.length >= 12) break;
   }
 
   return { terms, jobTypes, locations, remoteOnly };
@@ -279,17 +323,41 @@ export function extractLiveJobSearchTerms(query: string): string[] {
   return parseLiveJobQuery(query).terms;
 }
 
-function companyNameFromRow(row: Record<string, unknown>): string | null {
-  const companies = row.companies;
-  if (companies && typeof companies === "object" && !Array.isArray(companies)) {
-    const name = (companies as { name?: unknown }).name;
+function nestedName(
+  row: Record<string, unknown>,
+  key: "companies" | "job_categories",
+): string | null {
+  const nested = row[key];
+  if (nested && typeof nested === "object" && !Array.isArray(nested)) {
+    const name = (nested as { name?: unknown }).name;
     return typeof name === "string" && name.trim() ? name.trim() : null;
   }
-  if (Array.isArray(companies) && companies[0] && typeof companies[0] === "object") {
-    const name = (companies[0] as { name?: unknown }).name;
+  if (Array.isArray(nested) && nested[0] && typeof nested[0] === "object") {
+    const name = (nested[0] as { name?: unknown }).name;
     return typeof name === "string" && name.trim() ? name.trim() : null;
   }
   return null;
+}
+
+function companyNameFromRow(row: Record<string, unknown>): string | null {
+  return nestedName(row, "companies");
+}
+
+function categoryNameFromRow(row: Record<string, unknown>): string | null {
+  return nestedName(row, "job_categories");
+}
+
+/** Word-boundary aware match so short tokens like "hr" do not hit random substrings. */
+export function textMatchesTerm(haystack: string, term: string): boolean {
+  const h = haystack.toLowerCase();
+  const t = term.toLowerCase();
+  if (!t) return false;
+  if (t.length <= 2) {
+    return new RegExp(`(^|[^a-z0-9])${t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}([^a-z0-9]|$)`, "i").test(
+      h,
+    );
+  }
+  return h.includes(t);
 }
 
 function normalizeLiveJob(row: Record<string, unknown>): LiveApprovedJob | null {
@@ -310,6 +378,7 @@ function normalizeLiveJob(row: Record<string, unknown>): LiveApprovedJob | null 
     created_at: createdAt,
     job_type: typeof row.job_type === "string" ? row.job_type : null,
     company_name: companyNameFromRow(row),
+    category_name: categoryNameFromRow(row),
   };
 }
 
@@ -318,13 +387,15 @@ function scoreLiveJob(job: LiveApprovedJob, parsed: ParsedLiveJobQuery): number 
   const desc = (job.description ?? "").toLowerCase();
   const loc = (job.location ?? "").toLowerCase();
   const company = (job.company_name ?? "").toLowerCase();
+  const category = (job.category_name ?? "").toLowerCase();
   let score = 0;
 
   for (const term of parsed.terms) {
-    if (title.includes(term)) score += 6;
-    if (company.includes(term)) score += 3;
-    if (desc.includes(term)) score += 2;
-    if (loc.includes(term)) score += 2;
+    if (textMatchesTerm(title, term)) score += 6;
+    if (category && textMatchesTerm(category, term)) score += 5;
+    if (textMatchesTerm(company, term)) score += 3;
+    if (textMatchesTerm(desc, term)) score += 2;
+    if (textMatchesTerm(loc, term)) score += 2;
   }
   for (const location of parsed.locations) {
     if (loc.includes(location)) score += 5;
@@ -351,18 +422,32 @@ function passesClientFilters(job: LiveApprovedJob, parsed: ParsedLiveJobQuery): 
     const loc = (job.location ?? "").toLowerCase();
     if (!parsed.locations.some((l) => loc.includes(l))) return false;
   }
-  // Location / type / remote filters are authoritative. Residual chat words like
-  // "there" must not exclude otherwise valid approved jobs.
-  if (parsed.terms.length > 0 && !hasStructuralFilters(parsed)) {
-    const title = job.title.toLowerCase();
-    const hay =
-      `${job.title} ${job.description ?? ""} ${job.company_name ?? ""} ${job.location ?? ""}`.toLowerCase();
-    // Role searches (software / engineer / developer / …) must match the TITLE so
-    // marketing/HR/labor cards with a stray keyword in the description are excluded.
-    if (isRoleHeavyLiveQuery(parsed)) {
-      if (!parsed.terms.some((t) => title.includes(t))) return false;
-    } else if (!parsed.terms.some((t) => hay.includes(t))) {
-      return false;
+  // Location / type / remote filters are authoritative for structure, but role /
+  // industry terms must still apply so "IT in Sylhet" does not return HR in Sylhet.
+  if (parsed.terms.length > 0) {
+    const title = job.title;
+    const category = job.category_name ?? "";
+    const hay = `${job.title} ${job.description ?? ""} ${job.company_name ?? ""} ${job.location ?? ""} ${category}`;
+    const roleHeavy = isRoleHeavyLiveQuery(parsed);
+    const industryPreferred = parsed.terms.some((t) =>
+      TITLE_OR_CATEGORY_PREFERRED.has(t.toLowerCase()),
+    );
+
+    if (roleHeavy) {
+      // Role searches must match the TITLE (not description-only noise).
+      if (!parsed.terms.some((t) => textMatchesTerm(title, t))) return false;
+    } else if (industryPreferred) {
+      // Finance/marketing/HR: prefer title or category — not company-only (Manor IT).
+      if (
+        !parsed.terms.some(
+          (t) => textMatchesTerm(title, t) || (category && textMatchesTerm(category, t)),
+        )
+      ) {
+        return false;
+      }
+    } else if (!hasStructuralFilters(parsed)) {
+      // Residual chat words must not exclude jobs when only structural filters remain.
+      if (!parsed.terms.some((t) => textMatchesTerm(hay, t))) return false;
     }
   }
   return true;
@@ -445,14 +530,6 @@ export async function recommendApprovedLiveJobs(
     ? parseLiveJobQuery(q)
     : { terms: [], jobTypes: [], locations: [], remoteOnly: false };
 
-  let builder = client.from("jobs").select(LIVE_JOB_SELECT).eq("status", "approved");
-
-  if (parsed.jobTypes.length === 1) {
-    builder = builder.eq("job_type", parsed.jobTypes[0]!);
-  } else if (parsed.jobTypes.length > 1) {
-    builder = builder.in("job_type", parsed.jobTypes);
-  }
-
   const orParts: string[] = [];
   for (const term of parsed.terms) {
     const pattern = `%${escapeIlikePattern(term)}%`;
@@ -470,13 +547,29 @@ export async function recommendApprovedLiveJobs(
     orParts.push(`location.ilike."%remote%"`);
   }
 
-  // Broad OR fetch, then precise client filter/rank. Avoids excluding valid matches.
-  if (orParts.length > 0) {
-    builder = builder.or(orParts.join(","));
-  }
-
   const fetchLimit = Math.min(50, Math.max(limit * 4, 20));
-  const response = await builder.order("created_at", { ascending: false }).limit(fetchLimit);
+
+  const runQuery = async (selectCols: string) => {
+    let builder = client.from("jobs").select(selectCols).eq("status", "approved");
+    if (parsed.jobTypes.length === 1) {
+      builder = builder.eq("job_type", parsed.jobTypes[0]!);
+    } else if (parsed.jobTypes.length > 1) {
+      builder = builder.in("job_type", parsed.jobTypes);
+    }
+    // Broad OR fetch, then precise client filter/rank. Avoids excluding valid matches.
+    if (orParts.length > 0) {
+      builder = builder.or(orParts.join(","));
+    }
+    return builder.order("created_at", { ascending: false }).limit(fetchLimit);
+  };
+
+  // Prefer category join for industry matching; fall back if the relationship is unavailable.
+  let response = await runQuery(LIVE_JOB_SELECT);
+  if (response.error && /job_categor/i.test(response.error.message)) {
+    response = await runQuery(
+      "id,title,description,location,status,company_id,created_at,job_type,companies(name)",
+    );
+  }
 
   if (response.error) {
     return { ok: false, message: "Could not load approved jobs." };

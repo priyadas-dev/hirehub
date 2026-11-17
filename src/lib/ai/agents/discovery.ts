@@ -17,6 +17,7 @@ import {
   parseLiveJobQuery,
   type LiveApprovedJob,
 } from "@/lib/ai/live-recommend";
+import { extractLiveTermsFromCorpusMatches } from "@/lib/ai/live-query-understand";
 import { rankJobsBySkills, type SkillMatchedJob } from "@/lib/ai/skill-match";
 import { extractSkillsFromQuestion, mergeSkillLists } from "@/lib/ai/skill-extract";
 
@@ -143,6 +144,26 @@ export async function runDiscoveryAgent(
       if (skillOnly.ok) live = skillOnly;
     }
 
+    // Empty live hit: use corpus RAG only to expand search terms (never as applyable cards).
+    // Preserves the existing ~20k embeddings without mixing them into job card IDs.
+    if (live.jobs.length === 0 && deps.retrieveCorpus) {
+      const corpusExpand = await deps.retrieveCorpus(questionUsed);
+      if (corpusExpand.ok && corpusExpand.matches.length > 0) {
+        corpusMatches = corpusExpand.matches.slice(0, 5);
+        const extra = extractLiveTermsFromCorpusMatches(corpusExpand.matches, 8);
+        if (extra.length > 0) {
+          const expandedQ = `${questionUsed} ${extra.join(" ")}`.trim().slice(0, 240);
+          const retry = await deps.listLiveJobs(expandedQ, {
+            skillHint: skills[0] ?? null,
+            skillTerms: skills,
+          });
+          if (retry.ok && retry.jobs.length > 0) live = retry;
+        }
+      } else if (!corpusExpand.ok) {
+        ragAvailable = !corpusExpand.unavailable;
+      }
+    }
+
     // Fairness already passed — safe to rank.
     // Never dump unrelated "recent approved" cards for a software/role ask.
     const roleHeavy = isRoleHeavyLiveQuery(parseLiveJobQuery(questionUsed));
@@ -160,13 +181,8 @@ export async function runDiscoveryAgent(
       } else {
         liveJobs = pool.slice(0, 8);
       }
-    } else if (skills.length > 0 && !roleHeavy) {
-      const ranked = rankJobsBySkills(live.jobs, skills, {
-        limit: 8,
-        requireSkillHit: true,
-      });
-      liveJobs = ranked.length > 0 ? ranked : [];
     } else {
+      // Industry / title searches must not be emptied by leftover session skills.
       liveJobs = (roleHeavy ? roleSafePool : live.jobs).slice(0, 8);
     }
   }
