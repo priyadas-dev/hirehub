@@ -211,8 +211,9 @@ export function detectRecruiterChatIntent(question: string): RecruiterChatIntent
   if (isListApplicantsQuestion(q)) return "list_applicants";
   // "conifrm rajon" / bare "confirm" must not fall through to owned-job dump.
   if (isConfirmShortlistQuestion(q)) return "confirm_shortlist";
-  if (isShortlistishQuestion(q)) return "shortlist";
+  // Offer/outreach before shortlist so "make an offer for this candidate" is not ordinal-shortlist.
   if (isOutreachDraftishQuestion(q)) return "draft_outreach";
+  if (isShortlistishQuestion(q)) return "shortlist";
   // Noisy / incomplete: any leftover tokens → browse owned jobs + applicants locally.
   if (extractSearchTokens(q).length > 0) return "browse";
   return "supervised";
@@ -239,8 +240,9 @@ export function isProcessHelpQuestion(question: string): boolean {
   return false;
 }
 
-/** shortlist / short list / shortlis / shorlist / shortlst */
-const SHORTLIST_WORD_RE = /\bshort[\s-]?(?:list|lis|lst|lsit)\b/i;
+/** shortlist / shortliste / shortlisted / shortlis / shorlist / shortlst */
+const SHORTLIST_WORD_RE =
+  /\b(?:short[\s-]?(?:list(?:ed|ing|e)?|lis|lst|lsit)|shorlist|shortliset)\b/i;
 
 /** confirm / conifrm / confrm — chat confirmation of a shortlist proposal */
 const CONFIRM_WORD_RE = /\b(confirm|conifrm|confrm|confirn|comfirm|confim)\b/i;
@@ -260,28 +262,152 @@ export function isShortlistishQuestion(question: string): boolean {
   const q = question.trim();
   if (isProcessHelpQuestion(q)) return false;
   if (isConfirmShortlistQuestion(q)) return false;
+  if (isOfferDraftishQuestion(q)) return false;
   // Accept "shortlist", "short list", "short-list", typos (shortlis), and common candidate typos.
   return (
     SHORTLIST_WORD_RE.test(q) ||
-    /\b(mark\s+as\s+short[\s-]?(?:list|lis)|propose\s+short[\s-]?(?:list|lis))\b/i.test(q) ||
-    /\b(best|top|strong(?:est)?|good)\b[\s\S]{0,40}\b(applicant|cand+idate|resume|profile)\b/i.test(
+    /\b(mark\s+as\s+short[\s-]?(?:list(?:e)?|lis)|propose\s+short[\s-]?(?:list(?:e)?|lis))\b/i.test(
       q,
     ) ||
-    /\b(who|which)\b[\s\S]{0,40}\b(hire|interview|cand+idate|applicant)\b/i.test(q) ||
-    /\b(match|rank|recommend)\b[\s\S]{0,40}\b(applicant|cand+idate|resume|profile)\b/i.test(q) ||
-    /\bfind\b[\s\S]{0,40}\b(applicant|cand+idate|someone|person)\b/i.test(q)
+    /\bmove\b[\s\S]{0,48}\b(?:to\s+)?short[\s-]?(?:list(?:ed|ing|e)?|lis)\b/i.test(q) ||
+    /\bselect\b[\s\S]{0,40}\b(?:the\s+)?(?:best|top)\b[\s\S]{0,40}\b(applicant|cand+idate)s?\b/i.test(
+      q,
+    ) ||
+    /\b(best|top|strong(?:est)?|good)\b[\s\S]{0,40}\b(applicants?|cand+idates?|resumes?|profiles?)\b/i.test(
+      q,
+    ) ||
+    /\b(who|which)\b[\s\S]{0,40}\b(hire|interview|cand+idates?|applicants?)\b/i.test(q) ||
+    /\b(match|rank|recommend)\b[\s\S]{0,40}\b(applicants?|cand+idates?|resumes?|profiles?)\b/i.test(
+      q,
+    ) ||
+    /\bfind\b[\s\S]{0,40}\b(applicants?|cand+idates?|someone|person)\b/i.test(q) ||
+    /\bwhat\s+about\b[\s\S]{0,24}\b(first|second|third|1st|2nd|3rd|#?\d+|this|that|him|her)\b/i.test(
+      q,
+    ) ||
+    extractApplicantOrdinalRef(q) != null
   );
 }
 
-/** draft outreach / give a draft ouitreach / write email */
+/** Offer letter / offer draft (never implies auto-send). */
+export function isOfferDraftishQuestion(question: string): boolean {
+  const q = question.trim();
+  return (
+    /\boffer\s+(letter|draft|email|mail)\b/i.test(q) ||
+    /\b(?:draft|write|prepare|create|make|compose|give)\b[\s\S]{0,24}\boffer\b/i.test(q) ||
+    /\bmake\s+(an?\s+)?offer\b/i.test(q)
+  );
+}
+
+/** draft outreach / offer letter / give a draft ouitreach / write email */
 export function isOutreachDraftishQuestion(question: string): boolean {
   const q = question.trim();
+  if (isOfferDraftishQuestion(q)) return true;
   const wantsDraft = /\b(draft|write|prepare|create|give|make|compose)\b/i.test(q);
   // outreach, ouitreach, outrech, out-reach, email, campaign
   const wantsOutreach =
     /\b(outreach|ouitreach|outrech|out[\s-]?reach|email|campaign|mail)\b/i.test(q) ||
     /\bou[it]{0,2}r[ea]{0,2}ch\b/i.test(q);
   return wantsDraft && wantsOutreach;
+}
+
+/** "second candidate", "this applicant", "him", "the 3rd one" */
+export type ApplicantOrdinalRef =
+  | { kind: "index"; index: number }
+  | { kind: "pronoun" };
+
+const ORDINAL_WORD_TO_INDEX: Record<string, number> = {
+  first: 0,
+  "1st": 0,
+  second: 1,
+  "2nd": 1,
+  third: 2,
+  "3rd": 2,
+  fourth: 3,
+  "4th": 3,
+  fifth: 4,
+  "5th": 4,
+};
+
+export function extractApplicantOrdinalRef(question: string): ApplicantOrdinalRef | null {
+  const q = question.trim();
+  if (!q) return null;
+  if (
+    /\b(?:this|that)\s+(?:candidate|applicant|one|person)\b/i.test(q) ||
+    /\b(?:him|her)\b/i.test(q) ||
+    /\b(?:for|about)\s+(?:this|that|him|her)\b/i.test(q)
+  ) {
+    return { kind: "pronoun" };
+  }
+  const word = q.match(
+    /\b(first|1st|second|2nd|third|3rd|fourth|4th|fifth|5th)\b(?:\s+(?:candidate|applicant|one|person))?\b/i,
+  );
+  if (word?.[1]) {
+    const idx = ORDINAL_WORD_TO_INDEX[word[1].toLowerCase()];
+    if (idx != null) return { kind: "index", index: idx };
+  }
+  const num = q.match(/\b(?:#|no\.?\s*)?(\d{1,2})(?:st|nd|rd|th)?\s+(?:candidate|applicant|one)\b/i);
+  if (num?.[1]) {
+    const n = Number(num[1]);
+    if (Number.isFinite(n) && n >= 1 && n <= 20) return { kind: "index", index: n - 1 };
+  }
+  return null;
+}
+
+/** "best three", "top 3", "select the best 3 applicants" */
+export function extractTopNApplicants(question: string): number | null {
+  const q = question.trim().toLowerCase();
+  const words: Record<string, number> = {
+    two: 2,
+    three: 3,
+    four: 4,
+    five: 5,
+    six: 6,
+    seven: 7,
+    eight: 8,
+  };
+  const m1 = q.match(/\b(?:best|top)\s+(\d+|two|three|four|five|six|seven|eight)\b/);
+  if (m1?.[1]) {
+    const n = words[m1[1]] ?? Number(m1[1]);
+    if (Number.isFinite(n) && n >= 2 && n <= 8) return n;
+  }
+  const m2 = q.match(
+    /\b(\d+|two|three|four|five|six|seven|eight)\s+(?:best\s+|top\s+)?(?:applicant|cand+idate)s?\b/,
+  );
+  if (m2?.[1]) {
+    const n = words[m2[1]] ?? Number(m2[1]);
+    if (Number.isFinite(n) && n >= 2 && n <= 8) return n;
+  }
+  return null;
+}
+
+/** "2 years of experience", "3+ yrs" */
+export function extractMinYearsExperience(question: string): number | null {
+  const m = question
+    .trim()
+    .match(/\b(\d+)\s*\+?\s*(?:years?|yrs?)(?:\s+of)?(?:\s+experience)?\b/i);
+  if (!m?.[1]) return null;
+  const n = Number(m[1]);
+  return Number.isFinite(n) && n >= 0 && n <= 40 ? n : null;
+}
+
+/** Resolve ordinal/pronoun against recent ranked choices or sticky selection. */
+export function resolveApplicantChoiceFromRef(
+  choices: RecruiterApplicantChoice[],
+  ref: ApplicantOrdinalRef,
+  fallbackApplicationId?: string | null,
+): RecruiterApplicantChoice | null {
+  if (ref.kind === "index") {
+    return choices[ref.index] ?? null;
+  }
+  if (fallbackApplicationId) {
+    const hit = choices.find((c) => c.applicationId === fallbackApplicationId);
+    if (hit) return hit;
+    return {
+      applicationId: fallbackApplicationId,
+      label: "Selected applicant",
+    };
+  }
+  return choices[0] ?? null;
 }
 
 export function applicantDisplayName(input: {
@@ -325,8 +451,19 @@ export function isListApplicantsQuestion(question: string): boolean {
   const q = question.trim();
   // Jobs+applicants starter is handled as list_jobs.
   if (isListJobsWithApplicantsQuestion(q)) return false;
+  // Ranking / shortlist phrasing must not become a plain list dump.
+  if (
+    /\b(best|top|rank|recommend|short[\s-]?(?:list(?:ed|ing|e)?|lis)|move\b[\s\S]{0,24}short)/i.test(
+      q,
+    )
+  ) {
+    return false;
+  }
   return (
     /\b(list|show|see|display)\b[\s\S]{0,40}\bapplicants?\b/i.test(q) ||
+    /\b(list|show|see|display)\b[\s\S]{0,40}\b(cand+idate|engineer|developer|seeker)s?\b/i.test(
+      q,
+    ) ||
     /\bapplicants?\s+for\s+(this\s+)?job\b/i.test(q)
   );
 }
@@ -471,6 +608,22 @@ const STOPWORDS = new Set([
   "yes",
   "okay",
   "sure",
+  "offer",
+  "letter",
+  "move",
+  "him",
+  "her",
+  "them",
+  "years",
+  "year",
+  "yrs",
+  "experience",
+  "exp",
+  "first",
+  "second",
+  "third",
+  "fourth",
+  "fifth",
 ]);
 
 /** Tokenize noisy recruiter questions into searchable keywords. */
@@ -488,7 +641,7 @@ export function extractSearchTokens(question: string): string[] {
 export function extractJobTitleHint(question: string): string | null {
   const q = question.trim();
   const patterns = [
-    /\bshort[\s-]?(?:list|lis|lst|lsit)\s+(?:cand+iate[s]?|applicant[s]?|candidate[s]?)?\s*(?:from|for|on)\s+(?:the\s+)?(.+?)(?:\s*[?.!]|$)/i,
+    /\bshort[\s-]?(?:list(?:ed|ing|e)?|lis|lst|lsit)\s+(?:cand+iate[s]?|applicant[s]?|candidate[s]?)?\s*(?:from|for|on)\s+(?:the\s+)?(.+?)(?:\s*[?.!]|$)/i,
     /\b(?:from|for|on)\s+(?:the\s+)?job\s+(.+?)(?:\s*[?.!]|$)/i,
     /\bpick\s+(?:the\s+)?job\s+(.+?)(?:\s*[?.!]|$)/i,
     /\bselect\s+(?:the\s+)?job\s+(.+?)(?:\s*[?.!]|$)/i,
@@ -508,14 +661,67 @@ export function extractJobTitleHint(question: string): string | null {
   return null;
 }
 
-/** Best-effort person name hint: "shortlist Priya", "shortlis koushik Roy", "conifrm rajon". */
+/**
+ * One or more person names after shortlist/confirm.
+ * "shortliste koushik and priya" → ["koushik", "priya"] (does not capture "and").
+ */
+export function extractApplicantNameHints(question: string): string[] {
+  const q = question.trim();
+  // Job-scoped shortlist ("shortlist from Software Developer") has no person names.
+  if (
+    /\b(?:short[\s-]?(?:list(?:ed|ing|e)?|lis|lst|lsit)|shorlist|shortliset)\s+(?:from|for|on)\b/i.test(
+      q,
+    )
+  ) {
+    return [];
+  }
+  const head = q.match(
+    /\b(?:confirm|conifrm|confrm|confirn|comfirm|confim|short[\s-]?(?:list(?:ed|ing|e)?|lis|lst|lsit)|shorlist|shortliset|select|pick|choose)\s+(.+)$/i,
+  );
+  const offerFor = q.match(
+    /\b(?:offer|outreach)(?:\s+(?:letter|draft|email|mail))?\s+(?:for|to)\s+(.+)$/i,
+  );
+  const nameTail = head?.[1] ?? offerFor?.[1];
+  if (!nameTail) {
+    const single = extractApplicantNameHintLegacy(q);
+    return single ? [single] : [];
+  }
+  const cleaned = nameTail
+    .split(/\s+\b(?:from|for|on)\b\s+/i)[0]!
+    .replace(/[?.!,]+$/g, "")
+    .trim();
+  const parts = cleaned
+    .split(/\s*(?:,|&|\/|\band\b|\bor\b)\s*/i)
+    .map((p) => p.trim())
+    .filter((p) => {
+      if (p.length < 2) return false;
+      if (STOPWORDS.has(p.toLowerCase())) return false;
+      if (
+        /^(from|for|on|the|this|that|him|her|my|job|applicant|candidate|please|and|or)$/i.test(
+          p,
+        )
+      ) {
+        return false;
+      }
+      return /^[A-Za-z][A-Za-z'-]*(?:\s+[A-Za-z][A-Za-z'-]*){0,2}$/.test(p);
+    });
+  return [...new Set(parts)].slice(0, 5);
+}
+
+/** Best-effort single person name (first hint). */
 export function extractApplicantNameHint(question: string): string | null {
+  return extractApplicantNameHints(question)[0] ?? extractApplicantNameHintLegacy(question);
+}
+
+/** Legacy single-name patterns kept for confirm/select phrasing. */
+function extractApplicantNameHintLegacy(question: string): string | null {
   const q = question.trim();
   const patterns = [
     // Confirm + name (typos included): "confirm Rajon", "conifrm rajon dey"
     /\b(?:confirm|conifrm|confrm|confirn|comfirm|confim)\s+([A-Za-z][A-Za-z'-]+(?:\s+[A-Za-z][A-Za-z'-]+)?)\b/i,
-    // Allow typos of shortlist + any casing for the name.
-    /\b(?:short[\s-]?(?:list|lis|lst|lsit)|select|pick|choose)\s+([A-Za-z][A-Za-z'-]+(?:\s+[A-Za-z][A-Za-z'-]+)?)\b/i,
+    // Allow typos of shortlist + any casing for the name; stop before and/or.
+    /\b(?:short[\s-]?(?:list(?:ed|ing|e)?|lis|lst|lsit)|shorlist|shortliset|select|pick|choose)\s+([A-Za-z][A-Za-z'-]+(?:\s+[A-Za-z][A-Za-z'-]+)?)(?=\s+(?:and|or)\b|,|$|\s+[?.!])/i,
+    /\b(?:short[\s-]?(?:list(?:ed|ing|e)?|lis|lst|lsit)|shorlist|shortliset|select|pick|choose)\s+([A-Za-z][A-Za-z'-]+(?:\s+[A-Za-z][A-Za-z'-]+)?)\b/i,
     /\b(?:named|name)\s+([A-Za-z][A-Za-z'-]+(?:\s+[A-Za-z][A-Za-z'-]+)?)\b/i,
     /\bapplicant\s+([A-Za-z][A-Za-z'-]+(?:\s+[A-Za-z][A-Za-z'-]+)?)\b/i,
   ];
@@ -524,7 +730,7 @@ export function extractApplicantNameHint(question: string): string | null {
     const raw = m?.[1]?.trim();
     if (!raw) continue;
     if (STOPWORDS.has(raw.toLowerCase())) continue;
-    if (/^(from|for|on|the|this|my|job)$/i.test(raw)) continue;
+    if (/^(from|for|on|the|this|my|job|and|or)$/i.test(raw)) continue;
     // Reject clear job-title fragments after shortlist-from style asks.
     if (/^(from|for)\b/i.test(raw)) continue;
     return raw;
@@ -638,6 +844,7 @@ export function rankApplicantsByProfileAndResume(
     [query, job?.title ?? "", job?.description ?? ""].filter(Boolean).join(" "),
   );
   const nameHint = extractApplicantNameHint(query)?.toLowerCase() ?? null;
+  const minYears = extractMinYearsExperience(query);
 
   return applicants
     .map((applicant) => {
@@ -677,6 +884,17 @@ export function rankApplicantsByProfileAndResume(
           reasons.push(`resume file ~ ${tok}`);
         } else if (haystack.includes(tok)) {
           score += 1;
+        }
+      }
+
+      if (minYears != null) {
+        const yearsHit = haystack.match(/\b(\d+)\s*\+?\s*(?:years?|yrs?)\b/);
+        if (yearsHit?.[1]) {
+          const mentioned = Number(yearsHit[1]);
+          if (Number.isFinite(mentioned) && mentioned >= minYears) {
+            score += 6;
+            reasons.push(`experience ≥ ${minYears}y in cover/profile text`);
+          }
         }
       }
 

@@ -19,6 +19,8 @@ export type RecruiterOwnedJob = {
   title: string;
   recruiterId: string;
   companyId?: string | null;
+  companyName?: string | null;
+  salaryRange?: string | null;
 };
 
 export type RecruiterApplicationRow = {
@@ -116,6 +118,15 @@ export type DraftOutreachInput = {
   /** If true, also run prepareCampaignSend (still requires campaign confirm semantics). */
   confirmSend?: boolean;
   existingRecipients?: Parameters<typeof prepareCampaignSend>[0]["existingRecipients"];
+  /** Default outreach campaign; "offer" builds an offer-letter style draft. */
+  draftKind?: "outreach" | "offer";
+  /** Applicant identity when no CRM contact (from owned application). */
+  applicantName?: string | null;
+  applicantEmail?: string | null;
+  /** Optional terms — never invent; omit or mark TBD when unknown. */
+  salaryText?: string | null;
+  joiningDateText?: string | null;
+  designation?: string | null;
 };
 
 export type DraftOutreachResult =
@@ -170,19 +181,66 @@ export function draftRecruiterOutreach(
   }
 
   const ownerId = input.job.recruiterId;
-  const seekerLabel = input.contact?.fullName?.trim() || "candidate";
-  const campaign = createCampaignRecord({
-    recruiterId: ownerId,
-    segmentId: input.segment?.id ?? null,
-    name: `Outreach: ${input.job.title}`.slice(0, 120),
-    subject: `Opportunity: ${input.job.title}`.slice(0, 200),
-    htmlBody: [
-      `<p>Hi ${seekerLabel},</p>`,
-      `<p>We thought you might be a strong fit for <strong>${input.job.title}</strong> on HireHub.</p>`,
-      `<p>If you are interested, reply to this email or apply in HireHub.</p>`,
-      `<p>Best regards</p>`,
-    ].join("\n"),
-  });
+  const draftKind = input.draftKind === "offer" ? "offer" : "outreach";
+  const seekerLabel =
+    input.contact?.fullName?.trim() ||
+    input.applicantName?.trim() ||
+    "candidate";
+  const companyLabel = input.job.companyName?.trim() || null;
+  const designation =
+    input.designation?.trim() || input.job.title?.trim() || "the role";
+  const salaryText =
+    input.salaryText?.trim() || input.job.salaryRange?.trim() || null;
+  const joiningDateText = input.joiningDateText?.trim() || null;
+
+  const missingTerms: string[] = [];
+  if (draftKind === "offer") {
+    if (!salaryText) missingTerms.push("salary");
+    if (!joiningDateText) missingTerms.push("joining date");
+    if (!companyLabel) missingTerms.push("company name");
+  }
+
+  const campaign =
+    draftKind === "offer"
+      ? createCampaignRecord({
+          recruiterId: ownerId,
+          segmentId: input.segment?.id ?? null,
+          name: `Offer draft: ${designation}`.slice(0, 120),
+          subject: `Offer of employment — ${designation}`.slice(0, 200),
+          htmlBody: [
+            `<p>Dear ${seekerLabel},</p>`,
+            `<p>We are pleased to offer you the position of <strong>${designation}</strong>${
+              companyLabel ? ` at <strong>${companyLabel}</strong>` : ""
+            }.</p>`,
+            `<p><strong>Compensation:</strong> ${
+              salaryText ?? "[salary — provide before sending]"
+            }</p>`,
+            `<p><strong>Proposed joining date:</strong> ${
+              joiningDateText ?? "[joining date — provide before sending]"
+            }</p>`,
+            input.applicantEmail?.trim()
+              ? `<p>Candidate email on file: ${input.applicantEmail.trim()}</p>`
+              : "",
+            `<p>This is a draft only. No offer email has been sent from HireHub.</p>`,
+            `<p>Best regards</p>`,
+          ]
+            .filter(Boolean)
+            .join("\n"),
+        })
+      : createCampaignRecord({
+          recruiterId: ownerId,
+          segmentId: input.segment?.id ?? null,
+          name: `Outreach: ${input.job.title}`.slice(0, 120),
+          subject: `Opportunity: ${input.job.title}`.slice(0, 200),
+          htmlBody: [
+            `<p>Hi ${seekerLabel},</p>`,
+            `<p>We thought you might be a strong fit for <strong>${input.job.title}</strong>${
+              companyLabel ? ` at <strong>${companyLabel}</strong>` : ""
+            } on HireHub.</p>`,
+            `<p>If you are interested, reply to this email or apply in HireHub.</p>`,
+            `<p>Best regards</p>`,
+          ].join("\n"),
+        });
 
   if ("error" in campaign) {
     return { ok: false, code: "validation", message: campaign.error };
@@ -230,14 +288,22 @@ export function draftRecruiterOutreach(
     });
   }
 
+  const missingNote =
+    missingTerms.length > 0
+      ? ` Missing before send: ${missingTerms.join(", ")}.`
+      : "";
   return {
     ok: true,
     campaign,
     preview,
     send,
     message: input.confirmSend
-      ? "Outreach draft prepared; send result attached when confirmSend was set."
-      : "Outreach draft created. Review in CRM before sending.",
+      ? draftKind === "offer"
+        ? `Offer draft prepared; send result attached when confirmSend was set.${missingNote}`
+        : "Outreach draft prepared; send result attached when confirmSend was set."
+      : draftKind === "offer"
+        ? `Offer draft created for ${seekerLabel}. Nothing was emailed.${missingNote}`
+        : "Outreach draft created. Review in CRM before sending.",
   };
 }
 
@@ -256,15 +322,24 @@ const UUID_IN_TEXT_RE =
 
 export function looksLikeShortlistIntent(question: string): boolean {
   // Natural chat often says "short list from X" / typos without the word "applicant".
-  return /\b(short[\s-]?list(?:ed)?|mark\s+as\s+short[\s-]?list|move\s+to\s+interview|reject\s+applicant|hire\s+applicant)\b/i.test(
+  return /\b(short[\s-]?list(?:ed)?|mark\s+as\s+short[\s-]?list|move\b[\s\S]{0,40}\bshort[\s-]?list(?:ed)?|move\s+to\s+interview|reject\s+applicant|hire\s+applicant|best\s+(?:candidate|applicant)s?|top\s+\d+\s+(?:candidate|applicant)s?)\b/i.test(
     question,
   );
 }
 
-export function looksLikeOutreachDraftIntent(question: string): boolean {
+export function looksLikeOfferDraftIntent(question: string): boolean {
   return (
-    /\b(draft|write|prepare|create)\b/i.test(question) &&
-    /\b(outreach|email\s+campaign|campaign|email)\b/i.test(question)
+    /\boffer\s+(letter|draft|email|mail)\b/i.test(question) ||
+    /\b(?:draft|write|prepare|create|make|compose)\b[\s\S]{0,24}\boffer\b/i.test(question) ||
+    /\bmake\s+(an?\s+)?offer\b/i.test(question)
+  );
+}
+
+export function looksLikeOutreachDraftIntent(question: string): boolean {
+  if (looksLikeOfferDraftIntent(question)) return true;
+  return (
+    /\b(draft|write|prepare|create|give|make|compose)\b/i.test(question) &&
+    /\b(outreach|email\s+campaign|campaign|email|mail)\b/i.test(question)
   );
 }
 

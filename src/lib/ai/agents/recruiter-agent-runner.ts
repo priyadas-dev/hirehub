@@ -109,7 +109,7 @@ export async function runRecruiterSpecialistFromSupervisor(
 
   const { data: jobRow, error: jobError } = await ctx.supabase
     .from("jobs")
-    .select("id,title,recruiter_id,company_id")
+    .select("id,title,recruiter_id,company_id,salary_range,companies(name)")
     .eq("id", jobId)
     .maybeSingle();
 
@@ -121,11 +121,14 @@ export async function runRecruiterSpecialistFromSupervisor(
     };
   }
 
+  const companyJoin = jobRow.companies as unknown as { name?: string | null } | null;
   const job: RecruiterOwnedJob = {
     id: jobRow.id,
     title: jobRow.title,
     recruiterId: jobRow.recruiter_id,
     companyId: jobRow.company_id,
+    companyName: companyJoin?.name ?? null,
+    salaryRange: (jobRow as { salary_range?: string | null }).salary_range ?? null,
   };
 
   let contact: { id: string; recruiterId: string; email: string; fullName: string | null } | null = null;
@@ -145,6 +148,29 @@ export async function runRecruiterSpecialistFromSupervisor(
     }
   }
 
+  let applicantName: string | null = null;
+  let applicantEmail: string | null = null;
+  const applicationId = input.applicationId?.trim();
+  if (applicationId) {
+    const { data: appRow } = await ctx.supabase
+      .from("applications")
+      .select("id,job_id,profiles(full_name,email),jobs!inner(id,recruiter_id)")
+      .eq("id", applicationId)
+      .maybeSingle();
+    if (appRow) {
+      const jobsMeta = appRow.jobs as unknown as { id: string; recruiter_id: string };
+      // Only personalize when the application belongs to this owned job.
+      if (appRow.job_id === jobId && jobsMeta.recruiter_id === job.recruiterId) {
+        const profile = appRow.profiles as unknown as {
+          full_name?: string | null;
+          email?: string | null;
+        } | null;
+        applicantName = profile?.full_name?.trim() || null;
+        applicantEmail = profile?.email?.trim() || null;
+      }
+    }
+  }
+
   let segment: { id: string; recruiterId: string; name: string } | null = null;
   if (input.segmentId) {
     const { data: s } = await ctx.supabase
@@ -159,12 +185,18 @@ export async function runRecruiterSpecialistFromSupervisor(
 
   // Supervisor NL path never sets confirmSend; structured API may only when caller explicitly opts in.
   const confirmSend = Boolean(input.confirmSend);
+  const draftKind = input.draftKind === "offer" ? "offer" : "outreach";
   return draftRecruiterOutreach(
     {
       job,
       contact,
       segment,
       confirmSend,
+      draftKind,
+      applicantName,
+      applicantEmail,
+      salaryText: job.salaryRange,
+      designation: job.title,
     },
     deps,
   );

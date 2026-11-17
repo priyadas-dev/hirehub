@@ -3,14 +3,20 @@ import {
   applicantDisplayName,
   detectRecruiterChatIntent,
   extractApplicantNameHint,
+  extractApplicantNameHints,
+  extractApplicantOrdinalRef,
   extractJobTitleHint,
+  extractMinYearsExperience,
   extractSearchTokens,
+  extractTopNApplicants,
   formatOwnedJobsReply,
   formatRankedApplicantsReply,
   htmlToEditablePlain,
   isConfirmShortlistQuestion,
   isListJobsWithApplicantsQuestion,
   isListOwnedJobsQuestion,
+  isOfferDraftishQuestion,
+  isOutreachDraftishQuestion,
   isProcessHelpQuestion,
   isShortlistishQuestion,
   matchApplicantsByNameHint,
@@ -21,6 +27,7 @@ import {
   parseSupervisedAgentMessage,
   rankApplicantsByProfileAndResume,
   rankOwnedJobsByQuery,
+  resolveApplicantChoiceFromRef,
   suggestJobsWithApplicants,
 } from "@/lib/ai/recruiter-agent-ui";
 
@@ -141,6 +148,15 @@ describe("detectRecruiterChatIntent", () => {
     expect(detectRecruiterChatIntent("which process do you follow to shortlist?")).toBe("help");
     expect(detectRecruiterChatIntent("Draft outreach for this job")).toBe("draft_outreach");
     expect(detectRecruiterChatIntent("give a draft ouitreach")).toBe("draft_outreach");
+    expect(detectRecruiterChatIntent("Make an offer for this candidate")).toBe("draft_outreach");
+    expect(detectRecruiterChatIntent("Prepare an offer letter")).toBe("draft_outreach");
+    expect(detectRecruiterChatIntent("Create an offer draft for him")).toBe("draft_outreach");
+    expect(detectRecruiterChatIntent("Find me the best candidates")).toBe("shortlist");
+    expect(detectRecruiterChatIntent("Select the best three applicants")).toBe("shortlist");
+    expect(detectRecruiterChatIntent("Move him to shortlisted")).toBe("shortlist");
+    expect(detectRecruiterChatIntent("What about the second candidate?")).toBe("shortlist");
+    expect(detectRecruiterChatIntent("Find candidates with React experience")).toBe("shortlist");
+    expect(detectRecruiterChatIntent("Show software engineers")).toBe("list_applicants");
     expect(detectRecruiterChatIntent("show my own jobs?")).toBe("list_jobs");
     expect(detectRecruiterChatIntent("is this is my own jobs?")).toBe("list_jobs");
     expect(detectRecruiterChatIntent("List my jobs with applicants")).toBe("list_jobs");
@@ -148,6 +164,30 @@ describe("detectRecruiterChatIntent", () => {
     expect(detectRecruiterChatIntent("ai enginners somehow")).toBe("browse");
     expect(isProcessHelpQuestion("how do you shortlist?")).toBe(true);
     expect(isShortlistishQuestion("how do you shortlist?")).toBe(false);
+    expect(isOfferDraftishQuestion("make an offer")).toBe(true);
+    expect(isOutreachDraftishQuestion("Prepare an offer letter")).toBe(true);
+  });
+
+  it("resolves ordinals, top-N, and experience filters from NL", () => {
+    expect(extractApplicantOrdinalRef("What about the second candidate?")).toEqual({
+      kind: "index",
+      index: 1,
+    });
+    expect(extractApplicantOrdinalRef("Shortlist this candidate")).toEqual({ kind: "pronoun" });
+    expect(extractApplicantOrdinalRef("Move him to shortlisted")).toEqual({ kind: "pronoun" });
+    expect(extractTopNApplicants("Select the best three applicants")).toBe(3);
+    expect(extractMinYearsExperience("Show applicants with 2 years of experience")).toBe(2);
+    const choices = [
+      { applicationId: "a1", label: "A" },
+      { applicationId: "a2", label: "B" },
+      { applicationId: "a3", label: "C" },
+    ];
+    expect(resolveApplicantChoiceFromRef(choices, { kind: "index", index: 1 })?.applicationId).toBe(
+      "a2",
+    );
+    expect(
+      resolveApplicantChoiceFromRef(choices, { kind: "pronoun" }, "a3")?.applicationId,
+    ).toBe("a3");
   });
 
   it("routes confirm typos to confirm_shortlist instead of owned-job browse dump", () => {
@@ -171,15 +211,30 @@ describe("detectRecruiterChatIntent", () => {
   it("extracts applicant names from typo shortlist asks", () => {
     expect(extractApplicantNameHint("shortlis koushik Roy")).toMatch(/koushik/i);
     expect(extractApplicantNameHint("shortlist Dibyo Das")).toMatch(/Dibyo/i);
+    expect(detectRecruiterChatIntent("shortliste koushik and priya")).toBe("shortlist");
+    expect(extractApplicantNameHints("shortliste koushik and priya")).toEqual([
+      "koushik",
+      "priya",
+    ]);
+    expect(extractApplicantNameHint("shortlist koushik and priya")).toBe("koushik");
+    expect(detectRecruiterChatIntent("show software developer applicant")).toBe("list_applicants");
     const hits = matchApplicantsByNameHint(
       [
         { id: "1", profiles: { full_name: "Koushik Roy", email: "k@x.com" } },
         { id: "2", profiles: { full_name: "Dibyo Das", email: "d@x.com" } },
+        { id: "3", profiles: { full_name: "Priya Das", email: "p@x.com" } },
       ],
       "koushik Roy",
     );
     expect(hits).toHaveLength(1);
     expect(hits[0]?.id).toBe("1");
+    expect(matchApplicantsByNameHint(
+      [
+        { id: "1", profiles: { full_name: "Koushik Roy", email: "k@x.com" } },
+        { id: "3", profiles: { full_name: "Priya Das", email: "p@x.com" } },
+      ],
+      "priya",
+    )[0]?.id).toBe("3");
   });
 });
 
@@ -266,6 +321,30 @@ describe("owned job chat helpers", () => {
     );
     expect(ranked[0]?.applicant.id).toBe("a1");
     expect(formatRankedApplicantsReply(ranked, "Software Developer")).toMatch(/Priya Das/);
+  });
+
+  it("boosts applicants whose cover note meets requested years of experience", () => {
+    const ranked = rankApplicantsByProfileAndResume(
+      [
+        {
+          id: "junior",
+          status: "applied",
+          cover_note: "1 year of experience with HTML",
+          profiles: { full_name: "Junior", email: "j@x.com" },
+          jobs: { id: "j1", title: "Software Developer" },
+        },
+        {
+          id: "mid",
+          status: "applied",
+          cover_note: "3 years of experience with React",
+          profiles: { full_name: "Mid", email: "m@x.com" },
+          jobs: { id: "j1", title: "Software Developer" },
+        },
+      ],
+      "Show applicants with 2 years of experience",
+      { title: "Software Developer" },
+    );
+    expect(ranked[0]?.applicant.id).toBe("mid");
   });
 });
 

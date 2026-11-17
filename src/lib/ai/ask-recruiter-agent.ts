@@ -14,9 +14,11 @@ const shortlistSchema = z.object({
 const draftSchema = z.object({
   action: z.literal("draft_outreach"),
   jobId: z.string().uuid(),
+  applicationId: z.string().uuid().optional(),
   contactId: z.string().uuid().optional(),
   segmentId: z.string().uuid().optional(),
   confirmSend: z.boolean().optional(),
+  draftKind: z.enum(["outreach", "offer"]).optional(),
 });
 
 const supervisedSchema = z.object({
