@@ -49,3 +49,4 @@ docs/authentication-phase-1-verify-result.json
 .cursor/
 .impeccable/
 /capture-replay-tool/
+.vercel

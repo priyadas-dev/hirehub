@@ -209,12 +209,7 @@ export function detectRecruiterChatIntent(question: string): RecruiterChatIntent
   if (isListJobsWithApplicantsQuestion(q) || isListOwnedJobsQuestion(q)) return "list_jobs";
   if (isListApplicantsQuestion(q)) return "list_applicants";
   if (isShortlistishQuestion(q)) return "shortlist";
-  if (
-    /\b(draft|write|prepare|create)\b/i.test(q) &&
-    /\b(outreach|email|campaign)\b/i.test(q)
-  ) {
-    return "draft_outreach";
-  }
+  if (isOutreachDraftishQuestion(q)) return "draft_outreach";
   // Noisy / incomplete: any leftover tokens → browse owned jobs + applicants locally.
   if (extractSearchTokens(q).length > 0) return "browse";
   return "supervised";
@@ -241,13 +236,16 @@ export function isProcessHelpQuestion(question: string): boolean {
   return false;
 }
 
+/** shortlist / short list / shortlis / shorlist / shortlst */
+const SHORTLIST_WORD_RE = /\bshort[\s-]?(?:list|lis|lst|lsit)\b/i;
+
 export function isShortlistishQuestion(question: string): boolean {
   const q = question.trim();
   if (isProcessHelpQuestion(q)) return false;
-  // Accept "shortlist", "short list", "short-list", and common typos (candiate).
+  // Accept "shortlist", "short list", "short-list", typos (shortlis), and common candidate typos.
   return (
-    /\bshort[\s-]?list\b/i.test(q) ||
-    /\b(mark\s+as\s+short[\s-]?list|propose\s+short[\s-]?list)\b/i.test(q) ||
+    SHORTLIST_WORD_RE.test(q) ||
+    /\b(mark\s+as\s+short[\s-]?(?:list|lis)|propose\s+short[\s-]?(?:list|lis))\b/i.test(q) ||
     /\b(best|top|strong(?:est)?|good)\b[\s\S]{0,40}\b(applicant|cand+idate|resume|profile)\b/i.test(
       q,
     ) ||
@@ -255,6 +253,17 @@ export function isShortlistishQuestion(question: string): boolean {
     /\b(match|rank|recommend)\b[\s\S]{0,40}\b(applicant|cand+idate|resume|profile)\b/i.test(q) ||
     /\bfind\b[\s\S]{0,40}\b(applicant|cand+idate|someone|person)\b/i.test(q)
   );
+}
+
+/** draft outreach / give a draft ouitreach / write email */
+export function isOutreachDraftishQuestion(question: string): boolean {
+  const q = question.trim();
+  const wantsDraft = /\b(draft|write|prepare|create|give|make|compose)\b/i.test(q);
+  // outreach, ouitreach, outrech, out-reach, email, campaign
+  const wantsOutreach =
+    /\b(outreach|ouitreach|outrech|out[\s-]?reach|email|campaign|mail)\b/i.test(q) ||
+    /\bou[it]{0,2}r[ea]{0,2}ch\b/i.test(q);
+  return wantsDraft && wantsOutreach;
 }
 
 export function applicantDisplayName(input: {
@@ -394,11 +403,19 @@ const STOPWORDS = new Set([
   "candidate",
   "candidates",
   "shortlist",
+  "shortlis",
+  "shorlist",
+  "shortlst",
   "propose",
   "draft",
   "outreach",
+  "ouitreach",
+  "outrech",
   "email",
   "campaign",
+  "give",
+  "make",
+  "compose",
   "show",
   "list",
   "find",
@@ -444,7 +461,7 @@ export function extractSearchTokens(question: string): string[] {
 export function extractJobTitleHint(question: string): string | null {
   const q = question.trim();
   const patterns = [
-    /\bshort[\s-]?list\s+(?:cand+iate[s]?|applicant[s]?|candidate[s]?)?\s*(?:from|for|on)\s+(?:the\s+)?(.+?)(?:\s*[?.!]|$)/i,
+    /\bshort[\s-]?(?:list|lis|lst|lsit)\s+(?:cand+iate[s]?|applicant[s]?|candidate[s]?)?\s*(?:from|for|on)\s+(?:the\s+)?(.+?)(?:\s*[?.!]|$)/i,
     /\b(?:from|for|on)\s+(?:the\s+)?job\s+(.+?)(?:\s*[?.!]|$)/i,
     /\bpick\s+(?:the\s+)?job\s+(.+?)(?:\s*[?.!]|$)/i,
     /\bselect\s+(?:the\s+)?job\s+(.+?)(?:\s*[?.!]|$)/i,
@@ -464,11 +481,12 @@ export function extractJobTitleHint(question: string): string | null {
   return null;
 }
 
-/** Best-effort person name hint: "shortlist Priya", "candidate named Alex". */
+/** Best-effort person name hint: "shortlist Priya", "shortlis koushik Roy". */
 export function extractApplicantNameHint(question: string): string | null {
   const q = question.trim();
   const patterns = [
-    /\b(?:shortlist|select|pick|choose)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\b/,
+    // Allow typos of shortlist + any casing for the name.
+    /\b(?:short[\s-]?(?:list|lis|lst|lsit)|select|pick|choose)\s+([A-Za-z][A-Za-z'-]+(?:\s+[A-Za-z][A-Za-z'-]+)?)\b/i,
     /\b(?:named|name)\s+([A-Za-z][A-Za-z'-]+(?:\s+[A-Za-z][A-Za-z'-]+)?)\b/i,
     /\bapplicant\s+([A-Za-z][A-Za-z'-]+(?:\s+[A-Za-z][A-Za-z'-]+)?)\b/i,
   ];
@@ -478,9 +496,29 @@ export function extractApplicantNameHint(question: string): string | null {
     if (!raw) continue;
     if (STOPWORDS.has(raw.toLowerCase())) continue;
     if (/^(from|for|on|the|this|my|job)$/i.test(raw)) continue;
+    // Reject clear job-title fragments after shortlist-from style asks.
+    if (/^(from|for)\b/i.test(raw)) continue;
     return raw;
   }
   return null;
+}
+
+/** Match applicants by display name (case-insensitive substring). */
+export function matchApplicantsByNameHint<
+  T extends { id: string; profiles?: { full_name?: string | null; email?: string | null } | null },
+>(applicants: T[], nameHint: string): T[] {
+  const needle = nameHint.trim().toLowerCase();
+  if (!needle) return [];
+  const parts = needle.split(/\s+/).filter(Boolean);
+  return applicants.filter((a) => {
+    const name = (a.profiles?.full_name ?? "").trim().toLowerCase();
+    const email = (a.profiles?.email ?? "").trim().toLowerCase();
+    if (!name && !email) return false;
+    if (name.includes(needle) || email.includes(needle)) return true;
+    // All name parts present (order-insensitive): "roy koushik" ≈ "Koushik Roy"
+    if (parts.length > 1 && parts.every((p) => name.includes(p))) return true;
+    return false;
+  });
 }
 
 export function matchOwnedJobByTitle<T extends { id: string; title: string }>(

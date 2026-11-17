@@ -50,6 +50,7 @@ import {
   formatRankedApplicantsReply,
   htmlToEditablePlain,
   isListJobsWithApplicantsQuestion,
+  matchApplicantsByNameHint,
   matchOwnedJobByTitle,
   normalizeRecruiterChatTurn,
   parseOutreachAgentResult,
@@ -654,14 +655,18 @@ function RecruiterAgentPage() {
     await runShortlist(top.applicant.id, false, { quiet: true });
   }
 
-  async function selectAndProposeShortlist(applicationId: string) {
-    if (busy || !applicationId) return;
+  async function selectAndProposeShortlist(
+    applicationId: string,
+    options?: { alreadyBusy?: boolean },
+  ) {
+    if ((!options?.alreadyBusy && busy) || !applicationId) return;
     const row =
       appsForJob.data?.find((a) => a.id === applicationId) ||
       appsAcrossOwned.data?.find((a) => a.id === applicationId) ||
       null;
     if (row) selectApplicant(row);
-    setBusy(true);
+    const manageBusy = !options?.alreadyBusy;
+    if (manageBusy) setBusy(true);
     try {
       await runShortlist(applicationId, false, { quiet: true });
       const label = row
@@ -683,11 +688,52 @@ function RecruiterAgentPage() {
         error: true,
       });
     } finally {
-      setBusy(false);
+      if (manageBusy) setBusy(false);
     }
   }
 
   async function handleShortlistIntent(text: string) {
+    const nameHint = extractApplicantNameHint(text);
+    // Prefer an explicit person name over a stale Confirm chip (e.g. previous Dibyo proposal).
+    if (nameHint) {
+      let pool = applicantPool;
+      if (pool.length === 0) {
+        try {
+          const refreshed = await appsAcrossOwned.refetch();
+          pool = refreshed.data ?? [];
+        } catch {
+          pool = [];
+        }
+      }
+      const byName = matchApplicantsByNameHint(pool, nameHint);
+      if (byName.length === 1) {
+        await selectAndProposeShortlist(byName[0]!.id, { alreadyBusy: true });
+        return;
+      }
+      if (byName.length > 1) {
+        const ranked = byName.map((applicant) => ({
+          applicant,
+          score: 50,
+          reasons: [`name matches “${nameHint}”`],
+        }));
+        appendTurns({
+          id: newTurnId(),
+          role: "assistant",
+          text: `I found ${byName.length} applicants matching “${nameHint}”. Select one below (do not Confirm the previous proposal unless it’s the same person).`,
+          source: "local" as const,
+          applicantChoices: toApplicantChoices(ranked as never),
+        });
+        return;
+      }
+      appendTurns({
+        id: newTurnId(),
+        role: "assistant",
+        text: `I couldn’t find “${nameHint}” among applicants on jobs you own. Use Select on a card, or say “shortlist from <job title>”.`,
+        source: "local" as const,
+      });
+      return;
+    }
+
     const hint = extractJobTitleHint(text);
     const rankedJobs = rankOwnedJobsByQuery(jobs.data ?? [], text);
     const matched =
@@ -829,6 +875,20 @@ function RecruiterAgentPage() {
           if (ranked.length === 1) {
             targetJobId = ranked[0]!.job.id;
             selectJob(targetJobId);
+          }
+        }
+        // Reuse job from selected / pending shortlist applicant when chat has context.
+        if (!targetJobId) {
+          const contextAppId = selectedAppId || pendingShortlistAppId;
+          const contextApp =
+            (contextAppId &&
+              (appsForJob.data?.find((a) => a.id === contextAppId) ||
+                appsAcrossOwned.data?.find((a) => a.id === contextAppId))) ||
+            null;
+          if (contextApp?.job_id) {
+            targetJobId = contextApp.job_id;
+            selectJob(contextApp.job_id);
+            setSelectedAppId(contextApp.id);
           }
         }
         if (!targetJobId) {

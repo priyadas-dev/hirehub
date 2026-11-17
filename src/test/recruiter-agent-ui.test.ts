@@ -132,10 +132,12 @@ describe("detectRecruiterChatIntent", () => {
     );
     expect(detectRecruiterChatIntent("shortlist from ai enginners")).toBe("shortlist");
     expect(detectRecruiterChatIntent("short list candiate from software")).toBe("shortlist");
+    expect(detectRecruiterChatIntent("shortlis koushik Roy")).toBe("shortlist");
     expect(detectRecruiterChatIntent("best candidate for software")).toBe("shortlist");
     expect(detectRecruiterChatIntent("how do you shortlist?")).toBe("help");
     expect(detectRecruiterChatIntent("which process do you follow to shortlist?")).toBe("help");
     expect(detectRecruiterChatIntent("Draft outreach for this job")).toBe("draft_outreach");
+    expect(detectRecruiterChatIntent("give a draft ouitreach")).toBe("draft_outreach");
     expect(detectRecruiterChatIntent("show my own jobs?")).toBe("list_jobs");
     expect(detectRecruiterChatIntent("is this is my own jobs?")).toBe("list_jobs");
     expect(detectRecruiterChatIntent("List my jobs with applicants")).toBe("list_jobs");
@@ -143,6 +145,23 @@ describe("detectRecruiterChatIntent", () => {
     expect(detectRecruiterChatIntent("ai enginners somehow")).toBe("browse");
     expect(isProcessHelpQuestion("how do you shortlist?")).toBe(true);
     expect(isShortlistishQuestion("how do you shortlist?")).toBe(false);
+  });
+
+  it("extracts applicant names from typo shortlist asks", async () => {
+    const { extractApplicantNameHint, matchApplicantsByNameHint } = await import(
+      "@/lib/ai/recruiter-agent-ui"
+    );
+    expect(extractApplicantNameHint("shortlis koushik Roy")).toMatch(/koushik/i);
+    expect(extractApplicantNameHint("shortlist Dibyo Das")).toMatch(/Dibyo/i);
+    const hits = matchApplicantsByNameHint(
+      [
+        { id: "1", profiles: { full_name: "Koushik Roy", email: "k@x.com" } },
+        { id: "2", profiles: { full_name: "Dibyo Das", email: "d@x.com" } },
+      ],
+      "koushik Roy",
+    );
+    expect(hits).toHaveLength(1);
+    expect(hits[0]?.id).toBe("1");
   });
 });
 
