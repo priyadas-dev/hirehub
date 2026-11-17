@@ -187,7 +187,35 @@ const TERM_ALIASES: Record<string, string[]> = {
   code: ["software", "developer", "engineer"],
   programming: ["software", "developer", "engineer"],
   engineering: ["engineer", "software"],
+  frontend: ["frontend", "front-end", "react", "ui"],
+  backend: ["backend", "back-end", "api", "server"],
+  fullstack: ["full-stack", "fullstack", "full", "stack"],
+  "full-stack": ["full-stack", "fullstack", "software", "developer"],
+  devops: ["devops", "sre", "infrastructure"],
 };
+
+/** Career-role tokens that must hit the job TITLE (not description-only noise). */
+const ROLE_TITLE_TERMS = new Set([
+  "software",
+  "engineer",
+  "developer",
+  "frontend",
+  "front-end",
+  "backend",
+  "back-end",
+  "fullstack",
+  "full-stack",
+  "devops",
+  "intern",
+  "qa",
+  "testing",
+  "test",
+  "sre",
+]);
+
+export function isRoleHeavyLiveQuery(parsed: ParsedLiveJobQuery): boolean {
+  return parsed.terms.some((t) => ROLE_TITLE_TERMS.has(t.toLowerCase()));
+}
 
 export function escapeIlikePattern(value: string): string {
   return value.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
@@ -326,9 +354,16 @@ function passesClientFilters(job: LiveApprovedJob, parsed: ParsedLiveJobQuery): 
   // Location / type / remote filters are authoritative. Residual chat words like
   // "there" must not exclude otherwise valid approved jobs.
   if (parsed.terms.length > 0 && !hasStructuralFilters(parsed)) {
+    const title = job.title.toLowerCase();
     const hay =
       `${job.title} ${job.description ?? ""} ${job.company_name ?? ""} ${job.location ?? ""}`.toLowerCase();
-    if (!parsed.terms.some((t) => hay.includes(t))) return false;
+    // Role searches (software / engineer / developer / …) must match the TITLE so
+    // marketing/HR/labor cards with a stray keyword in the description are excluded.
+    if (isRoleHeavyLiveQuery(parsed)) {
+      if (!parsed.terms.some((t) => title.includes(t))) return false;
+    } else if (!parsed.terms.some((t) => hay.includes(t))) {
+      return false;
+    }
   }
   return true;
 }
@@ -373,6 +408,19 @@ export function filterLiveJobsByQuery(jobs: LiveApprovedJob[], query: string): L
     return jobs;
   }
   return jobs.filter((job) => passesClientFilters(job, filterOnly));
+}
+
+/**
+ * Keep role relevance after skill-pool merges.
+ * When the seeker asked for software/engineer/etc., drop cards whose titles do not match.
+ */
+export function filterLiveJobsByRoleRelevance(
+  jobs: LiveApprovedJob[],
+  query: string,
+): LiveApprovedJob[] {
+  const parsed = parseLiveJobQuery(query);
+  if (!isRoleHeavyLiveQuery(parsed)) return jobs;
+  return jobs.filter((job) => passesClientFilters(job, parsed));
 }
 
 /**

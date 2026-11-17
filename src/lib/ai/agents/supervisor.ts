@@ -34,6 +34,7 @@ import { extractSkillsFromQuestion } from "@/lib/ai/skill-extract";
 import {
   extractApplyJobId,
   extractSaveJobId,
+  filterRecentJobsByQuestion,
   looksLikeApplyIntent,
   looksLikeCheckStatusIntent,
   looksLikeSaveJobIntent,
@@ -559,15 +560,18 @@ export async function runSupervisor(
       recentJobs,
     });
     if (!jobId) {
+      const clarifyJobs = filterRecentJobsByQuestion(questionForRoute, recentJobs ?? []);
       return {
         ...okAssistant({
           answer:
-            "Tell me which approved job to save (pick a card, or say “save the first job”).",
+            clarifyJobs.length > 1
+              ? "I found a few matching jobs. Tell me which one to save (pick a card, or say “save the first job”)."
+              : "Tell me which approved job to save (pick a card, or say “save the first job”).",
           model: "application-agent",
           soughtLiveJobs: false,
           liveJobsAvailable: false,
           insufficientContext: false,
-          live: recentJobs?.map((j) => ({
+          live: clarifyJobs.map((j) => ({
             kind: "live_approved_job" as const,
             id: j.id,
             title: j.title,
@@ -696,15 +700,18 @@ export async function runSupervisor(
       recentJobs,
     });
     if (!jobId) {
+      const clarifyJobs = filterRecentJobsByQuestion(questionForRoute, recentJobs ?? []);
       return {
         ...okAssistant({
           answer:
-            "Tell me which approved job to apply to (pick a card, pass applyJobId, or say “apply to the first job”). I will not submit until you confirm.",
+            clarifyJobs.length > 1
+              ? "I found a few matching jobs. Tell me which one to apply to (pick a card, or say “apply to the first job”). I will not submit until you confirm."
+              : "Tell me which approved job to apply to (pick a card, pass applyJobId, or say “apply to the first job”). I will not submit until you confirm.",
           model: "application-agent",
           soughtLiveJobs: false,
           liveJobsAvailable: false,
           insufficientContext: false,
-          live: recentJobs?.map((j) => ({
+          live: clarifyJobs.map((j) => ({
             kind: "live_approved_job" as const,
             id: j.id,
             title: j.title,

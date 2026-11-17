@@ -191,4 +191,29 @@ describe("recommendApprovedLiveJobs", () => {
   it("escapes ILIKE wildcards from user input", () => {
     expect(escapeIlikePattern("100%_remote")).toBe("100\\%\\_remote");
   });
+
+  it("excludes HR/marketing titles from software engineering searches", async () => {
+    const marketing = {
+      ...hrFullTime,
+      id: "mkt-1",
+      title: "marketing Head",
+      description: "Need a software growth engineer mindset",
+      job_type: "contract",
+    };
+    const labor = {
+      ...hrFullTime,
+      id: "labor-1",
+      title: "senior labor",
+      description: "hard working dedicated man engineer",
+      job_type: "contract",
+    };
+    const result = await recommendApprovedLiveJobs(
+      mockClient([softwareDev, hrFullTime, marketing, labor], {}),
+      { query: "Show me software engineering jobs", limit: 8 },
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.jobs.every((j) => /software|developer|engineer/i.test(j.title))).toBe(true);
+    expect(result.jobs.some((j) => /marketing|labor|hr/i.test(j.title))).toBe(false);
+  });
 });

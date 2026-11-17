@@ -119,46 +119,89 @@ describe("Discovery agent empty / clarify / success paths", () => {
     expect(result.message).toMatch(/couldn't find any approved jobs/i);
   });
 
-  it("soft-falls back when skill ranking finds no literal skill hits", async () => {
-    const related = {
+  it("keeps skill matches and refuses when no skill hits exist", async () => {
+    const reactJob = {
+      ...liveJob,
+      id: "job-react",
+      title: "Frontend Engineer",
+      description: "React and TypeScript UI work",
+    };
+    const phpOnly = {
       ...liveJob,
       id: "job-php",
       title: "Backend Engineer",
       description: "PHP and Laravel APIs in Dhaka",
     };
-    const result = await runDiscoveryAgent(
+    const hit = await runDiscoveryAgent(
       { question: "I know React, JavaScript and SQL. Find suitable job" },
       {
-        listLiveJobs: async () => ({ ok: true, jobs: [related] }),
+        listLiveJobs: async () => ({ ok: true, jobs: [reactJob, phpOnly] }),
         retrieveCorpus: async () => ({ ok: true, matches: [] }),
       },
     );
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.liveJobs.length).toBeGreaterThan(0);
-    expect(result.inventedJobs).toBe(false);
+    expect(hit.ok).toBe(true);
+    if (!hit.ok) return;
+    expect(hit.liveJobs.map((j) => j.id)).toContain("job-react");
+    expect(hit.liveJobs.map((j) => j.id)).not.toContain("job-php");
+
+    const miss = await runDiscoveryAgent(
+      { question: "I know React, JavaScript and SQL. Find suitable job" },
+      {
+        listLiveJobs: async () => ({ ok: true, jobs: [phpOnly] }),
+        retrieveCorpus: async () => ({ ok: true, matches: [] }),
+      },
+    );
+    expect(miss.ok).toBe(false);
+    if (miss.ok) return;
+    expect(miss.code).toBe("low_confidence");
   });
 
-  it("falls back to recent approved jobs when skill search pool is empty", async () => {
-    const recent = {
-      ...liveJob,
-      id: "job-recent",
-      title: "Software Developer",
-      description: "General software role",
-    };
+  it("does not dump unrelated openings when skill search pool is empty", async () => {
     const result = await runDiscoveryAgent(
       { question: "I know React, JavaScript and SQL. Find suitable jobs" },
       {
-        listLiveJobs: async (q) => {
-          if (/approved openings/i.test(q)) return { ok: true, jobs: [recent] };
-          return { ok: true, jobs: [] };
-        },
+        listLiveJobs: async () => ({ ok: true, jobs: [] }),
+        retrieveCorpus: async () => ({ ok: true, matches: [] }),
+      },
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.code).toBe("low_confidence");
+    expect(result.message).toMatch(/couldn't find any approved jobs/i);
+  });
+
+  it("keeps software role searches off marketing/HR titles", async () => {
+    const se = {
+      ...liveJob,
+      id: "job-se",
+      title: "Software Engineer",
+      description: "Build APIs",
+    };
+    const hr = {
+      ...liveJob,
+      id: "job-hr",
+      title: "HR & Admin",
+      description: "Need software tools knowledge",
+    };
+    const marketing = {
+      ...liveJob,
+      id: "job-mkt",
+      title: "marketing Head",
+      description: "engineer growth campaigns",
+    };
+    const result = await runDiscoveryAgent(
+      { question: "Show me software engineering jobs" },
+      {
+        listLiveJobs: async () => ({ ok: true, jobs: [se, hr, marketing] }),
         retrieveCorpus: async () => ({ ok: true, matches: [] }),
       },
     );
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.liveJobs.map((j) => j.id)).toContain("job-recent");
+    const ids = result.liveJobs.map((j) => j.id);
+    expect(ids).toContain("job-se");
+    expect(ids).not.toContain("job-hr");
+    expect(ids).not.toContain("job-mkt");
   });
 
   it("returns needs_clarification for vague empty job search", async () => {

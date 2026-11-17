@@ -95,6 +95,34 @@ describe("Phase 7 application agent — confirm gate", () => {
     ).toBe(JOB_ID_2);
   });
 
+  it("resolves noisy / partial titles from recent job cards", () => {
+    const seId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaac";
+    const recent = [
+      { id: JOB_ID, title: "Junior Software Developer", company_name: "TechnoNext" },
+      { id: JOB_ID_2, title: "marketing Head", company_name: "Manor IT" },
+      { id: seId, title: "Software Engineer", company_name: "TechnoNext" },
+    ];
+    expect(
+      extractApplyJobId({
+        question: "Please save this job Junior Software Develope",
+        recentJobs: recent,
+      }),
+    ).toBe(JOB_ID);
+    expect(
+      extractApplyJobId({
+        question: "Software Enginee save the job",
+        recentJobs: recent,
+      }),
+    ).toBe(seId);
+    // Ambiguous when two software titles both match strongly — ask, don't guess.
+    expect(
+      extractApplyJobId({
+        question: "apply to the software job",
+        recentJobs: recent,
+      }),
+    ).toBeNull();
+  });
+
   it("unconfirmed apply attempts zero inserts", async () => {
     const store = createUniqueStore();
     const result = await runApplicationAgent(

@@ -11,7 +11,12 @@ import {
   redactPii,
 } from "@/lib/ai/guardrails";
 import type { CorpusMatch } from "@/lib/ai/corpus";
-import type { LiveApprovedJob } from "@/lib/ai/live-recommend";
+import {
+  filterLiveJobsByRoleRelevance,
+  isRoleHeavyLiveQuery,
+  parseLiveJobQuery,
+  type LiveApprovedJob,
+} from "@/lib/ai/live-recommend";
 import { rankJobsBySkills, type SkillMatchedJob } from "@/lib/ai/skill-match";
 import { extractSkillsFromQuestion, mergeSkillLists } from "@/lib/ai/skill-extract";
 
@@ -139,27 +144,30 @@ export async function runDiscoveryAgent(
     }
 
     // Fairness already passed — safe to rank.
-    // Strict skill hits first; if none, soft-rank / show related approved jobs (never invent).
+    // Never dump unrelated "recent approved" cards for a software/role ask.
+    const roleHeavy = isRoleHeavyLiveQuery(parseLiveJobQuery(questionUsed));
+    const roleSafePool = filterLiveJobsByRoleRelevance(live.jobs, questionUsed);
+
     if (classified.useSkillRanking && skills.length > 0) {
-      const strict = rankJobsBySkills(live.jobs, skills, { limit: 8, requireSkillHit: true });
+      const pool = roleHeavy ? roleSafePool : live.jobs;
+      const strict = rankJobsBySkills(pool, skills, { limit: 8, requireSkillHit: true });
       if (strict.length > 0) {
         liveJobs = strict;
+      } else if (!roleHeavy) {
+        // Soft skill rank only when the ask is skill-led (not "software engineer jobs").
+        const soft = rankJobsBySkills(pool, skills, { limit: 8, requireSkillHit: false });
+        liveJobs = soft.filter((j) => j.matchedSkills.length > 0).slice(0, 8);
       } else {
-        const soft = rankJobsBySkills(live.jobs, skills, { limit: 8, requireSkillHit: false });
-        liveJobs = soft.length > 0 ? soft : live.jobs.slice(0, 8);
+        liveJobs = pool.slice(0, 8);
       }
-      // Last resort: if the skill pool is empty but HireHub has approved jobs, show recent ones.
-      if (liveJobs.length === 0) {
-        const recent = await deps.listLiveJobs("approved openings", { skillTerms: [] });
-        if (recent.ok && recent.jobs.length > 0) {
-          liveJobs = recent.jobs.slice(0, 8);
-        }
-      }
-    } else if (skills.length > 0) {
-      const ranked = rankJobsBySkills(live.jobs, skills, { limit: 8, requireSkillHit: false });
-      liveJobs = ranked.length > 0 ? ranked : live.jobs.slice(0, 8);
+    } else if (skills.length > 0 && !roleHeavy) {
+      const ranked = rankJobsBySkills(live.jobs, skills, {
+        limit: 8,
+        requireSkillHit: true,
+      });
+      liveJobs = ranked.length > 0 ? ranked : [];
     } else {
-      liveJobs = live.jobs.slice(0, 8);
+      liveJobs = (roleHeavy ? roleSafePool : live.jobs).slice(0, 8);
     }
   }
 

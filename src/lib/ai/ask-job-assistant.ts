@@ -20,6 +20,7 @@ import {
 } from "@/lib/ai/job-assistant";
 import {
   filterLiveJobsByQuery,
+  filterLiveJobsByRoleRelevance,
   recommendApprovedLiveJobs,
 } from "@/lib/ai/live-recommend";
 import { decodeResumePdfBase64, extractResumePdfText } from "@/lib/ai/resume-pdf";
@@ -148,7 +149,9 @@ export function buildSeekerJobAssistantDeps(ctx: SeekerAssistantContext): JobAss
           for (const job of skillPass.jobs) byId.set(job.id, job);
         }
 
-        const merged = filterLiveJobsByQuery([...byId.values()], question);
+        const structural = filterLiveJobsByQuery([...byId.values()], question);
+        // Re-apply role title relevance after skill widening (stops HR/marketing noise).
+        const merged = filterLiveJobsByRoleRelevance(structural, question);
         return { ok: true as const, jobs: merged.slice(0, Math.max(limit, 12)) };
       };
 

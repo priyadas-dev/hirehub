@@ -106,6 +106,83 @@ export function looksLikeCheckStatusIntent(question: string): boolean {
   );
 }
 
+/** Shared prefix length for noisy titles ("enginee" ↔ "engineer", "develope" ↔ "developer"). */
+function sharedPrefixLen(a: string, b: string): number {
+  const n = Math.min(a.length, b.length);
+  let i = 0;
+  while (i < n && a[i] === b[i]) i += 1;
+  return i;
+}
+
+function tokenizeJobHint(question: string): string[] {
+  return question
+    .toLowerCase()
+    .replace(
+      /\b(please|can you|could you|i want to|i('?d| would) like to|save|bookmark|favourite|favorite|apply|submit|application|the|a|an|this|that|it|job|jobs|role|roles|position|opening|for|to|in|at|on|of|and|or|with|from|approved|full-?time|part-?time|contract)\b/gi,
+      " ",
+    )
+    .replace(/[^a-z0-9+#.\s-]/g, " ")
+    .split(/\s+/)
+    .map((t) => t.trim())
+    .filter((t) => t.length >= 3);
+}
+
+/**
+ * Resolve a recent card by noisy / partial title (never guess when two cards tie).
+ */
+export function resolveRecentJobIdByTitle(
+  question: string,
+  recentJobs: ApplicationAgentJobRef[],
+): string | null {
+  if (!recentJobs.length) return null;
+  const tokens = tokenizeJobHint(question);
+  if (!tokens.length) return null;
+
+  const scored = recentJobs
+    .map((job) => {
+      const title = job.title.toLowerCase();
+      const company = (job.company_name ?? "").toLowerCase();
+      const titleWords = title.split(/[^a-z0-9+#]+/).filter(Boolean);
+      let score = 0;
+      for (const tok of tokens) {
+        if (title === tok) score += 10;
+        else if (title.includes(tok)) score += 6;
+        else if (titleWords.some((w) => sharedPrefixLen(tok, w) >= Math.min(5, tok.length, w.length))) {
+          score += 4;
+        }
+        if (company && company.includes(tok)) score += 2;
+      }
+      return { id: job.id, score };
+    })
+    .filter((x) => x.score >= 4)
+    .sort((a, b) => b.score - a.score || a.id.localeCompare(b.id));
+
+  if (!scored.length) return null;
+  if (scored.length === 1 || scored[0]!.score > scored[1]!.score) return scored[0]!.id;
+  return null;
+}
+
+/** Filter recent cards to those that plausibly match the question (for clarify UI). */
+export function filterRecentJobsByQuestion(
+  question: string,
+  recentJobs: ApplicationAgentJobRef[],
+): ApplicationAgentJobRef[] {
+  const tokens = tokenizeJobHint(question);
+  if (!tokens.length || !recentJobs.length) return recentJobs;
+  const filtered = recentJobs.filter((job) => {
+    const title = job.title.toLowerCase();
+    const company = (job.company_name ?? "").toLowerCase();
+    const titleWords = title.split(/[^a-z0-9+#]+/).filter(Boolean);
+    return tokens.some(
+      (tok) =>
+        title.includes(tok) ||
+        company.includes(tok) ||
+        titleWords.some((w) => sharedPrefixLen(tok, w) >= Math.min(5, tok.length, w.length)),
+    );
+  });
+  return filtered.length > 0 ? filtered : recentJobs;
+}
+
 export function extractApplyJobId(input: {
   question: string;
   applyJobId?: string | null;
@@ -134,7 +211,9 @@ export function extractApplyJobId(input: {
     const idx = map[ordinal[1]!.toLowerCase()];
     if (idx != null && recent[idx]) return recent[idx]!.id;
   }
-  return null;
+
+  // Fuzzy / noisy title match against cards already shown in this conversation.
+  return resolveRecentJobIdByTitle(input.question, recent);
 }
 
 /** Same job-id resolution as apply — used for Save Job. */
