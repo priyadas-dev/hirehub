@@ -368,6 +368,27 @@ describe("Phase 7 recruiter agent — ownership", () => {
     }
   });
 
+  it("rejects shortlist when applicant is already shortlisted", () => {
+    const result = planRecruiterShortlist(
+      {
+        application: {
+          id: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+          jobId: JOB_ID,
+          seekerId: SEEKER_ID,
+          status: "shortlisted",
+          jobRecruiterId: OWNER_ID,
+        },
+        confirm: true,
+      },
+      { callerId: OWNER_ID, callerRole: "recruiter" },
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.code).toBe("validation");
+      expect(result.message).toMatch(/already shortlisted/i);
+    }
+  });
+
   it("denies outreach draft for non-owned job", () => {
     const result = draftRecruiterOutreach(
       {

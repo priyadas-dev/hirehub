@@ -13,6 +13,7 @@ import {
   prepareCampaignSend,
 } from "@/lib/crm/campaigns";
 import type { CrmCampaign, CrmContact, CrmSegment } from "@/lib/crm/types";
+import { nextApplicationStatuses } from "@/lib/hirehub";
 
 export type RecruiterOwnedJob = {
   id: string;
@@ -88,6 +89,25 @@ export function planRecruiterShortlist(
       ok: false,
       code: "forbidden",
       message: "You can only shortlist applicants for jobs you own.",
+    };
+  }
+
+  const current = input.application.status;
+  if (current === status) {
+    return {
+      ok: false,
+      code: "validation",
+      message: `This applicant is already ${status}. Pick someone still in “applied”, or move them to interview instead.`,
+    };
+  }
+  const allowed = nextApplicationStatuses(current);
+  if (!allowed.includes(status)) {
+    return {
+      ok: false,
+      code: "validation",
+      message: `Cannot move from ${current} to ${status}. Allowed next steps from ${current}: ${
+        allowed.length ? allowed.join(", ") : "none"
+      }.`,
     };
   }
 

@@ -751,6 +751,23 @@ function applicantNameMatchesHint(
 }
 
 /**
+ * Only "applied" can transition to shortlisted in HireHub's status machine.
+ * Prefer those when resolving "confirm priya" among duplicate name hits.
+ */
+export function isShortlistableApplicationStatus(status: string | null | undefined): boolean {
+  return String(status ?? "").trim().toLowerCase() === "applied";
+}
+
+/**
+ * Keep applicants who can still be shortlisted; if none, return the original list
+ * so the UI can explain "already shortlisted" / terminal statuses.
+ */
+export function preferShortlistableApplicants<T extends { status: string }>(applicants: T[]): T[] {
+  const ready = applicants.filter((a) => isShortlistableApplicationStatus(a.status));
+  return ready.length > 0 ? ready : applicants;
+}
+
+/**
  * Match applicants by person name first.
  * Email is only a fallback when no display-name hit exists — otherwise
  * "confirm priya" falsely matches “Dibyo Das” via priya.das+…@email.

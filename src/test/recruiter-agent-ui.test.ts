@@ -19,8 +19,10 @@ import {
   isOutreachDraftishQuestion,
   isProcessHelpQuestion,
   isShortlistishQuestion,
+  isShortlistableApplicationStatus,
   matchApplicantsByNameHint,
   matchOwnedJobByTitle,
+  preferShortlistableApplicants,
   normalizeRecruiterChatTurn,
   parseOutreachAgentResult,
   parseShortlistAgentResult,
@@ -259,6 +261,18 @@ describe("detectRecruiterChatIntent", () => {
     );
     expect(hits).toHaveLength(1);
     expect(hits[0]?.id).toBe("priya");
+  });
+
+  it("prefers applied applications over already-shortlisted name duplicates", () => {
+    expect(isShortlistableApplicationStatus("shortlisted")).toBe(false);
+    expect(isShortlistableApplicationStatus("applied")).toBe(true);
+    const preferred = preferShortlistableApplicants([
+      { id: "s1", status: "shortlisted" },
+      { id: "a1", status: "applied" },
+      { id: "r1", status: "rejected" },
+    ]);
+    expect(preferred).toHaveLength(1);
+    expect(preferred[0]?.id).toBe("a1");
   });
 });
 

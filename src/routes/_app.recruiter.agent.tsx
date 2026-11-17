@@ -54,12 +54,14 @@ import {
   htmlToEditablePlain,
   isListJobsWithApplicantsQuestion,
   isOfferDraftishQuestion,
+  isShortlistableApplicationStatus,
   matchApplicantsByNameHint,
   matchOwnedJobByTitle,
   normalizeRecruiterChatTurn,
   parseOutreachAgentResult,
   parseShortlistAgentResult,
   parseSupervisedAgentMessage,
+  preferShortlistableApplicants,
   rankApplicantsByProfileAndResume,
   rankOwnedJobsByQuery,
   resolveApplicantChoiceFromRef,
@@ -729,16 +731,26 @@ function RecruiterAgentPage() {
       appsAcrossOwned.data?.find((a) => a.id === applicationId) ||
       null;
     if (row) selectApplicant(row);
+    const label = row
+      ? applicantDisplayName({
+          full_name: row.profiles?.full_name,
+          email: row.profiles?.email,
+        })
+      : "Applicant";
+    if (row && !isShortlistableApplicationStatus(row.status)) {
+      setPendingShortlistAppId(null);
+      appendTurns({
+        id: newTurnId(),
+        role: "assistant",
+        text: `${label} is already “${row.status}” — shortlist only moves applicants from “applied”. Pick an applied card, or move a shortlisted person to interview instead.`,
+        source: "local" as const,
+      });
+      return;
+    }
     const manageBusy = !options?.alreadyBusy;
     if (manageBusy) setBusy(true);
     try {
       await runShortlist(applicationId, false, { quiet: true });
-      const label = row
-        ? applicantDisplayName({
-            full_name: row.profiles?.full_name,
-            email: row.profiles?.email,
-          })
-        : "Applicant";
       toast.message("Applicant selected", {
         description: `${label} — Confirm shortlist below when ready.`,
       });
@@ -811,12 +823,36 @@ function RecruiterAgentPage() {
           byName.push(row);
         }
       }
-      if (byName.length === 1) {
-        await selectAndProposeShortlist(byName[0]!.id, { alreadyBusy: true });
+      const actionable = preferShortlistableApplicants(byName);
+      if (
+        actionable.length > 0 &&
+        actionable.every((a) => !isShortlistableApplicationStatus(a.status))
+      ) {
+        const label = applicantDisplayName({
+          full_name: actionable[0]!.profiles?.full_name,
+          email: actionable[0]!.profiles?.email,
+        });
+        appendTurns({
+          id: newTurnId(),
+          role: "assistant",
+          text: `${label} already has status “${actionable[0]!.status}” on your owned jobs — nothing left to shortlist. Select an “applied” applicant, or move a shortlisted person to interview.`,
+          source: "local" as const,
+          applicantChoices: toApplicantChoices(
+            actionable.map((applicant) => ({
+              applicant,
+              score: 50,
+              reasons: [`already ${applicant.status}`],
+            })) as never,
+          ),
+        });
         return;
       }
-      if (byName.length > 1) {
-        const ranked = byName.map((applicant) => ({
+      if (actionable.length === 1) {
+        await selectAndProposeShortlist(actionable[0]!.id, { alreadyBusy: true });
+        return;
+      }
+      if (actionable.length > 1) {
+        const ranked = actionable.map((applicant) => ({
           applicant,
           score: 50,
           reasons: [`name matches “${nameHints.join(", ")}”`],
@@ -824,7 +860,7 @@ function RecruiterAgentPage() {
         appendTurns({
           id: newTurnId(),
           role: "assistant",
-          text: `I found ${byName.length} applicants matching “${nameHints.join(", ")}”. Select one below, then Confirm shortlist (one person at a time).`,
+          text: `I found ${actionable.length} shortlistable applicants matching “${nameHints.join(", ")}” (already-shortlisted rows hidden). Select one below, then Confirm shortlist.`,
           source: "local" as const,
           applicantChoices: toApplicantChoices(ranked as never),
         });
@@ -910,7 +946,25 @@ function RecruiterAgentPage() {
           pool = [];
         }
       }
-      const byName = matchApplicantsByNameHint(pool, nameHint);
+      const byName = preferShortlistableApplicants(matchApplicantsByNameHint(pool, nameHint));
+      if (
+        byName.length > 0 &&
+        byName.every((a) => !isShortlistableApplicationStatus(a.status))
+      ) {
+        const app = byName[0]!;
+        const label = applicantDisplayName({
+          full_name: app.profiles?.full_name,
+          email: app.profiles?.email,
+        });
+        setPendingShortlistAppId(null);
+        appendTurns({
+          id: newTurnId(),
+          role: "assistant",
+          text: `${label} is already “${app.status}” — Confirm shortlist only works from “applied”.`,
+          source: "local" as const,
+        });
+        return;
+      }
       if (byName.length === 1) {
         const app = byName[0]!;
         selectApplicant(app);
@@ -938,7 +992,7 @@ function RecruiterAgentPage() {
         appendTurns({
           id: newTurnId(),
           role: "assistant",
-          text: `I found ${byName.length} applicants matching “${nameHint}”. Select the right person below, then Confirm shortlist.`,
+          text: `I found ${byName.length} shortlistable applicants matching “${nameHint}”. Select the right person below, then Confirm shortlist.`,
           source: "local" as const,
           applicantChoices: toApplicantChoices(ranked as never),
         });
@@ -955,6 +1009,24 @@ function RecruiterAgentPage() {
 
     const appId = selectedAppId || pendingShortlistAppId;
     if (appId) {
+      const row =
+        appsForJob.data?.find((a) => a.id === appId) ||
+        appsAcrossOwned.data?.find((a) => a.id === appId) ||
+        null;
+      if (row && !isShortlistableApplicationStatus(row.status)) {
+        setPendingShortlistAppId(null);
+        const label = applicantDisplayName({
+          full_name: row.profiles?.full_name,
+          email: row.profiles?.email,
+        });
+        appendTurns({
+          id: newTurnId(),
+          role: "assistant",
+          text: `${label} is already “${row.status}” — Confirm shortlist only works from “applied”.`,
+          source: "local" as const,
+        });
+        return;
+      }
       await runShortlist(appId, true);
       return;
     }
