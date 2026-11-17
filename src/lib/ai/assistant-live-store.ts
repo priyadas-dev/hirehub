@@ -5,6 +5,7 @@
  */
 
 import type { AskJobAssistantResult } from "@/lib/ai/job-assistant";
+import { looksLikeConfirmApplyIntent } from "@/lib/ai/agents/application";
 import {
   createConversationId,
   readAssistantHistory,
@@ -21,6 +22,40 @@ export type LiveChatTurn = {
   pending?: boolean;
   attachment?: AssistantHistoryAttachmentMeta | null;
 };
+
+const JOB_UUID_IN_TEXT_RE =
+  /[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/i;
+
+/** Last pending Confirm-apply job from prior assistant turns (UI chip or needs_confirm). */
+function findPendingApplyJobId(turns: LiveChatTurn[]): string | null {
+  for (let i = turns.length - 1; i >= 0; i -= 1) {
+    const result = turns[i]?.result;
+    if (result && result.ok && result.pendingApply?.jobId) {
+      return result.pendingApply.jobId;
+    }
+  }
+  return null;
+}
+
+/**
+ * Recover a job id for chat Confirm when Gemini invented a confirm prompt
+ * (no pendingApply payload) but an earlier user turn named the job UUID.
+ */
+function findApplyJobIdFromPriorTurns(turns: LiveChatTurn[]): string | null {
+  const pending = findPendingApplyJobId(turns);
+  if (pending) return pending;
+  for (let i = turns.length - 1; i >= 0; i -= 1) {
+    const q = turns[i]?.question ?? "";
+    if (!JOB_UUID_IN_TEXT_RE.test(q)) continue;
+    if (!/\b(appl|confirm|job|submit)\b/i.test(q) && !/please confirm apply to job/i.test(q)) {
+      // Still accept a bare UUID-bearing apply paste from the same session.
+      if (!/\b[0-9a-f]{8}-/i.test(q)) continue;
+    }
+    const match = q.match(JOB_UUID_IN_TEXT_RE);
+    if (match?.[0]) return match[0];
+  }
+  return null;
+}
 
 export type AssistantLiveState = {
   userId: string;
@@ -295,6 +330,18 @@ export function runAssistantLiveAsk(userId: string, payload: AssistantAskPayload
         }))
       : undefined;
 
+  // Chat "confirm"/"yes" must finalize the pending apply — same as the Confirm button.
+  const chatConfirm = looksLikeConfirmApplyIntent(trimmed);
+  const recoveredApplyJobId = chatConfirm
+    ? findApplyJobIdFromPriorTurns(contextSourceTurns)
+    : findPendingApplyJobId(contextSourceTurns);
+  const effectiveApplyJobId =
+    payload.applyJobId?.trim() ||
+    (chatConfirm && recoveredApplyJobId ? recoveredApplyJobId : undefined) ||
+    undefined;
+  const effectiveConfirmApply =
+    Boolean(payload.confirmApply) || Boolean(chatConfirm && effectiveApplyJobId);
+
   // Keep prior-turn context short — long context + Gemini 3.8 was timing out on live follow-ups.
   const conversationContext = contextSourceTurns
     .filter((t) => t.result && !t.pending)
@@ -332,8 +379,8 @@ export function runAssistantLiveAsk(userId: string, payload: AssistantAskPayload
             ...(recentJobs?.length ? { recentJobs } : {}),
             ...(conversationContext ? { conversationContext } : {}),
             ...(conversationId ? { conversationId } : {}),
-            ...(payload.applyJobId ? { applyJobId: payload.applyJobId } : {}),
-            ...(payload.confirmApply ? { confirmApply: true } : {}),
+            ...(effectiveApplyJobId ? { applyJobId: effectiveApplyJobId } : {}),
+            ...(effectiveConfirmApply ? { confirmApply: true } : {}),
           },
         }),
         ASSISTANT_CLIENT_TIMEOUT_MS,

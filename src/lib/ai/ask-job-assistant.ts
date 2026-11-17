@@ -181,6 +181,47 @@ export function buildSeekerJobAssistantDeps(ctx: SeekerAssistantContext): JobAss
   };
 }
 
+async function persistChatResumePdfForSeeker(input: {
+  supabase: SupabaseClient;
+  seekerId: string;
+  chatPdfBase64: string;
+  fileName?: string | null;
+}): Promise<{ resumeStoragePath: string; resumeFileName: string }> {
+  const bytes = decodeResumePdfBase64(input.chatPdfBase64);
+  if (!bytes || bytes.byteLength < 64) {
+    throw new Error(
+      "I could not read the resume PDF from chat. Upload it in Profile, then Confirm again.",
+    );
+  }
+  const fileName = input.fileName?.trim() || "resume.pdf";
+  const storagePath = buildResumeObjectPath(input.seekerId, fileName);
+  const { error: uploadErr } = await input.supabase.storage
+    .from(RESUMES_BUCKET)
+    .upload(storagePath, bytes, {
+      contentType: "application/pdf",
+      // Re-attach / re-confirm on a later turn must overwrite the same object safely.
+      upsert: true,
+    });
+  if (uploadErr) {
+    throw new Error(
+      "Could not save your chat resume to HireHub Storage. Upload the PDF in Profile, then Confirm again.",
+    );
+  }
+  const { error: profileErr } = await input.supabase
+    .from("profiles")
+    .update({
+      resume_storage_path: storagePath,
+      resume_file_name: fileName,
+    })
+    .eq("id", input.seekerId);
+  if (profileErr) {
+    throw new Error(
+      "Resume uploaded, but profile update failed. Open Profile to finish saving it, then Confirm again.",
+    );
+  }
+  return { resumeStoragePath: storagePath, resumeFileName: fileName };
+}
+
 /**
  * Production seeker orchestration — Supervisor routes Discovery / Application / legacy assistant.
  */
@@ -204,6 +245,21 @@ export async function runSeekerAskJobAssistantViaSupervisor(
     (chatMeta?.mime === "application/pdf" ||
       chatMeta?.kind === "pdf" ||
       /\.pdf$/i.test(chatMeta?.name ?? ""));
+
+  // Persist chat PDF as soon as it is attached so a later "confirm" turn still has a resume
+  // (the UI clears the paperclip attachment after each send).
+  if (chatLooksLikeResumePdf && chatPdfBase64) {
+    try {
+      await persistChatResumePdfForSeeker({
+        supabase: ctx.supabase,
+        seekerId,
+        chatPdfBase64,
+        fileName: chatMeta?.name,
+      });
+    } catch {
+      // Soft: Confirm-time ensureChatResume / validation will surface a clear error.
+    }
+  }
 
   // Path B: hydrate from agent_sessions (JWT + RLS); fall back to in-process Map if table missing.
   const { result } = await withDurableAgentMemory({
@@ -232,38 +288,12 @@ export async function runSeekerAskJobAssistantViaSupervisor(
             hasChatResumeAttachment: chatLooksLikeResumePdf,
             ensureChatResume: async () => {
               if (!chatLooksLikeResumePdf || !chatPdfBase64) return null;
-              const bytes = decodeResumePdfBase64(chatPdfBase64);
-              if (!bytes || bytes.byteLength < 64) {
-                throw new Error(
-                  "I could not read the resume PDF from chat. Upload it in Profile, then Confirm again.",
-                );
-              }
-              const fileName = chatMeta?.name?.trim() || "resume.pdf";
-              const storagePath = buildResumeObjectPath(seekerId, fileName);
-              const { error: uploadErr } = await ctx.supabase.storage
-                .from(RESUMES_BUCKET)
-                .upload(storagePath, bytes, {
-                  contentType: "application/pdf",
-                  upsert: false,
-                });
-              if (uploadErr) {
-                throw new Error(
-                  "Could not save your chat resume to HireHub Storage. Upload the PDF in Profile, then Confirm again.",
-                );
-              }
-              const { error: profileErr } = await ctx.supabase
-                .from("profiles")
-                .update({
-                  resume_storage_path: storagePath,
-                  resume_file_name: fileName,
-                })
-                .eq("id", seekerId);
-              if (profileErr) {
-                throw new Error(
-                  "Resume uploaded, but profile update failed. Open Profile to finish saving it, then Confirm again.",
-                );
-              }
-              return { resumeStoragePath: storagePath, resumeFileName: fileName };
+              return persistChatResumePdfForSeeker({
+                supabase: ctx.supabase,
+                seekerId,
+                chatPdfBase64,
+                fileName: chatMeta?.name,
+              });
             },
             loadSeekerResume: async () => {
               const { data: row } = await ctx.supabase

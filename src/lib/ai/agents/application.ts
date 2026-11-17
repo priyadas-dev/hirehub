@@ -172,9 +172,35 @@ const UUID_RE =
 const UUID_IN_TEXT_RE =
   /[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/i;
 
+/**
+ * True when the seeker is confirming a pending apply (chat Confirm, not the UI button).
+ * Bare "confirm"/"yes" must route to Application Agent — never Gemini inventing "submitted".
+ */
+export function looksLikeConfirmApplyIntent(question: string): boolean {
+  const q = question.trim();
+  if (!q) return false;
+  if (
+    /^\s*(y|yes|ok|okay|sure|confirm|conifrm|confrm|confirn|comfirm|confim|proceed)\s*[!.]?\s*$/i.test(
+      q,
+    )
+  ) {
+    return true;
+  }
+  // "please confirm" / "confirm apply" / "yes confirm" / "confirm to job <uuid>"
+  if (
+    /\b(confirm|conifrm|confrm|confirn|comfirm|confim)\b/i.test(q) &&
+    /\b(appl(?:y|ied|ying)|job|yes|please|proceed|submit|application)\b/i.test(q)
+  ) {
+    return true;
+  }
+  if (/\b(confirm|conifrm|confrm)\b/i.test(q) && UUID_IN_TEXT_RE.test(q)) return true;
+  return false;
+}
+
 /** True when the seeker is asking the Application Agent to apply (not general advice). */
 export function looksLikeApplyIntent(question: string): boolean {
   const q = question.trim();
+  if (looksLikeConfirmApplyIntent(q)) return true;
   // Match apply / applied / applying — noisy chat often uses past tense.
   if (
     !/\b(appl(?:y|ied|ying)|submit\s+(an?\s+)?application|send\s+(my\s+)?(resume|cv))\b/i.test(
