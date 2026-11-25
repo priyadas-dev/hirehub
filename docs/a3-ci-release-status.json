@@ -1,0 +1,34 @@
+{
+  "ok": true,
+  "originMainSha": "91fc5664f8b11e92fccc69134a2109b6902bc1c8",
+  "latestRun": {
+    "id": 44091862041,
+    "status": "completed",
+    "conclusion": "success",
+    "html_url": "https://github.com/priyadas-dev/hirehub/actions/runs/44091862041",
+    "head_sha": "91fc5664f8b11e92fccc69134a2109b6902bc1c8",
+    "created_at": "2026-11-17T13:21:08Z"
+  },
+  "greenRun": {
+    "id": 44091862041,
+    "html_url": "https://github.com/priyadas-dev/hirehub/actions/runs/44091862041",
+    "head_sha": "91fc5664f8b11e92fccc69134a2109b6902bc1c8",
+    "created_at": "2026-11-17T13:21:08Z"
+  },
+  "release": {
+    "created": true,
+    "html_url": "https://github.com/priyadas-dev/hirehub/releases/tag/assessment-3",
+    "tag_name": "assessment-3"
+  },
+  "tag": {
+    "created": true,
+    "sha": "91fc5664f8b11e92fccc69134a2109b6902bc1c8"
+  },
+  "tagPush": {
+    "status": 0,
+    "stderr": [
+      "To https://github.com/priyadas-dev/hirehub.git",
+      " * [new tag]         assessment-3 -> assessment-3"
+    ]
+  }
+}

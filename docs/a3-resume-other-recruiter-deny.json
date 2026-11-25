@@ -1,0 +1,31 @@
+{
+  "checkedAt": "2026-11-24T07:00:53.537Z",
+  "bucket": "resumes",
+  "objectPathRedacted": "833e28a9…/…",
+  "foreignPathRedacted": "b340c66b…/…",
+  "otherMode": "hiring_recruiter_on_foreign_path",
+  "hiringRecruiter": {
+    "email": "miyradr@gmail.com",
+    "ok": true,
+    "status": null,
+    "errorMessage": null
+  },
+  "otherPrincipal": {
+    "email": "miyradr@gmail.com",
+    "ok": false,
+    "status": 404,
+    "errorMessage": "Object not found"
+  },
+  "anonymous": {
+    "ok": false,
+    "status": 404,
+    "errorMessage": "Object not found"
+  },
+  "pass": true,
+  "amolEvidence": {
+    "hiringAllowed": true,
+    "otherDenied": true,
+    "anonDenied": true,
+    "expected": "hiring ok=true; non-entitled recruiter/path ok=false (~403/RLS); anon ok=false"
+  }
+}

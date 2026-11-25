@@ -214,9 +214,31 @@ export function detectRecruiterChatIntent(question: string): RecruiterChatIntent
   // Offer/outreach before shortlist so "make an offer for this candidate" is not ordinal-shortlist.
   if (isOutreachDraftishQuestion(q)) return "draft_outreach";
   if (isShortlistishQuestion(q)) return "shortlist";
+  // Skills / experience / resume / compare → server supervised Q&A (JWT ownership enforced).
+  if (isApplicantContextQuestion(q)) return "supervised";
   // Noisy / incomplete: any leftover tokens → browse owned jobs + applicants locally.
   if (extractSearchTokens(q).length > 0) return "browse";
   return "supervised";
+}
+
+/** Route context-aware applicant questions through Supervisor (not local browse). */
+export function isApplicantContextQuestion(question: string): boolean {
+  const q = question.trim();
+  if (/\b(resume|cv)\b/i.test(q)) return true;
+  if (/\b(compare|versus|vs\.?)\b/i.test(q) && /\b(applicant|candidate|shortlist)/i.test(q)) {
+    return true;
+  }
+  if (
+    /\b(skill|skills|experience|years?|summarize|summary|machine\s+learning|react|node\.?js)\b/i.test(
+      q,
+    ) &&
+    /\b(applicant|candidate|they|them|this\s+one|selected|resume|cv)\b/i.test(q)
+  ) {
+    return true;
+  }
+  if (/\b(does|do)\s+(this|the|my)\s+(applicant|candidate)\b/i.test(q)) return true;
+  if (/\bfind\s+applicants?\b[\s\S]{0,40}\b(experience|skill|year)/i.test(q)) return true;
+  return false;
 }
 
 /** "how do you shortlist?", "which process do you follow…", etc. */

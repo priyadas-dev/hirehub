@@ -50,6 +50,8 @@ export type AgentConversationMemory = {
   skills: string[];
   preferences: AgentMemoryPreferences;
   recentJobs: AgentMemoryRecentJob[];
+  /** A4 rolling summary (compacted history). */
+  summary?: string;
 };
 
 export type DiscoveryMemoryBundle = {
@@ -194,6 +196,7 @@ export function createServerAgentMemory(options?: {
         skills: [],
         preferences: EMPTY_PREFS(),
         recentJobs: [],
+        summary: undefined,
       };
       store.set(key, created);
       return created;
@@ -295,13 +298,42 @@ export function createServerAgentMemory(options?: {
     /** Prior turns as short context for specialists (PII already redacted). */
     toConversationContext(userId: string, conversationId: string, maxChars = 1200): string {
       const mem = this.get(userId, conversationId);
-      if (!mem?.turns.length) return "";
+      if (!mem) return "";
       const lines: string[] = [];
+      if (mem.summary?.trim()) {
+        lines.push(`Summary: ${mem.summary.trim()}`);
+      }
       for (const t of mem.turns.slice(-6)) {
         const label = t.role === "user" ? "User" : t.role === "assistant" ? "Assistant" : "System";
         lines.push(`${label}: ${t.text}`);
       }
       return lines.join("\n").slice(0, maxChars);
+    },
+
+    setSummary(userId: string, conversationId: string, summary: string): string {
+      const mem = this.ensure(userId, conversationId);
+      mem.summary = redactPii(summary).text.slice(0, 800);
+      mem.updatedAt = new Date().toISOString();
+      store.set(memoryKey(userId, conversationId), mem);
+      markDirty(userId, conversationId);
+      return mem.summary;
+    },
+
+    /** Apply compaction result into the in-process row (marks durable dirty). */
+    applyCompactedPayload(
+      userId: string,
+      conversationId: string,
+      payload: AgentSessionMemoryPayload,
+    ): AgentConversationMemory {
+      const prior = this.getDurableMeta(userId, conversationId);
+      const expected = prior?.expectedUpdatedAt ?? null;
+      const mem = this.replaceFromPayload(userId, conversationId, payload, expected);
+      durableMeta.set(memoryKey(userId, conversationId), {
+        expectedUpdatedAt: expected,
+        dirty: true,
+        durableEnabled: prior?.durableEnabled ?? true,
+      });
+      return mem;
     },
 
     /** Discovery: skills + preferences + transcript snippet. */
@@ -350,6 +382,7 @@ export function createServerAgentMemory(options?: {
         skills: parsed.skills.slice(0, 24),
         preferences: parsed.preferences ?? EMPTY_PREFS(),
         recentJobs: parsed.recentJobs.slice(0, 8),
+        summary: parsed.summary,
       };
       const key = memoryKey(userId, conversationId);
       store.set(key, created);

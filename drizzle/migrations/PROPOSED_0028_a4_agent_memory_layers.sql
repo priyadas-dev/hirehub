@@ -1,0 +1,3 @@
+-- Mirror of supabase/migrations/20261123180000_a4_agent_memory_layers.sql
+-- See that file for full DDL (agent_sessions ensure + episodic + semantic + match RPC).
+-- Apply via the Supabase migration path after plan approval (A4 Memory Capstone).
