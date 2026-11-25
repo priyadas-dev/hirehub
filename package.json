@@ -29,12 +29,7 @@
     "rag:classify:track5-ood": "node --import tsx scripts/rag/eval-track5-ood.mjs",
     "rag:classify:track5-ood-build": "node --import tsx scripts/rag/build-track5-ood-v1.mjs",
     "rag:classify:track5-p5": "node --import tsx scripts/rag/track5-p5-diversify-experiments.mjs",
-    "rag:classify:original": "node --import tsx scripts/rag/eval-original-descriptions.mjs",
-    "a4:memory-eval": "node scripts/a4-memory-eval.mjs",
-    "a4:recall-trace": "node scripts/a4-session-recall-trace.mjs",
-    "a3:sentry-smoke": "node scripts/sentry-smoke-capture.mjs",
-    "a3:resume-deny": "node scripts/resume-other-recruiter-deny.mjs",
-    "a3:migration-status": "node scripts/a3-migration-status-probe.mjs"
+    "rag:classify:original": "node --import tsx scripts/rag/eval-original-descriptions.mjs"
   },
   "overrides": {
     "rolldown": "1.2.1"
@@ -82,7 +77,6 @@
     "cmdk": "^1.1.1",
     "date-fns": "^4.1.0",
     "embla-carousel-react": "^8.6.0",
-    "headroom-ai": "^0.44.0",
     "input-otp": "^1.4.2",
     "lucide-react": "^0.575.0",
     "mammoth": "^1.13.0",

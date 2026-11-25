@@ -194,38 +194,18 @@ async function main() {
     );
 
     if (CONFIRM_APPLY) {
-      const confirmBtn = page.getByRole("button", { name: /confirm apply/i });
-      const visible = await confirmBtn.first().isVisible().catch(() => false);
-      if (visible) {
+      const confirmBtn = page.getByRole("button", { name: /^confirm$/i }).or(
+        page.getByRole("button", { name: /confirm apply|confirm submission/i }),
+      );
+      if (await confirmBtn.first().isVisible().catch(() => false)) {
         await confirmBtn.first().click();
         await waitNotBusy(page);
-        await page.waitForTimeout(1500);
         mainText = await page.locator("main").innerText();
-        let applied =
-          /Application submitted|already applied|application (is )?saved|can.?t submit|no resume|applied successfully/i.test(
-            mainText,
-          );
-        if (!applied) {
-          // Fallback: chat confirm intent (same server path as the chip)
-          await ask(page, "confirm");
-          mainText = await page.locator("main").innerText();
-          applied =
-            /Application submitted|already applied|application (is )?saved|can.?t submit|no resume|applied successfully/i.test(
-              mainText,
-            );
-        }
-        const applyApi = [...results.askSummaries]
-          .reverse()
-          .find((s) => s.applyOutcome || /already_applied|created|submitted/i.test(JSON.stringify(s)));
-        check(
-          "6-confirm-apply-result",
-          applied || Boolean(applyApi?.applyOutcome) ? "pass" : "fail",
-          applyApi?.applyOutcome
-            ? `applyOutcome=${JSON.stringify(applyApi.applyOutcome)}`
-            : mainText.slice(0, 280),
-        );
+        const applied =
+          /Application submitted|already applied|can.?t submit|no resume/i.test(mainText);
+        check("6-confirm-apply-result", applied ? "pass" : "fail", mainText.slice(0, 220));
       } else {
-        check("6-confirm-apply-result", "fail", "Confirm apply button not found");
+        check("6-confirm-apply-result", "fail", "Confirm button not found");
       }
     } else {
       check(

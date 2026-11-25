@@ -42,7 +42,7 @@ Until pushed, CI cannot show green on GitHub even if local `npm test` passes.
 | `SENTRY_DSN` | Server host secrets (Vercel / local `.env`) | Server-only |
 | `VITE_SENTRY_DSN` | Frontend env (optional) | Public DSN only — not a secret token |
 
-**Live evidence (2026-11-24):** DSN set locally + Vercel (redeployed). Smoke event marker `hirehub-a3-sentry-smoke-2026-11-24T06:25:04.122Z`. Screenshot: [`a3-sentry-event-screenshot.png`](./a3-sentry-event-screenshot.png). See [`ASSESSMENT_3_SENTRY_EVIDENCE.md`](./ASSESSMENT_3_SENTRY_EVIDENCE.md).
+Create a free Sentry project → copy DSN → set the vars → redeploy → trigger a handled error in the root boundary or SSR path and confirm it appears in Sentry.
 
 ---
 
@@ -72,7 +72,7 @@ Project: **HireHub** `munqgybiuqpncxbgfvdp` (production). No writes.
 | `storage.buckets` | `resumes.public = false`, `company-logos.public = false` | **PASS (live)** |
 | Resume Storage policies | `resumes_select_owner_admin_or_hiring_recruiter` + seeker own INSERT/UPDATE/DELETE | **PASS (live)** |
 
-**Dashboard screenshot for DCT:** see [`a3-security-advisor-pass.md`](./a3-security-advisor-pass.md). Supabase → **Advisors** → Security. Do **not** “fix” by making `resumes` public. Any RLS change needs explicit approval. Re-verified live bucket + policies 2026-11-24.
+**Still recommended (Dashboard screenshot for DCT):** Supabase → **Advisors** → Security / Performance. Do **not** “fix” by making `resumes` public. Any RLS change needs explicit approval.
 
 ### 4.2 Static / code evidence (resume focus)
 
@@ -81,7 +81,7 @@ Project: **HireHub** `munqgybiuqpncxbgfvdp` (production). No writes.
 | Resume bucket private | `PROPOSED_0008` + live query above | **PASS** |
 | Resume SELECT policy | Live `pg_policies` + migration | **PASS** |
 | App authorize-before-sign mirror | `src/lib/resume-access.ts` + `src/test/resume-access-rls.test.ts` | **PASS (unit)** |
-| Live JWT denial matrix | `npm run a3:resume-deny` (+ Track 3 resume ACL doc) | **SCRIPT READY** — run with two recruiter JWTs; screenshot for DCT |
+| Live JWT denial matrix | Track 3 resume ACL doc; not re-run in Phase 1 | **PENDING proof polish** |
 | Service-role / secrets in `VITE_` | Integrations use non-`VITE_` names (`src/lib/integrations/env.ts`) | **PASS (pattern)** |
 | AI match endpoint AuthZ | `askJobAssistant` uses `requireSupabaseAuth` + profile role | **PASS** |
 
@@ -89,7 +89,7 @@ Project: **HireHub** `munqgybiuqpncxbgfvdp` (production). No writes.
 
 - CRM cross-tenant INSERT cohesion gaps exist on the CRM branch audit (app-layer mitigated on send). Not changed in Phase 1.  
 - Live Storage denial still needs the 3-JWT matrix write-up (Phase 3 proof polish).  
-- Durable `agent_sessions` (`PROPOSED_0027`) is **live applied** (verified 2026-11-24) — see [`ASSESSMENT_3_MIGRATION_STATUS.md`](./ASSESSMENT_3_MIGRATION_STATUS.md).
+- Durable `agent_sessions` (`PROPOSED_0027`) remains **unapplied** until explicit approval.
 
 ---
 
@@ -99,7 +99,7 @@ Project: **HireHub** `munqgybiuqpncxbgfvdp` (production). No writes.
 |-------|--------|
 | `vitest` — `ai-match-guard`, `sentry-observability`, `ask-job-assistant-supervisor`, `resume-access-rls` | **21 passed** |
 | `npm run build` (client + SSR) | **Success** (2026-11-10) |
-| GitHub Actions green URL | Publish per [`ASSESSMENT_3_AMOL_GAP_CLOSEOUT.md`](./ASSESSMENT_3_AMOL_GAP_CLOSEOUT.md) — open Actions → paste green CI run into DCT + submission report |
+| GitHub Actions green URL | **Pending push** of this branch |
 
 ---
 

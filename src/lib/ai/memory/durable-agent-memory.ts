@@ -12,7 +12,6 @@ import {
   saveAgentSession,
   type AgentSessionDb,
 } from "@/lib/ai/memory/agent-session-repository";
-import { compactAgentSessionPayload } from "@/lib/ai/memory/compaction";
 
 export type DurableMemoryStatus = {
   hydrated: boolean;
@@ -122,15 +121,9 @@ export async function persistDurableAgentMemory(args: {
     return { hydrated: true, persisted: false, fallback: true, reason: "no_db" };
   }
 
-  const rawPayload = args.memory.toPayload(args.userId, args.conversationId);
-  if (!rawPayload) {
+  const payload = args.memory.toPayload(args.userId, args.conversationId);
+  if (!payload) {
     return { hydrated: true, persisted: false, fallback: true, reason: "empty" };
-  }
-
-  // A4: compact before durable write so agent_sessions never blows the JSON budget.
-  const { payload, metrics } = compactAgentSessionPayload(rawPayload);
-  if (metrics.compacted) {
-    args.memory.applyCompactedPayload(args.userId, args.conversationId, payload);
   }
 
   const savedOrTimeout = await withTimeout(

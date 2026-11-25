@@ -5,7 +5,6 @@ import { CardSkeleton, ErrorState, PageHeader } from "@/components/feedback/Stat
 import { ContactProfileCard } from "@/components/profile/ContactProfileCard";
 import { ChangePasswordForm } from "@/components/settings/ChangePasswordForm";
 import { DeleteProfileSection } from "@/components/settings/DeleteProfileSection";
-import { ForgetAgentMemorySection } from "@/components/settings/ForgetAgentMemorySection";
 import { Button } from "@/components/ui/button";
 import { ROLE_HOME, useAuth } from "@/lib/auth";
 import { fetchOwnProfile } from "@/lib/profile";
@@ -123,8 +122,6 @@ function SettingsPage() {
         </div>
         <ChangePasswordForm email={user.email} />
       </section>
-
-      <ForgetAgentMemorySection />
 
       <DeleteProfileSection currentRole={user.role} />
     </div>

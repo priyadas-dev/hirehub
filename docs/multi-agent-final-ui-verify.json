@@ -1,7 +1,7 @@
 {
-  "generatedAt": "2026-11-24T07:04:41.090Z",
-  "baseUrl": "https://hirehub-dev.vercel.app",
-  "confirmApplyEnabled": true,
+  "generatedAt": "2026-11-17T09:29:05.732Z",
+  "baseUrl": "http://localhost:8080",
+  "confirmApplyEnabled": false,
   "checks": [
     {
       "id": "login",
@@ -34,13 +34,13 @@
     },
     {
       "id": "4-resume-gate-message",
-      "status": "partial",
-      "notes": "Resume present or message soft"
+      "status": "pass",
+      "notes": "Asked to upload resume (none on profile)"
     },
     {
       "id": "6-confirm-apply-result",
-      "status": "fail",
-      "notes": "HISTORY\n\nNew\nconfirm\n\nJOB SEEKER\n\nAI Job Assistant\n\nAsk anything — career advice, interview prep, concepts, or approved HireHub jobs. Answers keep going if you navigate away and come back.\n\nBrowse jobs\n\nfinace job\n\nI found 1 approved HireHub job that matches your request. Open th"
+      "status": "skipped",
+      "notes": "Set MULTI_AGENT_CONFIRM_APPLY=1 to exercise live insert; covered by workflow DB tests"
     },
     {
       "id": "7-follow-up-second",

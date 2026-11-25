@@ -22,8 +22,6 @@ export type AgentSessionMemoryPayload = {
   skills: string[];
   preferences: AgentMemoryPreferences;
   recentJobs: AgentMemoryRecentJob[];
-  /** A4 rolling summary after compaction (PII-redacted). */
-  summary?: string;
 };
 
 const EMPTY_PREFS = (): AgentMemoryPreferences => ({
@@ -123,27 +121,18 @@ export function parseAgentSessionPayload(raw: unknown): AgentSessionMemoryPayloa
     const s = sanitizeRecentJob(j);
     if (s) recentJobs.push(s);
   }
-  const summaryRaw = typeof raw.summary === "string" ? raw.summary : "";
-  const summary = summaryRaw
-    ? redactPii(summaryRaw).text.slice(0, 800)
-    : undefined;
-
   return {
     v: AGENT_SESSION_PAYLOAD_VERSION,
     turns,
     skills: asStringArray(raw.skills, 24),
     preferences: sanitizePreferences(raw.preferences),
     recentJobs,
-    ...(summary ? { summary } : {}),
   };
 }
 
 export function conversationMemoryToPayload(
   mem: AgentConversationMemory,
 ): AgentSessionMemoryPayload {
-  const summary = mem.summary?.trim()
-    ? redactPii(mem.summary).text.slice(0, 800)
-    : undefined;
   return {
     v: AGENT_SESSION_PAYLOAD_VERSION,
     turns: mem.turns.slice(-24).map((t) => ({
@@ -168,7 +157,6 @@ export function conversationMemoryToPayload(
         ? redactPii(j.description).text.slice(0, 600)
         : null,
     })),
-    ...(summary ? { summary } : {}),
   };
 }
 
@@ -199,10 +187,6 @@ export function mergeAgentSessionPayloads(
     turns.push(t);
   }
 
-  const summary = (b.summary?.trim() || a.summary?.trim() || "")
-    ? redactPii((b.summary?.trim() || a.summary || "").trim()).text.slice(0, 800)
-    : undefined;
-
   return {
     v: AGENT_SESSION_PAYLOAD_VERSION,
     turns: turns.slice(-24),
@@ -213,7 +197,6 @@ export function mergeAgentSessionPayloads(
       keywords: keywords.slice(0, 8),
     },
     recentJobs: [...byId.values()].slice(0, 8),
-    ...(summary ? { summary } : {}),
   };
 }
 

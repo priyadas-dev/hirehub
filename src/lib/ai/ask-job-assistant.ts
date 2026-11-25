@@ -38,7 +38,6 @@ import {
 } from "@/lib/hirehub-storage";
 import { createServerAgentMemory } from "@/lib/ai/memory/server-memory";
 import { withDurableAgentMemory } from "@/lib/ai/memory/durable-agent-memory";
-import { createSupervisorMemoryLayer } from "@/lib/ai/memory/supervisor-memory-layer";
 import {
   aiMatchGuard,
   rateLimitedAssistantMessage,
@@ -268,9 +267,6 @@ export async function runSeekerAskJobAssistantViaSupervisor(
     }
   }
 
-  // A4: semantic + episodic memory layer (Supervisor writes only; JWT client).
-  const memoryLayer = createSupervisorMemoryLayer({ supabase: ctx.supabase });
-
   // Path B: hydrate from agent_sessions (JWT + RLS); fall back to in-process Map if table missing.
   const { result } = await withDurableAgentMemory({
     memory,
@@ -283,7 +279,6 @@ export async function runSeekerAskJobAssistantViaSupervisor(
         userId: seekerId,
         conversationId,
         memory,
-        memoryLayer,
         listLiveJobs: deps.listLiveJobs,
         retrieveCorpus: deps.retrieveCorpus,
         runApplicationAgent: (input) =>
