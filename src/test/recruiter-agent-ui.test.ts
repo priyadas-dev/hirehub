@@ -9,10 +9,12 @@ import {
   extractApplicantStatusFilter,
   extractJobTitleHint,
   extractMinYearsExperience,
+  extractResumeOpenNameHint,
   extractSearchTokens,
   extractTopNApplicants,
   isApplicantStatusFilterQuestion,
   isListApplicantsQuestion,
+  isOpenResumeQuestion,
   formatOwnedJobsReply,
   formatRankedApplicantsReply,
   htmlToEditablePlain,
@@ -34,6 +36,7 @@ import {
   parseSupervisedAgentMessage,
   rankApplicantsByProfileAndResume,
   rankOwnedJobsByQuery,
+  inferOwnedJobIdFromContext,
   resolveApplicantChoiceFromRef,
   suggestJobsWithApplicants,
 } from "@/lib/ai/recruiter-agent-ui";
@@ -190,7 +193,21 @@ describe("detectRecruiterChatIntent", () => {
     expect(detectRecruiterChatIntent("is this is my own jobs?")).toBe("list_jobs");
     expect(detectRecruiterChatIntent("List my jobs with applicants")).toBe("list_jobs");
     expect(detectRecruiterChatIntent("Show applicants for this job")).toBe("list_applicants");
+    expect(detectRecruiterChatIntent("open jia resume")).toBe("open_resume");
+    expect(detectRecruiterChatIntent("open Priya das resume")).toBe("open_resume");
+    expect(detectRecruiterChatIntent("view Priya's CV")).toBe("open_resume");
+    expect(detectRecruiterChatIntent("show the resume for Alex")).toBe("open_resume");
+    // Summarize/skills about resume stay out of open_resume (and may shortlist via "this applicant").
+    expect(isOpenResumeQuestion("Summarize this applicant's resume experience")).toBe(false);
+    expect(detectRecruiterChatIntent("What skills does the resume mention for React?")).toBe(
+      "supervised",
+    );
     expect(detectRecruiterChatIntent("ai enginners somehow")).toBe("browse");
+    expect(isOpenResumeQuestion("open jia resume")).toBe(true);
+    expect(isOpenResumeQuestion("Show applicants for this job")).toBe(false);
+    expect(extractResumeOpenNameHint("open jia resume")).toBe("jia");
+    expect(extractResumeOpenNameHint("open Priya das resume")).toMatch(/Priya das/i);
+    expect(extractResumeOpenNameHint("show the resume for Alex")).toMatch(/Alex/i);
     expect(isProcessHelpQuestion("how do you shortlist?")).toBe(true);
     expect(isShortlistishQuestion("how do you shortlist?")).toBe(false);
     expect(isOfferDraftishQuestion("make an offer")).toBe(true);
@@ -203,8 +220,27 @@ describe("detectRecruiterChatIntent", () => {
       index: 1,
     });
     expect(extractApplicantOrdinalRef("Shortlist this candidate")).toEqual({ kind: "pronoun" });
+    expect(extractApplicantOrdinalRef("Propose shortlist for the selected applicant")).toEqual({
+      kind: "pronoun",
+    });
     expect(extractApplicantOrdinalRef("Move him to shortlisted")).toEqual({ kind: "pronoun" });
     expect(extractTopNApplicants("Select the best three applicants")).toBe(3);
+    expect(
+      inferOwnedJobIdFromContext(
+        [
+          { id: "j1", applicantCount: 1 },
+          { id: "j2", applicantCount: 0 },
+        ],
+        { question: "Show applicants for this job" },
+      ),
+    ).toBe("j1");
+    expect(
+      resolveApplicantChoiceFromRef(
+        [{ applicationId: "a1", label: "Priya" }],
+        { kind: "pronoun" },
+        null,
+      )?.applicationId,
+    ).toBe("a1");
     expect(extractMinYearsExperience("Show applicants with 2 years of experience")).toBe(2);
     const choices = [
       { applicationId: "a1", label: "A" },

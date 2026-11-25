@@ -1,6 +1,6 @@
 /** Server-only integration env names (never VITE_). Values stay in host secrets / local .env. */
 
-import { normalizeProcessEnvValue } from "@/lib/server-process-env";
+import { normalizeProcessEnvValue } from "@/lib/process-env-normalize";
 
 export const INTEGRATION_ENV = {
   resendApiKey: "RESEND_API_KEY",

@@ -218,6 +218,131 @@ describe("answerRecruiterApplicantQuestion authorization", () => {
     }
   });
 
+  it("denies open-resume for a name not on owned jobs without listing owned applicants", async () => {
+    const rows = [
+      {
+        id: APP_ID,
+        job_id: JOB_ID,
+        seeker_id: SEEKER,
+        status: "applied",
+        cover_note: "React",
+        resume_storage_path: `${SEEKER}/r.pdf`,
+        resume_file_name: "r.pdf",
+        profiles: { full_name: "Priya Das", email: "priya@x.com", skills: ["React"] },
+        jobs: { id: JOB_ID, recruiter_id: OWNER, title: "FE" },
+      },
+    ];
+    const makeQuery = () => {
+      const q: Record<string, unknown> = {};
+      q.select = () => q;
+      q.order = () => q;
+      q.limit = () => q;
+      q.eq = () => q;
+      q.then = (resolve: (v: unknown) => unknown) => resolve({ data: rows, error: null });
+      q.maybeSingle = async () => ({ data: rows[0], error: null });
+      return q;
+    };
+    const result = await answerRecruiterApplicantQuestion(
+      {
+        supabase: { from: () => makeQuery() } as never,
+        callerId: OWNER,
+        callerRole: "recruiter",
+        generateText: async () => ({ ok: false, message: "offline" }),
+      },
+      { question: "open jia resume" },
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.code).toBe("forbidden");
+      expect(result.message).toBe(RECRUITER_RESUME_ACCESS_DENIED_MESSAGE);
+      expect(result.message).not.toMatch(/Priya|jia@|owned that I can use/i);
+    }
+  });
+
+  it("answers open-resume for an owned applicant with resume on file (no owned-list dump)", async () => {
+    const rows = [
+      {
+        id: APP_ID,
+        job_id: JOB_ID,
+        seeker_id: SEEKER,
+        status: "applied",
+        cover_note: "React",
+        resume_storage_path: `${SEEKER}/r.pdf`,
+        resume_file_name: "r.pdf",
+        profiles: { full_name: "Priya Das", email: "priya@x.com", skills: ["React"] },
+        jobs: { id: JOB_ID, recruiter_id: OWNER, title: "FE" },
+      },
+    ];
+    const makeQuery = () => {
+      const q: Record<string, unknown> = {};
+      q.select = () => q;
+      q.order = () => q;
+      q.limit = () => q;
+      q.eq = () => q;
+      q.then = (resolve: (v: unknown) => unknown) => resolve({ data: rows, error: null });
+      q.maybeSingle = async () => ({ data: rows[0], error: null });
+      return q;
+    };
+    const result = await answerRecruiterApplicantQuestion(
+      {
+        supabase: {
+          from: () => makeQuery(),
+          storage: { from: () => ({ download: async () => ({ data: null, error: true }) }) },
+        } as never,
+        callerId: OWNER,
+        callerRole: "recruiter",
+        generateText: async () => ({ ok: false, message: "offline" }),
+      },
+      { question: "open Priya das resume" },
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.message).toMatch(/Priya/i);
+      expect(result.message).toMatch(/resume|on file|View resume/i);
+      expect(result.message).not.toMatch(/Here are applicants for jobs you own/i);
+    }
+  });
+
+  it("says no resume on file when owned applicant has none", async () => {
+    const rows = [
+      {
+        id: APP_ID,
+        job_id: JOB_ID,
+        seeker_id: SEEKER,
+        status: "applied",
+        cover_note: null,
+        resume_storage_path: null,
+        resume_file_name: null,
+        profiles: { full_name: "Priya Das", email: "priya@x.com", skills: null },
+        jobs: { id: JOB_ID, recruiter_id: OWNER, title: "FE" },
+      },
+    ];
+    const makeQuery = () => {
+      const q: Record<string, unknown> = {};
+      q.select = () => q;
+      q.order = () => q;
+      q.limit = () => q;
+      q.eq = () => q;
+      q.then = (resolve: (v: unknown) => unknown) => resolve({ data: rows, error: null });
+      q.maybeSingle = async () => ({ data: rows[0], error: null });
+      return q;
+    };
+    const result = await answerRecruiterApplicantQuestion(
+      {
+        supabase: { from: () => makeQuery() } as never,
+        callerId: OWNER,
+        callerRole: "recruiter",
+        generateText: async () => ({ ok: false, message: "offline" }),
+      },
+      { question: "open Priya resume" },
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.message).toMatch(/No resume on file/i);
+      expect(result.message).not.toMatch(/Here are applicants for jobs you own/i);
+    }
+  });
+
   it("handles missing resume information without inventing facts", async () => {
     const rows = [
       {
