@@ -72,6 +72,27 @@ Synthetic `job_corpus` rows are **never** shown as real vacancies. Full detail: 
 
 Manual verification checklist: [`docs/assessment-2-verification.md`](docs/assessment-2-verification.md).
 
+## Assessment 4 — Memory Layer (capstone)
+
+HireHub remembers across sessions via durable **Path B** (`agent_sessions`) plus **episodic** (`agent_memory_events`) and **semantic** (`agent_semantic_memories` + `match_agent_semantic_memories` / gte-small 384-d). Memory is written only through the Supervisor (never the browser). Settings → **Forget agent memory** clears all three layers for the signed-in user.
+
+| Metric | Before (cold / raw) | After (warm / compact) |
+|--------|--------------------:|-----------------------:|
+| Clarifying signals | 2 | 1 |
+| Personalization lift | — | **50%** fewer clarify signals |
+| Context tokens (session blob) | 412 | 251 (**39.1%↓**) |
+| Fact fidelity after compact | — | **pass** (4/4) |
+| Ideal-term overlap | 0.00 | 0.24 |
+
+Reproduce:
+
+```sh
+npm run a4:memory-eval
+npm test -- src/test/a4-memory-layer.test.ts
+```
+
+Artifacts: `scripts/rag/out/a4-memory-eval.json`, [`docs/ASSESSMENT_4_DECISION_LOG.md`](docs/ASSESSMENT_4_DECISION_LOG.md), [`docs/ASSESSMENT_4_MEMORY_PROGRESS.md`](docs/ASSESSMENT_4_MEMORY_PROGRESS.md), [`docs/ASSESSMENT_4_DB_APPLY.md`](docs/ASSESSMENT_4_DB_APPLY.md).
+
 ## RAG (measured)
 
 Rechecked against the live project during documentation (service-role count queries):

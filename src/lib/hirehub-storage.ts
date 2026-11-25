@@ -1,4 +1,9 @@
 import { supabase } from "@/integrations/supabase/client";
+import {
+  issueResumeSignedUrlAfterAuthorization,
+  type ResumeAccessApplicationLink,
+} from "@/lib/resume-access";
+import { mapDbRole } from "@/lib/auth";
 
 /** Private Storage buckets from PROPOSED_0008 (apply migration before live uploads succeed). */
 export const RESUMES_BUCKET = "resumes";
@@ -161,5 +166,50 @@ export async function resolveDisplayUrl(
   if (!isStorageObjectPath(trimmed)) return null;
   const bucket = kind === "resume" ? RESUMES_BUCKET : COMPANY_LOGOS_BUCKET;
   const ttl = kind === "resume" ? RESUME_SIGNED_URL_TTL_SEC : LOGO_SIGNED_URL_TTL_SEC;
+
+  // Resumes: authorize-before-sign using JWT + DB application links (never trust client ownership claims).
+  if (kind === "resume") {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    const authUserId = user?.id ?? null;
+    let role: string | null = null;
+    if (authUserId) {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", authUserId)
+        .maybeSingle();
+      role = profile?.role ? mapDbRole(profile.role) : null;
+    }
+
+    const { data: linkRows } = await supabase
+      .from("applications")
+      .select("seeker_id,resume_storage_path,jobs!inner(recruiter_id)")
+      .eq("resume_storage_path", trimmed)
+      .limit(20);
+
+    const applicationLinks: ResumeAccessApplicationLink[] = (linkRows ?? []).map((row) => {
+      const jobs = row.jobs as unknown as { recruiter_id?: string } | null;
+      return {
+        seekerId: String(row.seeker_id ?? ""),
+        resumeStoragePath: String(row.resume_storage_path ?? ""),
+        jobRecruiterId: String(jobs?.recruiter_id ?? ""),
+      };
+    });
+
+    const issued = await issueResumeSignedUrlAfterAuthorization({
+      authUserId,
+      role,
+      objectName: trimmed,
+      applicationLinks,
+      expiresInSeconds: ttl,
+      createSignedUrl: (objectName, expiresInSeconds) =>
+        createSignedStorageUrl(bucket, objectName, expiresInSeconds),
+    });
+    if (!issued.ok) return null;
+    return issued.signedUrl;
+  }
+
   return createSignedStorageUrl(bucket, trimmed, ttl);
 }

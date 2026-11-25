@@ -16,6 +16,7 @@ import {
   type SupervisedAskResult,
 } from "@/lib/ai/agents/supervisor";
 import type { DraftOutreachResult, ShortlistResult } from "@/lib/ai/agents/recruiter";
+import { createSupervisorMemoryLayer } from "@/lib/ai/memory/supervisor-memory-layer";
 
 export type RecruiterAgentRequest =
   | {
@@ -69,6 +70,14 @@ function mapRunnerToSupervisorResult(
   }
 
   if ("status" in specialist && (specialist.status === "needs_confirm" || specialist.status === "authorized")) {
+    return {
+      ok: true,
+      message: specialist.message,
+      specialist,
+    };
+  }
+
+  if ("status" in specialist && specialist.status === "answered") {
     return {
       ok: true,
       message: specialist.message,
@@ -157,6 +166,8 @@ export async function invokeRecruiterAgentViaSupervisor(
     return mapRunnerToSupervisorResult(specialist);
   };
 
+  const memoryLayer = createSupervisorMemoryLayer({ supabase: ctx.supabase });
+
   const supervised = await runSupervisor(
     {
       question: questionForRequest(data),
@@ -169,21 +180,52 @@ export async function invokeRecruiterAgentViaSupervisor(
       role: ctx.role,
       userId: ctx.userId,
       conversationId: "recruiter-agent",
+      memoryLayer,
       listLiveJobs: async () => ({ ok: true, jobs: [] }),
       retrieveCorpus: async () => ({ ok: true, matches: [] }),
       runRecruiterAgent,
-      runLegacyPipeline: async () => ({
-        ok: true,
-        answer:
-          "I only act on jobs you own. Try: list my jobs · shortlist from <job title> · propose shortlist for the selected applicant · draft outreach for this job. Incomplete asks are OK — name a job or skill and I’ll browse your owned jobs first. Shortlist always needs confirm; emails are never sent from this page.",
-        insufficientContext: false,
-        ragAvailable: false,
-        liveJobsAvailable: false,
-        soughtLiveJobs: false,
-        corpusCitations: [],
-        liveCitations: [],
-        model: "recruiter-supervisor",
-      }),
+      runLegacyPipeline: async (legacyInput) => {
+        // Fallback Q&A still goes through ownership-gated applicant tools (never a generic dump).
+        const qa = await runRecruiterSpecialistFromSupervisor(
+          {
+            kind: "applicant_qa",
+            confirm: false,
+            question: legacyInput.question,
+            applicationId: data.action === "supervised" ? data.applicationId : undefined,
+            jobId: data.action === "supervised" ? data.jobId : undefined,
+          },
+          {
+            supabase: ctx.supabase,
+            callerId: ctx.userId,
+            callerRole: ctx.role,
+          },
+        );
+        if (qa.ok && "message" in qa) {
+          return {
+            ok: true as const,
+            answer: qa.message,
+            insufficientContext: false,
+            ragAvailable: false,
+            liveJobsAvailable: false,
+            soughtLiveJobs: false,
+            corpusCitations: [],
+            liveCitations: [],
+            model: "recruiter-applicant-qa",
+          };
+        }
+        return {
+          ok: true as const,
+          answer:
+            "I only act on jobs you own. Try: list my jobs · ask about skills or experience for your applicants · shortlist from a job title · draft outreach for this job. Shortlist always needs confirm; emails are never sent from this page.",
+          insufficientContext: false,
+          ragAvailable: false,
+          liveJobsAvailable: false,
+          soughtLiveJobs: false,
+          corpusCitations: [],
+          liveCitations: [],
+          model: "recruiter-supervisor",
+        };
+      },
     },
   );
 

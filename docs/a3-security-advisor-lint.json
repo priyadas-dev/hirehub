@@ -1,0 +1,25 @@
+{
+  "checkedAt": "2026-11-24",
+  "project": "munqgybiuqpncxbgfvdp",
+  "command": "npx supabase db lint --remote=munqgybiuqpncxbgfvdp --fail-on none",
+  "criticalSecurityFindings": [],
+  "resumeBucket": {
+    "id": "resumes",
+    "public": false,
+    "file_size_limit": 5242880,
+    "allowed_mime_types": ["application/pdf"],
+    "policies": [
+      "resumes_select_owner_admin_or_hiring_recruiter",
+      "resumes_insert_job_seeker_own",
+      "resumes_update_job_seeker_own",
+      "resumes_delete_job_seeker_own"
+    ]
+  },
+  "nonSecurityStyleWarningsOnly": [
+    {
+      "function": "public.extract_known_skills",
+      "note": "text→text[] cast / shadowed loop var — out of scope; do not weaken RLS to clear"
+    }
+  ],
+  "dashboardAdvisorScreenshot": "Attach Supabase Dashboard → Advisors → Security screenshot as docs/a3-security-advisor-screenshot.png when captured (CLI lint cannot replace Dashboard UI screenshot)."
+}

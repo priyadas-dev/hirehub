@@ -17,6 +17,13 @@ import {
   type AgentMemoryRecentJob,
   type ServerAgentMemory,
 } from "@/lib/ai/memory/server-memory";
+import {
+  formatRecalledMemoryBlock,
+  recalledMemoriesToDiscoveryEnrichment,
+  semanticRecallTraceMeta,
+  type RecalledSemanticMemory,
+} from "@/lib/ai/memory/semantic-memory";
+import { compactAgentSessionPayload } from "@/lib/ai/memory/compaction";
 import type {
   AskJobAssistantInput,
   AskJobAssistantResult,
@@ -52,6 +59,10 @@ import {
   looksLikeOutreachDraftIntent,
   looksLikeShortlistIntent,
 } from "@/lib/ai/agents/recruiter";
+import {
+  looksLikeApplicantQaIntent,
+  looksLikeCrossRecruiterAccessProbe,
+} from "@/lib/ai/agents/recruiter-applicant-access";
 import type { ApplicationStatus } from "@/components/status/status";
 import type {
   ApplicationStatusItemPayload,
@@ -62,7 +73,7 @@ import type {
 
 /** Structured recruiter API actions — routed without NL ambiguity. */
 export type RecruiterSupervisorDirective = {
-  kind: "shortlist" | "draft_outreach";
+  kind: "shortlist" | "draft_outreach" | "applicant_qa";
   applicationId?: string;
   jobId?: string;
   status?: Extract<ApplicationStatus, "shortlisted" | "interview" | "rejected" | "hired">;
@@ -71,6 +82,8 @@ export type RecruiterSupervisorDirective = {
   segmentId?: string;
   confirmSend?: boolean;
   draftKind?: "outreach" | "offer";
+  /** Original recruiter question for applicant_qa. */
+  question?: string;
 };
 
 export type SupervisorTurnInput = AskJobAssistantInput & {
@@ -82,7 +95,7 @@ export type SupervisorTurnInput = AskJobAssistantInput & {
 };
 
 export type RecruiterSupervisorAgentInput = {
-  kind: "shortlist" | "draft_outreach";
+  kind: "shortlist" | "draft_outreach" | "applicant_qa";
   applicationId?: string;
   jobId?: string;
   status?: Extract<ApplicationStatus, "shortlisted" | "interview" | "rejected" | "hired">;
@@ -92,6 +105,8 @@ export type RecruiterSupervisorAgentInput = {
   /** Draft-only from NL; structured callers may pass explicit confirmSend. */
   confirmSend?: boolean;
   draftKind?: "outreach" | "offer";
+  /** Applicant / resume Q&A question (authorized context only). */
+  question?: string;
 };
 
 export type RecruiterSupervisorAgentResult = {
@@ -102,11 +117,24 @@ export type RecruiterSupervisorAgentResult = {
   specialist?: unknown;
 };
 
+/** A4 memory layer hooks — semantic recall + durable fact/event writes (Supervisor only). */
+export type SupervisorMemoryLayer = {
+  recall: (userId: string, query: string) => Promise<RecalledSemanticMemory[]>;
+  persistTurn: (args: {
+    userId: string;
+    conversationId: string;
+    redactedText: string;
+    role?: string | null;
+  }) => Promise<void>;
+};
+
 export type SupervisorDeps = {
   role: JobAssistantDeps["role"];
   userId?: string;
   conversationId?: string;
   memory?: ServerAgentMemory;
+  /** Assessment 4 — semantic recall + episodic/semantic writes. */
+  memoryLayer?: SupervisorMemoryLayer;
   listLiveJobs: JobAssistantDeps["listLiveJobs"];
   retrieveCorpus: JobAssistantDeps["retrieveCorpus"];
   /** Phase 7: confirm-to-apply specialist (JWT only). */
@@ -138,6 +166,12 @@ export type SupervisorTrace = {
   piiRedacted: boolean;
   fairnessAction: "pass" | "neutralize" | "refuse" | "skipped";
   memoryWritten: boolean;
+  /** A4 Phase 2 — semantic memories injected this turn (demo/trace evidence). */
+  semanticRecall?: {
+    count: number;
+    kinds: string[];
+    preview: string;
+  };
   structured?: ReturnType<typeof buildStructuredAssistantPayload>;
 };
 
@@ -178,12 +212,16 @@ function validateRecruiterSupervisorQuestion(question: string): { ok: true } | {
   return { ok: true };
 }
 
-function recruiterTrace(piiRedacted: boolean): SupervisorTrace {
+function recruiterTrace(
+  piiRedacted: boolean,
+  semanticRecall?: SupervisorTrace["semanticRecall"],
+): SupervisorTrace {
   return {
     routedTo: "recruiter",
     piiRedacted,
     fairnessAction: "skipped",
     memoryWritten: false,
+    semanticRecall,
   };
 }
 
@@ -276,6 +314,29 @@ async function runRecruiterSupervisorTurn(
   const pii = redactPii(input.question);
   const questionForRoute = pii.text;
 
+  // A4 Phase 2: recall recruiter rubric + persist new facts (semantic only; no seeker Path A writes).
+  let recruiterRecallBlock = "";
+  let recruiterRecallMeta: SupervisorTrace["semanticRecall"] | undefined;
+  if (deps.userId && deps.memoryLayer) {
+    try {
+      const recalled = await deps.memoryLayer.recall(deps.userId, pii.text);
+      recruiterRecallBlock = formatRecalledMemoryBlock(recalled);
+      recruiterRecallMeta = semanticRecallTraceMeta(recalled);
+    } catch {
+      recruiterRecallBlock = "";
+    }
+    try {
+      await deps.memoryLayer.persistTurn({
+        userId: deps.userId,
+        conversationId: conversationIdFor(deps),
+        redactedText: pii.text,
+        role: deps.role,
+      });
+    } catch {
+      // Non-blocking
+    }
+  }
+
   const directive = input.recruiterDirective;
   if (directive) {
     if (directive.kind === "shortlist") {
@@ -286,6 +347,19 @@ async function runRecruiterSupervisorTurn(
           status: directive.status,
           confirm: Boolean(directive.confirm),
           confirmSend: false,
+        },
+        deps,
+        pii.redacted,
+      );
+    }
+    if (directive.kind === "applicant_qa") {
+      return dispatchRecruiterSpecialist(
+        {
+          kind: "applicant_qa",
+          applicationId: directive.applicationId,
+          jobId: directive.jobId,
+          confirm: false,
+          question: directive.question || questionForRoute,
         },
         deps,
         pii.redacted,
@@ -309,10 +383,16 @@ async function runRecruiterSupervisorTurn(
 
   const confirm = Boolean(input.confirmRecruiter);
 
+  // Applicant / resume Q&A must win over "applicationId in context → shortlist".
+  const wantsApplicantQa =
+    looksLikeApplicantQaIntent(questionForRoute) ||
+    looksLikeCrossRecruiterAccessProbe(questionForRoute);
+
   const wantsShortlist =
-    looksLikeShortlistIntent(questionForRoute) ||
-    Boolean(input.recruiterApplicationId) ||
-    (confirm && Boolean(input.recruiterApplicationId));
+    !wantsApplicantQa &&
+    (looksLikeShortlistIntent(questionForRoute) ||
+      (confirm && Boolean(input.recruiterApplicationId)) ||
+      (Boolean(input.recruiterApplicationId) && looksLikeShortlistIntent(questionForRoute)));
 
   // Do not treat a contextual jobId alone as outreach — that caused wrong drafts.
   const wantsOutreach = looksLikeOutreachDraftIntent(questionForRoute);
@@ -438,7 +518,46 @@ async function runRecruiterSupervisorTurn(
     );
   }
 
-  const legacy = await deps.runLegacyPipeline({ ...input, question: questionForRoute });
+  // Applicant / resume Q&A — ownership enforced in specialist (JWT + DB).
+  if (wantsApplicantQa) {
+    return dispatchRecruiterSpecialist(
+      {
+        kind: "applicant_qa",
+        applicationId: input.recruiterApplicationId,
+        jobId: input.recruiterJobId,
+        confirm: false,
+        question: questionForRoute,
+      },
+      deps,
+      pii.redacted,
+    );
+  }
+
+  // Selected application without an explicit shortlist verb → still allow shortlist confirm UX.
+  if (input.recruiterApplicationId && !wantsOutreach) {
+    const appOnlyShortlist = looksLikeShortlistIntent(questionForRoute) || confirm;
+    if (appOnlyShortlist) {
+      return dispatchRecruiterSpecialist(
+        {
+          kind: "shortlist",
+          applicationId: input.recruiterApplicationId,
+          confirm,
+          confirmSend: false,
+        },
+        deps,
+        pii.redacted,
+      );
+    }
+  }
+
+  const legacy = await deps.runLegacyPipeline({
+    ...input,
+    question: questionForRoute,
+    conversationContext: [recruiterRecallBlock, input.conversationContext]
+      .filter(Boolean)
+      .join("\n\n")
+      .slice(0, 2000),
+  });
   return {
     ...legacy,
     supervisor: {
@@ -446,6 +565,7 @@ async function runRecruiterSupervisorTurn(
       piiRedacted: pii.redacted,
       fairnessAction: "skipped",
       memoryWritten: false,
+      semanticRecall: recruiterRecallMeta,
     },
   };
 }
@@ -541,6 +661,41 @@ export async function runSupervisor(
     memory.mergePreferences(userId, conversationId, extractSearchPreferences(pii.text));
     if (input.recentJobs?.length) {
       memory.rememberRecentJobs(userId, conversationId, input.recentJobs);
+    }
+  }
+
+  // A4 Phase 2: recall semantic memories into context; persist new facts via Supervisor only.
+  let recalledMemories: RecalledSemanticMemory[] = [];
+  let recalledMemoryBlock = "";
+  if (userId && deps.memoryLayer) {
+    try {
+      recalledMemories = await deps.memoryLayer.recall(userId, pii.text);
+      recalledMemoryBlock = formatRecalledMemoryBlock(recalledMemories);
+    } catch {
+      recalledMemories = [];
+      recalledMemoryBlock = "";
+    }
+    try {
+      await deps.memoryLayer.persistTurn({
+        userId,
+        conversationId,
+        redactedText: pii.text,
+        role: deps.role,
+      });
+    } catch {
+      // Durable semantic/episodic failure must not break the turn (Path A continues).
+    }
+  }
+  const recallMeta = semanticRecallTraceMeta(recalledMemories);
+
+  // A4 compaction when working memory grows past budget.
+  if (userId) {
+    const payload = memory.toPayload(userId, conversationId);
+    if (payload) {
+      const { payload: compacted, metrics } = compactAgentSessionPayload(payload);
+      if (metrics.compacted) {
+        memory.applyCompactedPayload(userId, conversationId, compacted);
+      }
     }
   }
 
@@ -877,14 +1032,33 @@ export async function runSupervisor(
       ? memory.getDiscoveryBundle(userId, conversationId)
       : { skills: [], preferences: { locations: [], remotePreferred: false, keywords: [] }, conversationContext: "", searchHints: "" };
 
+    // Cross-session personalization: semantic recall enriches hints even when Path A/B session is cold.
+    const fromSemantic = recalledMemoriesToDiscoveryEnrichment(recalledMemories);
+    const mergedSkills = [
+      ...discoveryMemory.skills,
+      ...fromSemantic.skills.filter(
+        (s) => !discoveryMemory.skills.some((d) => d.toLowerCase() === s.toLowerCase()),
+      ),
+    ].slice(0, 24);
+    const mergedHints = [discoveryMemory.searchHints, fromSemantic.searchHints]
+      .filter(Boolean)
+      .join(" ")
+      .trim()
+      .slice(0, 160);
+
+    const mergedDiscoveryContext = [recalledMemoryBlock, discoveryMemory.conversationContext]
+      .filter(Boolean)
+      .join("\n\n")
+      .slice(0, 2000);
+
     const discovery = await runDiscoveryAgent(
       {
         question: questionForRoute,
         sessionSkills: input.sessionSkills,
         memory: {
-          skills: discoveryMemory.skills,
-          searchHints: discoveryMemory.searchHints,
-          conversationContext: discoveryMemory.conversationContext,
+          skills: mergedSkills,
+          searchHints: mergedHints,
+          conversationContext: mergedDiscoveryContext,
         },
       },
       {
@@ -918,16 +1092,21 @@ export async function runSupervisor(
       memory,
       piiRedacted: pii.redacted,
       fairnessAction: fairness.flagged ? "neutralize" : "pass",
+      semanticRecall: recallMeta,
     });
   }
 
+  const baseLegacyContext =
+    userId && !input.conversationContext
+      ? memory.toConversationContext(userId, conversationId) || input.conversationContext
+      : input.conversationContext;
   const legacyInput: AskJobAssistantInput = {
     ...redactedInput,
     question: questionForRoute,
-    conversationContext:
-      userId && !input.conversationContext
-        ? memory.toConversationContext(userId, conversationId) || input.conversationContext
-        : input.conversationContext,
+    conversationContext: [recalledMemoryBlock, baseLegacyContext]
+      .filter(Boolean)
+      .join("\n\n")
+      .slice(0, 2000),
   };
   const legacy = await deps.runLegacyPipeline(legacyInput);
 
@@ -946,6 +1125,7 @@ export async function runSupervisor(
     ...legacy,
     supervisor: {
       routedTo: "legacy",
+      semanticRecall: recallMeta,
       piiRedacted: pii.redacted,
       fairnessAction: "skipped",
       memoryWritten: Boolean(userId && legacy.ok),
@@ -961,6 +1141,7 @@ function finalizeDiscovery(
     memory: ServerAgentMemory;
     piiRedacted: boolean;
     fairnessAction: "pass" | "neutralize";
+    semanticRecall?: SupervisorTrace["semanticRecall"];
   },
 ): SupervisedAskResult {
   if (!discovery.ok) {
@@ -989,6 +1170,7 @@ function finalizeDiscovery(
           piiRedacted: ctx.piiRedacted,
           fairnessAction: "refuse",
           memoryWritten: Boolean(ctx.userId),
+          semanticRecall: ctx.semanticRecall,
         },
       };
     }
@@ -1009,6 +1191,7 @@ function finalizeDiscovery(
           piiRedacted: ctx.piiRedacted,
           fairnessAction: ctx.fairnessAction,
           memoryWritten: Boolean(ctx.userId),
+          semanticRecall: ctx.semanticRecall,
           structured: buildStructuredAssistantPayload({
             answer: discovery.message,
             liveJobIds: [],
@@ -1031,6 +1214,7 @@ function finalizeDiscovery(
         piiRedacted: ctx.piiRedacted,
         fairnessAction: ctx.fairnessAction,
         memoryWritten: Boolean(ctx.userId),
+        semanticRecall: ctx.semanticRecall,
       },
     };
   }
@@ -1087,6 +1271,7 @@ function finalizeDiscovery(
       piiRedacted: ctx.piiRedacted,
       fairnessAction: ctx.fairnessAction,
       memoryWritten: Boolean(ctx.userId),
+      semanticRecall: ctx.semanticRecall,
       structured: buildStructuredAssistantPayload({
         answer,
         liveJobIds: liveCitations.map((c) => c.id),

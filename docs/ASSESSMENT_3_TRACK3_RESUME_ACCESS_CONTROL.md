@@ -124,6 +124,6 @@ Do **not** apply new migrations for Task 3E unless a live check shows the bucket
 ## 8. Remaining limitations
 
 1. Automated suite is a **policy mirror**, not an integration test against live Storage.  
-2. Browser `ResumeOpenLink` still uses JWT `createSignedUrl` directly; live deny depends on Storage RLS (mirror helper is available for gated call sites).  
+2. Browser `ResumeOpenLink` uses JWT `createSignedUrl` via Storage RLS; on deny it shows **Access denied** (does not fall back to legacy URL when a Storage path was requested). Live JWT matrix: `npm run a3:resume-deny`.  
 3. Legacy `applications.resume_url` https links (pre-private-bucket) remain readable if they point at public hosts — new uploads should use `resume_storage_path`.  
 4. No dedicated local Supabase Storage test harness in this repo for parallel JWT matrix runs.

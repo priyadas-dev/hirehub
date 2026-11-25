@@ -13,6 +13,8 @@ import {
   type RecruiterOwnedJob,
   type ShortlistResult,
 } from "@/lib/ai/agents/recruiter";
+import { answerRecruiterApplicantQuestion } from "@/lib/ai/agents/recruiter-applicant-qa";
+import { authorizeRecruiterApplicationAccess } from "@/lib/ai/agents/recruiter-applicant-access";
 import { updateApplicationStatusWithNotification } from "@/lib/notify-application-status";
 import type { RecruiterSupervisorAgentInput } from "@/lib/ai/agents/supervisor";
 
@@ -30,6 +32,7 @@ export type RecruiterAgentRunnerContext = {
 export type RecruiterAgentRunnerResult =
   | ShortlistResult
   | { ok: true; status: "updated"; applicationId: string; plannedStatus: ApplicationStatus; message: string }
+  | { ok: true; status: "answered"; message: string; model?: string }
   | DraftOutreachResult
   | { ok: false; code: "validation" | "forbidden" | "unauthorized" | "db"; message: string };
 
@@ -38,6 +41,25 @@ export async function runRecruiterSpecialistFromSupervisor(
   ctx: RecruiterAgentRunnerContext,
 ): Promise<RecruiterAgentRunnerResult> {
   const deps = { callerId: ctx.callerId, callerRole: ctx.callerRole };
+
+  if (input.kind === "applicant_qa") {
+    const qa = await answerRecruiterApplicantQuestion(
+      {
+        supabase: ctx.supabase,
+        callerId: ctx.callerId,
+        callerRole: ctx.callerRole,
+      },
+      {
+        question: input.question || "",
+        applicationId: input.applicationId,
+        jobId: input.jobId,
+      },
+    );
+    if (!qa.ok) {
+      return { ok: false, code: qa.code === "forbidden" ? "forbidden" : "validation", message: qa.message };
+    }
+    return { ok: true, status: "answered", message: qa.message, model: qa.model };
+  }
 
   if (input.kind === "shortlist") {
     const applicationId = input.applicationId?.trim();
@@ -67,6 +89,20 @@ export async function runRecruiterSpecialistFromSupervisor(
       status: appRow.status as ApplicationStatus,
       jobRecruiterId: jobs.recruiter_id,
     };
+
+    const owned = authorizeRecruiterApplicationAccess({
+      callerId: ctx.callerId,
+      callerRole: ctx.callerRole,
+      application: {
+        applicationId: application.id,
+        jobId: application.jobId,
+        seekerId: application.seekerId,
+        jobRecruiterId: application.jobRecruiterId,
+      },
+    });
+    if (!owned.allowed) {
+      return { ok: false, code: "forbidden", message: owned.message };
+    }
 
     const plan = planRecruiterShortlist(
       {
@@ -150,6 +186,18 @@ export async function runRecruiterSpecialistFromSupervisor(
     companyName: companyJoin?.name ?? null,
     salaryRange: (jobRow as { salary_range?: string | null }).salary_range ?? null,
   };
+
+  // Explicit ownership gate before any CRM / applicant personalization (JWT callerId).
+  if (
+    ctx.callerRole !== "admin" &&
+    job.recruiterId !== ctx.callerId
+  ) {
+    return {
+      ok: false,
+      code: "forbidden",
+      message: "You can only draft outreach for jobs you own.",
+    };
+  }
 
   let contact: { id: string; recruiterId: string; email: string; fullName: string | null } | null = null;
   if (input.contactId) {

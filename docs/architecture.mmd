@@ -1,0 +1,63 @@
+%% HireHub Assessment 3 — architecture (CareBridge / QuickBite tier layout)
+%% Implemented components only. Render → docs/architecture.png
+
+flowchart TB
+  subgraph Clients["HireHub clients · React · TanStack Start · Vercel"]
+    direction LR
+    SK["Job Seeker<br/>assistant · apply · save · status"]
+    RC["Recruiter<br/>agent · CRM · interviews · jobs"]
+    AD["Admin<br/>approvals · users"]
+  end
+
+  subgraph Shell["App shell · JWT · profiles.role · ROLE_HOME"]
+    AUTH["Auth + area guards"]
+    SFN["createServerFn · secrets never VITE_"]
+    SEN["Sentry<br/>browser + SSR"]
+  end
+
+  subgraph AI["Supervised multi-agent · shared memory Path A"]
+    direction TB
+    GRD["Guardrails<br/>validation · PII · fairness · low-confidence"]
+    SUP["Supervisor / router<br/>classify · delegate · merge · structured outputs"]
+    subgraph Spec["Specialists"]
+      direction LR
+      DIS["Discovery<br/>live approved jobs<br/>hybrid RAG + re-rank"]
+      APP["Application<br/>confirm→apply · save · status<br/>idempotent UNIQUE"]
+      REC["Recruiter<br/>owned shortlist · outreach draft"]
+    end
+    GRD --> SUP --> Spec
+  end
+
+  subgraph SB["Supabase"]
+    direction LR
+    PG["Postgres + RLS<br/>jobs · applications · crm_*<br/>interview_schedules<br/>email_delivery_events"]
+    ST["Storage<br/>resumes public=false<br/>signed URL TTL 120s"]
+    VEC["pgvector + FTS<br/>embedding_gte 384<br/>20k corpus · re-rank"]
+    EF["Edge Functions<br/>notify-application-status<br/>resend-webhook · close-expired-jobs<br/>sync-interview-rsvp"]
+  end
+
+  subgraph Ext["Third-party · free tier"]
+    direction LR
+    RES["Resend<br/>outbound status + campaigns<br/>Svix inbound verified"]
+    GC["Google Calendar<br/>interview events<br/>channel-token push verified"]
+    GEM["Gemini<br/>grounded chat"]
+  end
+
+  subgraph Prod["Production plane"]
+    direction LR
+    CI["GitHub Actions<br/>Vitest CI"]
+    RL["AI rate-limit + cache"]
+    EVAL["Offline eval<br/>agent scenarios · RAG a3_v1 · Track5 NB"]
+  end
+
+  SK & RC & AD --> AUTH
+  AUTH --> SFN
+  SFN --> GRD
+  SFN --> SEN
+  Spec --> PG & ST & VEC
+  SFN --> EF
+  EF --> RES & GC
+  DIS -.-> GEM
+  SFN --> RL
+  CI -.-> SFN
+  EVAL -.-> VEC
