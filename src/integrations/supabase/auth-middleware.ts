@@ -3,10 +3,7 @@ import { createMiddleware } from '@tanstack/react-start'
 import { getRequest } from '@tanstack/react-start/server'
 import { createClient } from '@supabase/supabase-js'
 import type { Database } from './types'
-import {
-  ensureProcessEnvFromDotenv,
-  normalizeProcessEnvValue,
-} from '@/lib/server-process-env'
+import { normalizeProcessEnvValue } from '@/lib/process-env-normalize'
 
 
 
@@ -55,6 +52,8 @@ function createSupabaseFetch(supabaseKey: string): typeof fetch {
 
 export const requireSupabaseAuth = createMiddleware({ type: 'function' }).server(
   async ({ next }) => {
+    // Dynamic import keeps node:fs out of the client graph (askRecruiterAgent is imported by routes).
+    const { ensureProcessEnvFromDotenv } = await import('@/lib/server-process-env')
     ensureProcessEnvFromDotenv();
 
     const SUPABASE_URL = readServerSupabaseUrl();

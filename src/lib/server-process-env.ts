@@ -1,48 +1,46 @@
-import { existsSync, readFileSync } from "node:fs";
-import path from "node:path";
+import { normalizeProcessEnvValue } from "@/lib/process-env-normalize";
 
-/**
- * Normalize env strings that may include wrapping quotes or whitespace.
- * Never logs or returns secret values — presence helpers only.
- */
-export function normalizeProcessEnvValue(value: string | undefined | null): string {
-  let v = (value ?? "").trim();
-  if (!v) return "";
-  if (
-    (v.startsWith('"') && v.endsWith('"')) ||
-    (v.startsWith("'") && v.endsWith("'")) ||
-    (v.startsWith("\u201C") && v.endsWith("\u201D")) ||
-    (v.startsWith("\u2018") && v.endsWith("\u2019"))
-  ) {
-    v = v.slice(1, -1).trim();
-  }
-  return v;
-}
+export { normalizeProcessEnvValue };
 
 let dotenvLoaded = false;
 
 /**
  * One-time `.env` → `process.env` fill for Node server paths that run outside
  * Vite's config hook (or started before keys were added). Skips keys already set.
- * No-op in non-Node runtimes / when `.env` is absent (e.g. Vercel with injected secrets).
+ * No-op in browsers / when `.env` is absent (e.g. Vercel with injected secrets).
+ *
+ * Intentionally avoids top-level `node:fs` imports so this module is safe to
+ * appear in a client dependency graph (server fns imported by routes). FS is
+ * only required after a browser guard.
  */
-export function ensureProcessEnvFromDotenv(cwd = process.cwd()): void {
+export function ensureProcessEnvFromDotenv(cwd = typeof process !== "undefined" ? process.cwd() : ""): void {
   if (dotenvLoaded) return;
   dotenvLoaded = true;
   if (typeof process === "undefined" || typeof process.env !== "object") return;
+  // Real Node only — Vite client has no process.versions.node; jsdom tests still do.
+  if (typeof process.versions?.node !== "string") return;
+  if (!cwd) return;
 
-  const envPath = path.join(cwd, ".env");
-  if (!existsSync(envPath)) return;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const fs = require("node:fs") as typeof import("node:fs");
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const path = require("node:path") as typeof import("node:path");
+    const envPath = path.join(cwd, ".env");
+    if (!fs.existsSync(envPath)) return;
 
-  const text = readFileSync(envPath, "utf8");
-  for (const rawLine of text.split(/\r?\n/)) {
-    const line = rawLine.trim();
-    if (!line || line.startsWith("#")) continue;
-    const eq = line.indexOf("=");
-    if (eq <= 0) continue;
-    const key = line.slice(0, eq).trim();
-    if (!key || process.env[key] !== undefined) continue;
-    process.env[key] = normalizeProcessEnvValue(line.slice(eq + 1));
+    const text = fs.readFileSync(envPath, "utf8");
+    for (const rawLine of text.split(/\r?\n/)) {
+      const line = rawLine.trim();
+      if (!line || line.startsWith("#")) continue;
+      const eq = line.indexOf("=");
+      if (eq <= 0) continue;
+      const key = line.slice(0, eq).trim();
+      if (!key || process.env[key] !== undefined) continue;
+      process.env[key] = normalizeProcessEnvValue(line.slice(eq + 1));
+    }
+  } catch {
+    /* hosted runtimes inject secrets; local without Node fs is a no-op */
   }
 }
 

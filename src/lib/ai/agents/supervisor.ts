@@ -172,6 +172,14 @@ export type SupervisorTrace = {
     kinds: string[];
     preview: string;
   };
+  /** A4 Phase 3 — compaction metrics when rolling summary ran this turn. */
+  compaction?: {
+    compacted: boolean;
+    beforeTokens: number;
+    afterTokens: number;
+    beforeTurns: number;
+    afterTurns: number;
+  };
   structured?: ReturnType<typeof buildStructuredAssistantPayload>;
 };
 
@@ -688,11 +696,19 @@ export async function runSupervisor(
   }
   const recallMeta = semanticRecallTraceMeta(recalledMemories);
 
-  // A4 compaction when working memory grows past budget.
+  // A4 Phase 3: compaction when working memory grows past budget.
+  let compactionMeta: SupervisorTrace["compaction"] | undefined;
   if (userId) {
     const payload = memory.toPayload(userId, conversationId);
     if (payload) {
       const { payload: compacted, metrics } = compactAgentSessionPayload(payload);
+      compactionMeta = {
+        compacted: metrics.compacted,
+        beforeTokens: metrics.beforeTokens,
+        afterTokens: metrics.afterTokens,
+        beforeTurns: metrics.beforeTurns,
+        afterTurns: metrics.afterTurns,
+      };
       if (metrics.compacted) {
         memory.applyCompactedPayload(userId, conversationId, compacted);
       }
@@ -1093,6 +1109,7 @@ export async function runSupervisor(
       piiRedacted: pii.redacted,
       fairnessAction: fairness.flagged ? "neutralize" : "pass",
       semanticRecall: recallMeta,
+      compaction: compactionMeta,
     });
   }
 
@@ -1126,6 +1143,7 @@ export async function runSupervisor(
     supervisor: {
       routedTo: "legacy",
       semanticRecall: recallMeta,
+      compaction: compactionMeta,
       piiRedacted: pii.redacted,
       fairnessAction: "skipped",
       memoryWritten: Boolean(userId && legacy.ok),
@@ -1142,6 +1160,7 @@ function finalizeDiscovery(
     piiRedacted: boolean;
     fairnessAction: "pass" | "neutralize";
     semanticRecall?: SupervisorTrace["semanticRecall"];
+    compaction?: SupervisorTrace["compaction"];
   },
 ): SupervisedAskResult {
   if (!discovery.ok) {
@@ -1171,6 +1190,7 @@ function finalizeDiscovery(
           fairnessAction: "refuse",
           memoryWritten: Boolean(ctx.userId),
           semanticRecall: ctx.semanticRecall,
+          compaction: ctx.compaction,
         },
       };
     }
@@ -1192,6 +1212,7 @@ function finalizeDiscovery(
           fairnessAction: ctx.fairnessAction,
           memoryWritten: Boolean(ctx.userId),
           semanticRecall: ctx.semanticRecall,
+          compaction: ctx.compaction,
           structured: buildStructuredAssistantPayload({
             answer: discovery.message,
             liveJobIds: [],
@@ -1215,6 +1236,7 @@ function finalizeDiscovery(
         fairnessAction: ctx.fairnessAction,
         memoryWritten: Boolean(ctx.userId),
         semanticRecall: ctx.semanticRecall,
+        compaction: ctx.compaction,
       },
     };
   }
@@ -1272,6 +1294,7 @@ function finalizeDiscovery(
       fairnessAction: ctx.fairnessAction,
       memoryWritten: Boolean(ctx.userId),
       semanticRecall: ctx.semanticRecall,
+      compaction: ctx.compaction,
       structured: buildStructuredAssistantPayload({
         answer,
         liveJobIds: liveCitations.map((c) => c.id),

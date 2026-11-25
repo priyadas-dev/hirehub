@@ -139,7 +139,7 @@ export const RECRUITER_SHORTLIST_PROCESS_HELP = `Here’s how shortlisting works
 5. You click Confirm shortlist — then the status updates.
 6. Outreach is draft-only here; nothing is emailed from this page.
 
-Try: “shortlist from Software Developer” or pick a job in the context strip above.`;
+Try: “shortlist from Software Developer”, “show applicants for this job”, or “propose shortlist for the selected applicant”.`;
 
 /** Where an assistant reply came from — honest provenance for the chat badge. */
 export type RecruiterAssistantSource = "supervisor" | "local";
@@ -195,6 +195,7 @@ export type RecruiterChatIntent =
   | "draft_outreach"
   | "list_jobs"
   | "list_applicants"
+  | "open_resume"
   | "browse"
   | "supervised";
 
@@ -206,6 +207,8 @@ export function detectRecruiterChatIntent(question: string): RecruiterChatIntent
   const q = question.trim();
   // Process / how-to questions must win over shortlist keyword matching.
   if (isProcessHelpQuestion(q)) return "help";
+  // "open jia resume" before list_applicants so "show … resume" is not treated as a list ask.
+  if (isOpenResumeQuestion(q)) return "open_resume";
   // "List my jobs with applicants" must hit list_jobs before list_applicants.
   if (isListJobsWithApplicantsQuestion(q) || isListOwnedJobsQuestion(q)) return "list_jobs";
   if (isListApplicantsQuestion(q)) return "list_applicants";
@@ -219,6 +222,43 @@ export function detectRecruiterChatIntent(question: string): RecruiterChatIntent
   // Noisy / incomplete: any leftover tokens → browse owned jobs + applicants locally.
   if (extractSearchTokens(q).length > 0) return "browse";
   return "supervised";
+}
+
+/** "open jia resume", "view Priya das resume", "show the resume for Alex". */
+export function isOpenResumeQuestion(question: string): boolean {
+  const q = question.trim();
+  if (!/\b(resume|cv|curriculum\s+vitae)\b/i.test(q)) return false;
+  // Summarize / skills questions about a resume stay supervised — not open.
+  if (/\b(summarize|summary|skill|experience|mention|contain|parse|extract)\b/i.test(q)) {
+    return false;
+  }
+  return /\b(open|view|show|display|see|get|pull\s+up)\b/i.test(q);
+}
+
+/**
+ * Person name from open/view resume phrasing.
+ * "open Priya das resume" → "Priya das"; "show resume for Jia" → "Jia".
+ */
+export function extractResumeOpenNameHint(question: string): string | null {
+  const q = question.trim();
+  const patterns = [
+    /\b(?:open|view|show|display|see|get|pull\s+up)\s+([A-Za-z][A-Za-z'-]+(?:\s+[A-Za-z][A-Za-z'-]+){0,2})\s+(?:['’]?s\s+)?(?:resume|cv|curriculum\s+vitae)\b/i,
+    /\b(?:open|view|show|display|see|get|pull\s+up)\s+(?:the\s+)?(?:resume|cv|curriculum\s+vitae)\s+(?:for|of|from)\s+([A-Za-z][A-Za-z'-]+(?:\s+[A-Za-z][A-Za-z'-]+){0,2})\b/i,
+    /\b(?:resume|cv|curriculum\s+vitae)\s+(?:for|of)\s+([A-Za-z][A-Za-z'-]+(?:\s+[A-Za-z][A-Za-z'-]+){0,2})\b/i,
+  ];
+  for (const re of patterns) {
+    const m = q.match(re);
+    const raw = m?.[1]?.trim();
+    if (!raw) continue;
+    if (STOPWORDS.has(raw.toLowerCase())) continue;
+    if (
+      /^(the|this|that|my|his|her|their|an|a|applicant|candidate|selected|resume|cv)$/i.test(raw)
+    ) {
+      continue;
+    }
+    return raw;
+  }
+  return null;
 }
 
 /** Route context-aware applicant questions through Supervisor (not local browse). */
@@ -436,9 +476,9 @@ export function extractApplicantOrdinalRef(question: string): ApplicantOrdinalRe
   const q = question.trim();
   if (!q) return null;
   if (
-    /\b(?:this|that)\s+(?:candidate|applicant|one|person)\b/i.test(q) ||
+    /\b(?:this|that|the\s+selected|selected)\s+(?:candidate|applicant|one|person)\b/i.test(q) ||
     /\b(?:him|her)\b/i.test(q) ||
-    /\b(?:for|about)\s+(?:this|that|him|her)\b/i.test(q)
+    /\b(?:for|about)\s+(?:this|that|him|her|the\s+selected|selected)\b/i.test(q)
   ) {
     return { kind: "pronoun" };
   }
@@ -512,6 +552,40 @@ export function resolveApplicantChoiceFromRef(
     };
   }
   return choices[0] ?? null;
+}
+
+/**
+ * Resolve "this job" / no explicit title when the recruiter has an unambiguous owned job
+ * (only one job, or only one job that already has applicants).
+ */
+export function inferOwnedJobIdFromContext(
+  owned: Array<{ id: string; applicantCount?: number }>,
+  options?: { currentJobId?: string | null; question?: string },
+): string | null {
+  if (options?.currentJobId) return options.currentJobId;
+  if (owned.length === 0) return null;
+  if (owned.length === 1) return owned[0]!.id;
+
+  const q = options?.question?.trim() ?? "";
+  const refersThisJob =
+    /\b(this|that|the)\s+job\b/i.test(q) ||
+    /\bapplicants?\s+for\s+this\b/i.test(q) ||
+    /\bfor\s+this\s+job\b/i.test(q) ||
+    /\bdraft\s+outreach\s+for\s+this\b/i.test(q);
+
+  const withApps = owned.filter((j) => (j.applicantCount ?? 0) > 0);
+  if (withApps.length === 1) return withApps[0]!.id;
+
+  if (refersThisJob && withApps.length > 1) {
+    const sorted = [...withApps].sort(
+      (a, b) => (b.applicantCount ?? 0) - (a.applicantCount ?? 0),
+    );
+    const top = sorted[0]!;
+    const second = sorted[1];
+    if ((top.applicantCount ?? 0) > (second?.applicantCount ?? 0)) return top.id;
+  }
+
+  return null;
 }
 
 export function applicantDisplayName(input: {

@@ -12,6 +12,10 @@ import {
   type OwnedApplicationFacts,
 } from "@/lib/ai/agents/recruiter-applicant-access";
 import { fetchGeminiGeneratedText } from "@/lib/ai/gemini-generate";
+import {
+  extractResumeOpenNameHint,
+  isOpenResumeQuestion,
+} from "@/lib/ai/recruiter-agent-ui";
 import { extractResumePdfText } from "@/lib/ai/resume-pdf";
 import { evaluateResumeStorageSelectAccess } from "@/lib/resume-access";
 import { RESUMES_BUCKET, storageFirstFolder } from "@/lib/hirehub-storage";
@@ -252,6 +256,30 @@ function heuristicAnswer(
     ].join("\n");
   }
 
+  // "open / view resume" — never dump the full owned list as a substitute for opening.
+  if (isOpenResumeQuestion(question)) {
+    if (apps.length === 1) {
+      const a = apps[0]!;
+      const name = a.seekerName || "this applicant";
+      if (a.resumeStoragePath) {
+        return `Resume for ${name} is on file. Use View resume in the chat UI to open it (signed link; ownership enforced).`;
+      }
+      return `No resume on file for ${name}.`;
+    }
+    if (apps.length > 1) {
+      const lines = apps
+        .slice(0, 8)
+        .map(
+          (a, i) =>
+            `${i + 1}. ${a.seekerName || "Applicant"} — ${a.status}${
+              a.resumeStoragePath ? " — resume on file" : ""
+            }`,
+        )
+        .join("\n");
+      return `Which applicant’s resume should I open?\n${lines}`;
+    }
+  }
+
   const list = apps
     .slice(0, 8)
     .map(
@@ -301,13 +329,30 @@ export async function answerRecruiterApplicantQuestion(
 
   let apps = await loadOwnedApplications(deps, input);
 
-  // Name-ish filter from question against owned pool only (no cross-tenant search).
-  const nameMatch = question.match(
-    /\b(?:applicant|candidate|resume(?:\s+for)?|about)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/,
-  );
-  if (nameMatch?.[1] && apps.length > 1) {
-    const needle = nameMatch[1].toLowerCase();
-    const filtered = apps.filter((a) => (a.seekerName || "").toLowerCase().includes(needle));
+  // Name from "open X resume" / legacy patterns — owned pool only (no cross-tenant search).
+  const openName = extractResumeOpenNameHint(question);
+  const nameMatch =
+    openName ||
+    question.match(
+      /\b(?:applicant|candidate|resume(?:\s+for)?|about)\s+([A-Za-z][A-Za-z'-]+(?:\s+[A-Za-z][A-Za-z'-]+)?)/i,
+    )?.[1] ||
+    null;
+  if (nameMatch) {
+    const needle = nameMatch.toLowerCase();
+    const parts = needle.split(/\s+/).filter(Boolean);
+    const filtered = apps.filter((a) => {
+      const name = (a.seekerName || "").toLowerCase();
+      if (!name) return false;
+      if (name.includes(needle)) return true;
+      return parts.length > 1 && parts.every((p) => name.includes(p));
+    });
+    // Named resume open for someone not on owned jobs → Access Denied (do not dump owned list).
+    if (
+      filtered.length === 0 &&
+      (isOpenResumeQuestion(question) || looksLikeResumeAccessQuestion(question))
+    ) {
+      return forbiddenApplicantReply(true);
+    }
     if (filtered.length) apps = filtered;
   }
 
@@ -315,6 +360,9 @@ export async function answerRecruiterApplicantQuestion(
     // If they asked about a specific application that RLS hid, still deny without leaking.
     if (input.applicationId?.trim()) {
       return forbiddenApplicantReply(looksLikeResumeAccessQuestion(question));
+    }
+    if (isOpenResumeQuestion(question) && nameMatch) {
+      return forbiddenApplicantReply(true);
     }
     return {
       ok: true,
@@ -355,6 +403,16 @@ export async function answerRecruiterApplicantQuestion(
         resumeExcerpts.set(app.applicationId, null);
       }
     }
+  }
+
+  // Open/view resume is a deterministic UX path — do not let Gemini dump owned lists.
+  if (isOpenResumeQuestion(question)) {
+    return {
+      ok: true,
+      message: heuristicAnswer(question, authorized, resumeExcerpts),
+      model: "recruiter-applicant-qa",
+      applicantsUsed: authorized.length,
+    };
   }
 
   const contextBlock = buildApplicantContextBlock(authorized.slice(0, 8), resumeExcerpts);

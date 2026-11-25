@@ -8,24 +8,26 @@ import {
   Copy,
   Loader2,
   Mail,
+  MoreHorizontal,
   Pencil,
   Plus,
   Search,
   SendHorizontal,
-  Sparkles,
   Trash2,
   Users,
-  X,
+  Zap,
 } from "lucide-react";
 import { toast } from "sonner";
-import {
-  RecruiterAgentEmpty,
-  RecruiterAgentLoading,
-} from "@/components/recruiter/RecruiterAgentFeedback";
-import { CardSkeleton, ErrorState, PageHeader } from "@/components/feedback/States";
-import { StatusBadge } from "@/components/status/StatusBadge";
+import { RecruiterAgentLoading } from "@/components/recruiter/RecruiterAgentFeedback";
 import type { ApplicationStatus } from "@/components/status/status";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { askRecruiterAgent } from "@/lib/ai/ask-recruiter-agent";
@@ -40,6 +42,7 @@ import {
   type RecruiterAgentConversation,
 } from "@/lib/ai/recruiter-agent-history";
 import { ResumeOpenLink } from "@/components/applications/ResumeOpenLink";
+import { RECRUITER_RESUME_ACCESS_DENIED_MESSAGE } from "@/lib/ai/agents/recruiter-applicant-access";
 import {
   RECRUITER_SHORTLIST_PROCESS_HELP,
   applicantDisplayName,
@@ -50,6 +53,7 @@ import {
   extractApplicantOrdinalRef,
   extractApplicantStatusFilter,
   extractJobTitleHint,
+  extractResumeOpenNameHint,
   extractTopNApplicants,
   formatOwnedJobsReply as formatOwnedJobsChatReply,
   formatRankedApplicantsReply,
@@ -65,14 +69,15 @@ import {
   parseSupervisedAgentMessage,
   preferShortlistableApplicants,
   rankApplicantsByProfileAndResume,
+  inferOwnedJobIdFromContext,
   rankOwnedJobsByQuery,
   resolveApplicantChoiceFromRef,
   suggestJobsWithApplicants,
-  type ApplicantStatusFilter,
   type RecruiterChatTurn,
 } from "@/lib/ai/recruiter-agent-ui";
 import { useAuth } from "@/lib/auth";
-import { fmtDate, supabase } from "@/components/dashboard/parts";
+import { resolveDisplayUrl } from "@/lib/hirehub-storage";
+import { supabase } from "@/components/dashboard/parts";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_app/recruiter/agent")({
@@ -130,6 +135,187 @@ function newTurnId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+function personInitials(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  const a = parts[0]?.[0] ?? "";
+  const b = parts.length > 1 ? parts[parts.length - 1]?.[0] ?? "" : "";
+  return (a + b).toUpperCase() || "?";
+}
+
+/** Display-only: strip technical asides from chat bubbles (authz logic unchanged). */
+function softenAssistantDisplayText(raw: string): string {
+  return raw
+    .replace(/\s*\(JWT\s+recruiter_id\)/gi, "")
+    .replace(/\bJWT\s+recruiter_id\b/gi, "ownership")
+    .replace(/[ \t]+\n/g, "\n")
+    .trim();
+}
+
+type AssistantTextBlock =
+  | { kind: "paragraph"; text: string }
+  | { kind: "list"; items: Array<{ title: string; meta?: string }> };
+
+function parseAssistantTextBlocks(raw: string): AssistantTextBlock[] {
+  const cleaned = softenAssistantDisplayText(raw);
+  if (!cleaned) return [];
+  const blocks: AssistantTextBlock[] = [];
+  const chunks = cleaned.split(/\n{2,}/);
+
+  for (const chunk of chunks) {
+    const lines = chunk
+      .split("\n")
+      .map((l) => l.trim())
+      .filter(Boolean);
+    if (lines.length === 0) continue;
+
+    const numbered = lines.filter((l) => /^\d+\.\s+/.test(l));
+    const mostlyList = numbered.length >= 2 && numbered.length >= Math.ceil(lines.length * 0.5);
+
+    if (mostlyList) {
+      const prose = lines.filter((l) => !/^\d+\.\s+/.test(l));
+      for (const p of prose) {
+        blocks.push({ kind: "paragraph", text: p });
+      }
+      blocks.push({
+        kind: "list",
+        items: numbered.map((line) => {
+          const body = line.replace(/^\d+\.\s+/, "");
+          const parts = body.split(/\s+[—–-]\s+/);
+          const title = (parts[0] ?? body).trim();
+          const meta = parts.slice(1).join(" — ").trim() || undefined;
+          return meta ? { title, meta } : { title };
+        }),
+      });
+      continue;
+    }
+
+    blocks.push({ kind: "paragraph", text: lines.join(" ") });
+  }
+
+  return blocks;
+}
+
+function listTitleMatchesJob(itemTitle: string, jobTitle: string | null | undefined): boolean {
+  if (!jobTitle) return false;
+  const cleaned = itemTitle.replace(/\s*\([^)]*\)\s*$/, "").trim().toLowerCase();
+  return cleaned === jobTitle.trim().toLowerCase() || itemTitle.toLowerCase().includes(jobTitle.toLowerCase());
+}
+
+/** Compact relative time for History cards (local browser clock). */
+function formatHistoryWhen(iso: string): string {
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return "";
+  const d = new Date(t);
+  const now = new Date();
+  const sameDay =
+    d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth() &&
+    d.getDate() === now.getDate();
+  if (sameDay) {
+    return d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  }
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  if (
+    d.getFullYear() === yesterday.getFullYear() &&
+    d.getMonth() === yesterday.getMonth() &&
+    d.getDate() === yesterday.getDate()
+  ) {
+    return "Yesterday";
+  }
+  const weekAgo = now.getTime() - 6 * 24 * 60 * 60 * 1000;
+  if (t >= weekAgo) {
+    return d.toLocaleDateString(undefined, { weekday: "short" });
+  }
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+function AssistantMessageBody({
+  text,
+  onPickListItem,
+  selectedJobTitle,
+}: {
+  text: string;
+  onPickListItem?: (title: string) => void;
+  selectedJobTitle?: string | null;
+}) {
+  const blocks = parseAssistantTextBlocks(text);
+  if (blocks.length === 0) {
+    return <p className="select-text text-sm leading-relaxed text-foreground">{text}</p>;
+  }
+  return (
+    <div className="select-text space-y-3 text-sm leading-relaxed text-foreground">
+      {blocks.map((block, i) =>
+        block.kind === "paragraph" ? (
+          <p key={`p-${i}`} className="text-[15px] leading-relaxed">
+            {block.text}
+          </p>
+        ) : (
+          <ul
+            key={`l-${i}`}
+            className="divide-y divide-border/70 overflow-hidden rounded-xl border border-border/80 bg-background"
+          >
+            {block.items.map((item, j) => {
+              const selected = listTitleMatchesJob(item.title, selectedJobTitle);
+              const row = (
+                <>
+                  <span
+                    className={cn(
+                      "flex size-6 shrink-0 items-center justify-center rounded-full text-[11px] font-bold tabular-nums",
+                      selected ? "bg-signal text-signal-foreground" : "bg-signal/10 text-signal",
+                    )}
+                  >
+                    {j + 1}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-semibold text-foreground">{item.title}</p>
+                    {item.meta ? (
+                      <p className="mt-0.5 text-xs leading-snug text-muted-foreground">{item.meta}</p>
+                    ) : null}
+                  </div>
+                  {selected ? (
+                    <span className="shrink-0 rounded-full bg-signal/15 px-2 py-0.5 text-[10px] font-semibold text-signal">
+                      Selected
+                    </span>
+                  ) : onPickListItem ? (
+                    <span className="shrink-0 text-[10px] font-medium text-muted-foreground">
+                      Select
+                    </span>
+                  ) : null}
+                </>
+              );
+              return onPickListItem ? (
+                <li key={`i-${i}-${j}`}>
+                  <button
+                    type="button"
+                    className={cn(
+                      "flex w-full items-center gap-3 px-3.5 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-signal/30",
+                      selected ? "bg-signal/10" : "hover:bg-signal/5",
+                    )}
+                    onClick={(e) => {
+                      // Don't steal a text-selection copy gesture.
+                      const sel = window.getSelection()?.toString();
+                      if (sel && sel.length > 0) return;
+                      e.preventDefault();
+                      onPickListItem(item.title);
+                    }}
+                  >
+                    {row}
+                  </button>
+                </li>
+              ) : (
+                <li key={`i-${i}-${j}`} className="flex items-center gap-3 px-3.5 py-3">
+                  {row}
+                </li>
+              );
+            })}
+          </ul>
+        ),
+      )}
+    </div>
+  );
+}
+
 function appCountFromJoin(row: { applications?: { count: number }[] | null }): number {
   const apps = row.applications;
   if (!Array.isArray(apps) || !apps[0]) return 0;
@@ -162,11 +348,6 @@ function RecruiterAgentPage() {
 
   const [jobId, setJobId] = useState("");
   const [selectedAppId, setSelectedAppId] = useState("");
-  const [jobSearch, setJobSearch] = useState("");
-  const [applicantSearch, setApplicantSearch] = useState("");
-  /** Chat-driven status filter for the applicants panel (e.g. not shortlisted). */
-  const [applicantStatusFilter, setApplicantStatusFilter] =
-    useState<ApplicantStatusFilter | null>(null);
   const [question, setQuestion] = useState("");
   const [turns, setTurns] = useState<RecruiterChatTurn[]>([]);
   const [conversationId, setConversationId] = useState(() => createRecruiterConversationId());
@@ -177,9 +358,15 @@ function RecruiterAgentPage() {
   const [pendingShortlistAppId, setPendingShortlistAppId] = useState<string | null>(null);
   const [editingTurnId, setEditingTurnId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState("");
+  const [historyQuery, setHistoryQuery] = useState("");
+  const [chatSwitchKey, setChatSwitchKey] = useState(0);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const editInputRef = useRef<HTMLTextAreaElement | null>(null);
   const persistTitleRef = useRef<string>("New conversation");
+  /** Keep in sync with conversationId so flush/open never write the wrong thread. */
+  const activeConversationIdRef = useRef(conversationId);
+  /** Skip one persist after History open so the list does not jump to top. */
+  const skipNextPersistRef = useRef(false);
 
   const jobs = useQuery({
     queryKey: ["recruiter-jobs-lite", id],
@@ -243,23 +430,6 @@ function RecruiterAgentPage() {
     },
   });
 
-  const filteredJobs = useMemo(() => {
-    const list = jobs.data ?? [];
-    const q = jobSearch.trim().toLowerCase();
-    const filtered = !q
-      ? [...list]
-      : list.filter(
-          (j) => j.title.toLowerCase().includes(q) || j.status.toLowerCase().includes(q),
-        );
-    // Jobs with applicants first (demo-friendly shortlist path), then newest.
-    filtered.sort((a, b) => {
-      const byApps = (b.applicantCount > 0 ? 1 : 0) - (a.applicantCount > 0 ? 1 : 0);
-      if (byApps !== 0) return byApps;
-      return String(b.created_at ?? "").localeCompare(String(a.created_at ?? ""));
-    });
-    return filtered;
-  }, [jobs.data, jobSearch]);
-
   const selectedJob = useMemo(
     () => jobs.data?.find((j) => j.id === jobId) ?? null,
     [jobs.data, jobId],
@@ -269,23 +439,6 @@ function RecruiterAgentPage() {
     if (jobId && appsForJob.data) return appsForJob.data;
     return appsAcrossOwned.data ?? [];
   }, [jobId, appsForJob.data, appsAcrossOwned.data]);
-
-  const filteredApplicants = useMemo(() => {
-    const q = applicantSearch.trim().toLowerCase();
-    const statusFiltered = applyApplicantStatusFilter(applicantPool, applicantStatusFilter);
-    const textFiltered = !q
-      ? statusFiltered
-      : statusFiltered.filter((a) => {
-          const name = a.profiles?.full_name?.toLowerCase() ?? "";
-          const email = a.profiles?.email?.toLowerCase() ?? "";
-          const title = a.jobs?.title?.toLowerCase() ?? "";
-          const status = String(a.status).toLowerCase();
-          return (
-            name.includes(q) || email.includes(q) || title.includes(q) || status.includes(q)
-          );
-        });
-    return textFiltered.slice(0, jobId ? 40 : 20);
-  }, [applicantPool, applicantSearch, applicantStatusFilter, jobId]);
 
   const selectedApp = useMemo(() => {
     const fromJob = appsForJob.data?.find((a) => a.id === selectedAppId);
@@ -335,7 +488,17 @@ function RecruiterAgentPage() {
   }, [pendingShortlistAppId, pendingShortlistApp]);
 
   useEffect(() => {
+    activeConversationIdRef.current = conversationId;
+  }, [conversationId]);
+
+  useEffect(() => {
     if (!id || turns.length === 0) return;
+    // Guard against a stale effect writing previous turns onto a newly selected id.
+    if (conversationId !== activeConversationIdRef.current) return;
+    if (skipNextPersistRef.current) {
+      skipNextPersistRef.current = false;
+      return;
+    }
     const firstUser = turns.find((t) => t.role === "user");
     const title = firstUser
       ? titleFromRecruiterTurn(firstUser.text)
@@ -345,7 +508,8 @@ function RecruiterAgentPage() {
       id: conversationId,
       title,
       updatedAt: new Date().toISOString(),
-      turns,
+      // Clone so History list never shares the live turns array reference.
+      turns: turns.map((t) => ({ ...t })),
     };
     const store = upsertRecruiterConversation(readRecruiterAgentHistory(id), conversation);
     writeRecruiterAgentHistory(id, store);
@@ -371,15 +535,102 @@ function RecruiterAgentPage() {
     setTurns((prev) => [...prev, ...next]);
   }
 
-  function startNewConversation() {
-    if (busy) return;
-    setConversationId(createRecruiterConversationId());
-    setTurns([]);
+  /** Sync current thread to localStorage before switching away (New / History click). */
+  function flushCurrentConversation() {
+    if (!id || turns.length === 0) return;
+    const currentId = activeConversationIdRef.current;
+    const prev = readRecruiterAgentHistory(id);
+    const existing = prev.conversations.find((c) => c.id === currentId);
+    const firstUser = turns.find((t) => t.role === "user");
+    const title = firstUser
+      ? titleFromRecruiterTurn(firstUser.text)
+      : persistTitleRef.current;
+    persistTitleRef.current = title;
+    const turnsClone = turns.map((t) => ({ ...t }));
+    const turnsChanged =
+      !existing ||
+      existing.turns.length !== turnsClone.length ||
+      JSON.stringify(existing.turns) !== JSON.stringify(turnsClone);
+    const conversation: RecruiterAgentConversation = {
+      id: currentId,
+      title,
+      // Keep list order stable when only switching threads.
+      updatedAt: turnsChanged
+        ? new Date().toISOString()
+        : (existing?.updatedAt ?? new Date().toISOString()),
+      turns: turnsClone,
+    };
+    const store = turnsChanged
+      ? upsertRecruiterConversation(prev, conversation)
+      : {
+          version: prev.version,
+          conversations: prev.conversations.map((c) =>
+            c.id === currentId ? conversation : c,
+          ),
+        };
+    writeRecruiterAgentHistory(id, store);
+    setConversations(store.conversations);
+  }
+
+  function resetTransientChatUi() {
     setQuestion("");
+    setEditingTurnId(null);
+    setEditDraft("");
     setPendingShortlistAppId(null);
     setDraftSubject("");
     setDraftBody("");
+  }
+
+  function applyConversationToUi(target: RecruiterAgentConversation) {
+    activeConversationIdRef.current = target.id;
+    skipNextPersistRef.current = true;
+    const normalized = target.turns.map(normalizeRecruiterChatTurn);
+    const pendingId =
+      [...normalized]
+        .reverse()
+        .find((t) => t.role === "assistant" && t.pendingShortlistApplicationId)
+        ?.pendingShortlistApplicationId ?? null;
+    const pendingRow =
+      (pendingId &&
+        (appsAcrossOwned.data?.find((a) => a.id === pendingId) ||
+          appsForJob.data?.find((a) => a.id === pendingId))) ||
+      null;
+    const restorePending =
+      Boolean(pendingId) &&
+      (!pendingRow || isShortlistableApplicationStatus(pendingRow.status));
+    const turnsForUi =
+      restorePending || !pendingId
+        ? normalized
+        : scrubPendingShortlistFromTurns(normalized);
+    const lastDraft = [...turnsForUi]
+      .reverse()
+      .find((t) => t.role === "assistant" && t.draft)?.draft;
+
+    resetTransientChatUi();
+    setPendingShortlistAppId(restorePending ? pendingId : null);
+    setConversationId(target.id);
+    setTurns(turnsForUi);
+    setDraftSubject(lastDraft?.subject ?? "");
+    setDraftBody(lastDraft?.body ?? "");
+    persistTitleRef.current = target.title;
+    setChatSwitchKey((k) => k + 1);
+  }
+
+  function startNewConversation() {
+    if (busy) {
+      toast.message("Wait for the current reply to finish");
+      return;
+    }
+    flushCurrentConversation();
+    const alreadyBlank = turns.length === 0;
+    const nextId = createRecruiterConversationId();
+    activeConversationIdRef.current = nextId;
+    resetTransientChatUi();
+    setConversationId(nextId);
+    setTurns([]);
     persistTitleRef.current = "New conversation";
+    setChatSwitchKey((k) => k + 1);
+    toast.message(alreadyBlank ? "Already in a new chat" : "New chat ready");
   }
 
   function scrubPendingShortlistFromTurns(list: RecruiterChatTurn[]): RecruiterChatTurn[] {
@@ -397,36 +648,18 @@ function RecruiterAgentPage() {
   }
 
   function openConversation(conversation: RecruiterAgentConversation) {
-    if (busy) return;
-    setConversationId(conversation.id);
-    const normalized = conversation.turns.map(normalizeRecruiterChatTurn);
-    const pendingId =
-      [...normalized]
-        .reverse()
-        .find((t) => t.role === "assistant" && t.pendingShortlistApplicationId)
-        ?.pendingShortlistApplicationId ?? null;
-    // Never restore Confirm for someone already shortlisted / past applied.
-    const pendingRow =
-      (pendingId &&
-        (appsAcrossOwned.data?.find((a) => a.id === pendingId) ||
-          appsForJob.data?.find((a) => a.id === pendingId))) ||
-      null;
-    const restorePending =
-      Boolean(pendingId) &&
-      (!pendingRow || isShortlistableApplicationStatus(pendingRow.status));
-    setPendingShortlistAppId(restorePending ? pendingId : null);
-    // Persist scrub so Confirm does not revive on every reopen after shortlist.
-    const turnsForUi =
-      restorePending || !pendingId
-        ? normalized
-        : scrubPendingShortlistFromTurns(normalized);
-    setTurns(turnsForUi);
-    const lastDraft = [...turnsForUi]
-      .reverse()
-      .find((t) => t.role === "assistant" && t.draft)?.draft;
-    setDraftSubject(lastDraft?.subject ?? "");
-    setDraftBody(lastDraft?.body ?? "");
-    persistTitleRef.current = conversation.title;
+    if (busy) {
+      toast.message("Wait for the current reply to finish");
+      return;
+    }
+    if (conversation.id === activeConversationIdRef.current) return;
+    flushCurrentConversation();
+    // Always reload from localStorage so we don't show a stale in-memory copy.
+    const fresh =
+      (id
+        ? readRecruiterAgentHistory(id).conversations.find((c) => c.id === conversation.id)
+        : null) ?? conversation;
+    applyConversationToUi(fresh);
   }
 
   function handleRename(conversation: RecruiterAgentConversation) {
@@ -446,10 +679,20 @@ function RecruiterAgentPage() {
   function handleDelete(conversation: RecruiterAgentConversation) {
     if (!id) return;
     if (!window.confirm("Delete this conversation from this browser?")) return;
+    const wasActive = conversation.id === activeConversationIdRef.current;
     const store = deleteRecruiterConversation(readRecruiterAgentHistory(id), conversation.id);
     writeRecruiterAgentHistory(id, store);
     setConversations(store.conversations);
-    if (conversation.id === conversationId) startNewConversation();
+    if (wasActive) {
+      // Do not flush — that would re-upsert the deleted thread.
+      const nextId = createRecruiterConversationId();
+      activeConversationIdRef.current = nextId;
+      resetTransientChatUi();
+      setConversationId(nextId);
+      setTurns([]);
+      persistTitleRef.current = "New conversation";
+      setChatSwitchKey((k) => k + 1);
+    }
   }
 
   async function runShortlist(
@@ -645,10 +888,18 @@ function RecruiterAgentPage() {
   }
 
   async function replyListJobs(question?: string) {
+    const owned = jobs.data ?? [];
+    // Sticky job for follow-ups like "show applicants for this job".
+    const inferred = inferOwnedJobIdFromContext(owned, {
+      currentJobId: jobId || null,
+      question: question ?? "list my jobs with applicants",
+    });
+    if (inferred && inferred !== jobId) selectJob(inferred);
+
     appendTurns({
       id: newTurnId(),
       role: "assistant",
-      text: formatOwnedJobsChatReply(jobs.data ?? [], {
+      text: formatOwnedJobsChatReply(owned, {
         includeApplicantCounts: !question || isListJobsWithApplicantsQuestion(question),
       }),
       source: "local",
@@ -673,11 +924,23 @@ function RecruiterAgentPage() {
     const statusFilter = questionText?.trim()
       ? extractApplicantStatusFilter(questionText)
       : null;
-    // Persist filter so the applicants panel matches the chat answer.
-    setApplicantStatusFilter(statusFilter);
 
     // Status-only asks ("not shortlisted") should list across owned jobs — do not force a job pick.
     const statusOnlyAsk = Boolean(statusFilter) && !extractJobTitleHint(questionText ?? "");
+
+    // "this job" / only-job-with-applicants when nothing is selected yet.
+    if (!effectiveJobId && !statusOnlyAsk) {
+      const inferred = inferOwnedJobIdFromContext(jobs.data ?? [], {
+        currentJobId: null,
+        question: questionText,
+      });
+      if (inferred) {
+        const meta = jobs.data?.find((j) => j.id === inferred);
+        selectJob(inferred);
+        effectiveJobId = inferred;
+        matchedTitle = meta?.title ?? null;
+      }
+    }
 
     // "show software developer applicant" → resolve owned job from NL when none selected.
     if (!effectiveJobId && questionText?.trim() && !statusOnlyAsk) {
@@ -707,7 +970,6 @@ function RecruiterAgentPage() {
         });
       }
     } else {
-      // Prefer full cross-job pool for status filters (not the truncated sidebar slice).
       let pool = appsAcrossOwned.data ?? [];
       if (pool.length === 0) {
         try {
@@ -723,12 +985,16 @@ function RecruiterAgentPage() {
           id: newTurnId(),
           role: "assistant",
           text:
-            "No job selected yet — showing recent applicants across jobs you own. Pick a job (or name it in chat) to narrow the list.",
+            "No job selected yet — showing recent applicants across jobs you own. Name a job (e.g. “applicants for Tech Lead”) to narrow the list.",
           source: "local" as const,
         });
       }
     }
     list = applyApplicantStatusFilter(list, statusFilter);
+    // Sticky selection for “propose shortlist for the selected applicant”.
+    if (list.length === 1) {
+      selectApplicant(list[0]!);
+    }
     const filterNote = statusFilter
       ? statusFilter.kind === "exclude"
         ? ` (excluding ${statusFilter.statuses.join(", ")})`
@@ -747,8 +1013,10 @@ function RecruiterAgentPage() {
         `Applicants${filterNote} (owned jobs only):`,
       )}${
         statusFilter
-          ? "\n\nThe applicants panel is filtered to match. Select a card to shortlist (only “applied” can be shortlisted)."
-          : ""
+          ? "\n\nOnly “applied” applicants can be shortlisted. Say “propose shortlist for the selected applicant” or tap Propose Shortlist on a card."
+          : list.length === 1
+            ? "\n\nSelected that applicant for follow-ups (shortlist / outreach)."
+            : ""
       }`,
       source: "local" as const,
       applicantChoices: list.length
@@ -1044,6 +1312,33 @@ function RecruiterAgentPage() {
       return;
     }
 
+    // Last listed applicants (e.g. after “show applicants…”) even if sticky id wasn’t set yet.
+    const recentChoices = latestApplicantChoices();
+    if (recentChoices.length > 0) {
+      const fromRecent = resolveApplicantChoiceFromRef(
+        recentChoices,
+        { kind: "pronoun" },
+        null,
+      );
+      if (fromRecent?.applicationId) {
+        await selectAndProposeShortlist(fromRecent.applicationId, { alreadyBusy: true });
+        return;
+      }
+    }
+
+    const inferredJobId = inferOwnedJobIdFromContext(jobs.data ?? [], {
+      currentJobId: jobId || null,
+      question: text,
+    });
+    if (inferredJobId) {
+      const meta = jobs.data?.find((j) => j.id === inferredJobId);
+      if (meta) {
+        selectJob(inferredJobId);
+        await proposeRankedShortlist(text, inferredJobId, meta);
+        return;
+      }
+    }
+
     if (jobId && selectedJob) {
       await proposeRankedShortlist(text, jobId, selectedJob);
       return;
@@ -1052,7 +1347,7 @@ function RecruiterAgentPage() {
     appendTurns({
       id: newTurnId(),
       role: "assistant",
-      text: `I couldn’t tell which owned job you mean. Here are jobs under your account:\n${formatOwnedJobsChatReply(jobs.data ?? [], { plain: true })}`,
+      text: `I couldn’t tell which owned job you mean. Here are jobs under your account:\n${formatOwnedJobsChatReply(jobs.data ?? [], { plain: true })}\n\nSay “show applicants for Tech Lead”, then “propose shortlist for the selected applicant”.`,
       source: "local" as const,
     });
   }
@@ -1162,6 +1457,158 @@ function RecruiterAgentPage() {
       id: newTurnId(),
       role: "assistant",
       text: `Nothing is pending to confirm yet. Select an applicant (or say “confirm <name>”), then Confirm shortlist.`,
+      source: "local" as const,
+    });
+  }
+
+  async function ensureApplicantPool(): Promise<ApplicantRow[]> {
+    let pool = applicantPool;
+    if (pool.length === 0) {
+      try {
+        const refreshed = await appsAcrossOwned.refetch();
+        pool = refreshed.data ?? [];
+      } catch {
+        pool = [];
+      }
+    }
+    return pool;
+  }
+
+  function choiceFromApplicantRow(
+    row: ApplicantRow,
+  ): NonNullable<Extract<RecruiterChatTurn, { role: "assistant" }>["applicantChoices"]>[number] {
+    const label = applicantDisplayName({
+      full_name: row.profiles?.full_name,
+      email: row.profiles?.email,
+    });
+    return {
+      applicationId: row.id,
+      label,
+      email: row.profiles?.email ?? null,
+      status: String(row.status),
+      score: 0,
+      meta: String(row.status),
+      resumeStoragePath: row.resume_storage_path ?? null,
+      resumeUrl: row.resume_url ?? null,
+      resumeFileName: row.resume_file_name ?? null,
+    };
+  }
+
+  /** Open resume for an owned applicant via signed URL; never bypass RLS. */
+  async function openResumeForOwnedApplicant(row: ApplicantRow) {
+    selectApplicant(row);
+    const label = applicantDisplayName({
+      full_name: row.profiles?.full_name,
+      email: row.profiles?.email,
+    });
+    const hasResume = Boolean(row.resume_storage_path || row.resume_url);
+    if (!hasResume) {
+      appendTurns({
+        id: newTurnId(),
+        role: "assistant",
+        text: `No resume on file for ${label}.`,
+        source: "local" as const,
+        applicantChoices: [choiceFromApplicantRow(row)],
+      });
+      return;
+    }
+
+    let opened = false;
+    let denied = false;
+    try {
+      if (row.resume_storage_path) {
+        const href = await resolveDisplayUrl(row.resume_storage_path, "resume");
+        if (href) {
+          window.open(href, "_blank", "noopener,noreferrer");
+          opened = true;
+        } else {
+          denied = true;
+        }
+      } else if (row.resume_url) {
+        window.open(row.resume_url, "_blank", "noopener,noreferrer");
+        opened = true;
+      }
+    } catch {
+      denied = true;
+    }
+
+    if (denied && !opened) {
+      appendTurns({
+        id: newTurnId(),
+        role: "assistant",
+        text: RECRUITER_RESUME_ACCESS_DENIED_MESSAGE,
+        source: "local" as const,
+      });
+      return;
+    }
+
+    appendTurns({
+      id: newTurnId(),
+      role: "assistant",
+      text: opened
+        ? `Opening resume for ${label}. If the tab was blocked, use View resume below.`
+        : `Resume for ${label} is available below.`,
+      source: "local" as const,
+      applicantChoices: [choiceFromApplicantRow(row)],
+    });
+  }
+
+  /**
+   * "open jia resume" / "open Priya das resume":
+   * only applicants on jobs this recruiter owns; else Access Denied (no owned-list dump).
+   */
+  async function handleOpenResumeIntent(text: string) {
+    const pool = await ensureApplicantPool();
+    const nameHint = extractResumeOpenNameHint(text) ?? extractApplicantNameHint(text);
+
+    if (nameHint) {
+      const matches = matchApplicantsByNameHint(pool, nameHint);
+      if (matches.length === 0) {
+        appendTurns({
+          id: newTurnId(),
+          role: "assistant",
+          text: RECRUITER_RESUME_ACCESS_DENIED_MESSAGE,
+          source: "local" as const,
+        });
+        return;
+      }
+      if (matches.length > 1) {
+        const ranked = matches.map((applicant) => ({
+          applicant,
+          score: 50,
+          reasons: ["name match"],
+        }));
+        appendTurns({
+          id: newTurnId(),
+          role: "assistant",
+          text: `I found more than one “${nameHint}”. Pick one and use View resume (I won’t open blindly).`,
+          source: "local" as const,
+          applicantChoices: toApplicantChoices(ranked as never),
+        });
+        return;
+      }
+      await openResumeForOwnedApplicant(matches[0]!);
+      return;
+    }
+
+    const selected =
+      (selectedAppId &&
+        (appsForJob.data?.find((a) => a.id === selectedAppId) ||
+          appsAcrossOwned.data?.find((a) => a.id === selectedAppId))) ||
+      (pendingShortlistAppId &&
+        (appsForJob.data?.find((a) => a.id === pendingShortlistAppId) ||
+          appsAcrossOwned.data?.find((a) => a.id === pendingShortlistAppId))) ||
+      null;
+
+    if (selected) {
+      await openResumeForOwnedApplicant(selected);
+      return;
+    }
+
+    appendTurns({
+      id: newTurnId(),
+      role: "assistant",
+      text: "Tell me which applicant’s resume to open (e.g. “open Priya resume”), or Select an applicant first. I can only open resumes for people who applied to jobs you own.",
       source: "local" as const,
     });
   }
@@ -1346,10 +1793,19 @@ function RecruiterAgentPage() {
             selectJob(matched.id);
           }
         } else if (!targetJobId) {
-          const ranked = rankOwnedJobsByQuery(jobs.data ?? [], text);
-          if (ranked.length === 1) {
-            targetJobId = ranked[0]!.job.id;
-            selectJob(targetJobId);
+          const inferred = inferOwnedJobIdFromContext(jobs.data ?? [], {
+            currentJobId: null,
+            question: text,
+          });
+          if (inferred) {
+            targetJobId = inferred;
+            selectJob(inferred);
+          } else {
+            const ranked = rankOwnedJobsByQuery(jobs.data ?? [], text);
+            if (ranked.length === 1) {
+              targetJobId = ranked[0]!.job.id;
+              selectJob(targetJobId);
+            }
           }
         }
         // Reuse job from selected / pending shortlist applicant when chat has context.
@@ -1392,6 +1848,10 @@ function RecruiterAgentPage() {
         await runOutreach(targetJobId, { applicationId: targetAppId, draftKind });
         return;
       }
+      if (intent === "open_resume") {
+        await handleOpenResumeIntent(text);
+        return;
+      }
       if (intent === "browse") {
         await handleBrowseIntent(text);
         return;
@@ -1417,487 +1877,438 @@ function RecruiterAgentPage() {
     onError: (e: Error) => toast.error("Confirm failed", { description: e.message }),
   });
 
-  const applicantsLoading =
-    (jobId && appsForJob.isLoading) || (!jobId && appsAcrossOwned.isLoading);
-  const applicantsError =
-    (jobId && appsForJob.isError) || (!jobId && appsAcrossOwned.isError);
+  const filteredHistory = useMemo(() => {
+    const q = historyQuery.trim().toLowerCase();
+    if (!q) return conversations;
+    return conversations.filter((c) => c.title.toLowerCase().includes(q));
+  }, [conversations, historyQuery]);
 
   return (
-    <div className="flex min-h-[calc(100vh-8rem)] flex-col gap-4 lg:flex-row">
-      <aside className="surface-card flex w-full shrink-0 flex-col overflow-hidden lg:min-h-[28rem] lg:w-64">
-        <div className="flex items-center justify-between gap-2 border-b px-3 py-3">
-          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-            Chat history
-          </p>
-          <Button
+    <div className="-mx-4 -my-6 flex h-[calc(100dvh-4rem)] flex-col overflow-hidden bg-[#f4f7f6] sm:-mx-6 sm:-my-8 lg:-mx-10 lg:-my-12 lg:flex-row">
+      {/* History rail — right edge border keeps this panel reading as a clear box */}
+      <aside className="flex max-h-[40vh] w-full shrink-0 flex-col border-b border-border bg-white lg:max-h-none lg:h-full lg:w-72 lg:border-b-0 lg:border-r lg:border-border">
+        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border/70 px-3.5 py-3">
+          <h2 className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
+            History
+          </h2>
+          <button
             type="button"
-            size="sm"
-            variant="outline"
             onClick={startNewConversation}
-            disabled={busy}
+            className="inline-flex items-center gap-1 rounded-full bg-signal/12 px-2.5 py-1 text-[11px] font-semibold text-signal transition-[background-color,transform] duration-150 hover:bg-signal/20 active:scale-[0.98]"
+            title="Start a new chat"
           >
-            <Plus /> New
-          </Button>
+            <Plus className="size-3.5" aria-hidden />
+            New
+          </button>
         </div>
-        <div className="flex-1 space-y-1 overflow-y-auto p-2">
+        <div className="shrink-0 border-b border-border/60 px-2.5 py-2.5">
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={historyQuery}
+              onChange={(e) => setHistoryQuery(e.target.value)}
+              placeholder="Search conversations…"
+              aria-label="Search conversations"
+              className="h-8 rounded-lg border-border/80 bg-muted/40 pl-8 text-xs"
+            />
+          </div>
+        </div>
+        <div className="min-h-0 flex-1 space-y-1 overflow-y-auto p-2" role="list">
           {conversations.length === 0 ? (
-            <p className="px-2 py-6 text-center text-xs text-muted-foreground">
-              Your chats on this device appear here after the first message.
+            <p className="px-2 py-8 text-center text-xs leading-relaxed text-muted-foreground">
+              Past chats stay on this device. No secrets are stored.
             </p>
+          ) : filteredHistory.length === 0 ? (
+            <p className="px-2 py-6 text-center text-xs text-muted-foreground">No matches.</p>
           ) : (
-            conversations.map((c) => (
-              <div
-                key={c.id}
-                className={cn(
-                  "group rounded-xl border px-2 py-2 transition-colors",
-                  c.id === conversationId
-                    ? "border-signal/40 bg-signal/10"
-                    : "border-transparent hover:bg-muted/50",
-                )}
-              >
-                <button
-                  type="button"
-                  className="w-full truncate text-left text-sm font-medium text-foreground"
-                  onClick={() => openConversation(c)}
-                  disabled={busy}
+            filteredHistory.map((c) => {
+              const active = c.id === conversationId;
+              return (
+                <div
+                  key={c.id}
+                  role="listitem"
+                  className={cn(
+                    "group relative flex items-start gap-0.5 rounded-xl border px-2 py-2.5 transition-[background-color,border-color,box-shadow] duration-200 ease-out",
+                    active
+                      ? "border-border bg-signal/10 shadow-xs"
+                      : "border-transparent hover:border-border/70 hover:bg-muted/40",
+                  )}
                 >
-                  {c.title}
-                </button>
-                <div className="mt-1 flex items-center gap-1 opacity-80 group-hover:opacity-100">
                   <button
                     type="button"
-                    className="rounded p-1 text-muted-foreground hover:bg-background hover:text-foreground"
-                    aria-label="Rename conversation"
-                    onClick={() => handleRename(c)}
+                    className="min-w-0 flex-1 rounded-lg px-1 py-0.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-signal/30"
+                    aria-current={active ? "true" : undefined}
+                    onClick={() => openConversation(c)}
                   >
-                    <Pencil className="size-3.5" />
+                    <p
+                      className={cn(
+                        "line-clamp-2 text-[12px] leading-snug tracking-tight",
+                        active ? "font-semibold text-foreground" : "font-medium text-foreground/85",
+                      )}
+                      title={c.title}
+                    >
+                      {c.title}
+                    </p>
+                    <p
+                      className={cn(
+                        "mt-1 text-[10px] tabular-nums",
+                        active ? "text-signal/80" : "text-muted-foreground",
+                      )}
+                    >
+                      {formatHistoryWhen(c.updatedAt)}
+                    </p>
                   </button>
-                  <button
-                    type="button"
-                    className="rounded p-1 text-muted-foreground hover:bg-background hover:text-destructive"
-                    aria-label="Delete conversation"
-                    onClick={() => handleDelete(c)}
-                  >
-                    <Trash2 className="size-3.5" />
-                  </button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button
+                        type="button"
+                        className={cn(
+                          "mt-0.5 shrink-0 rounded-md p-1.5 text-muted-foreground transition-[opacity,background-color,color] duration-150 hover:bg-muted hover:text-foreground",
+                          active
+                            ? "opacity-90"
+                            : "opacity-0 group-hover:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100",
+                        )}
+                        aria-label="Conversation actions"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <MoreHorizontal className="size-4" />
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-40 rounded-xl">
+                      <DropdownMenuItem
+                        onSelect={() => handleRename(c)}
+                        className="gap-2 text-xs"
+                      >
+                        <Pencil className="size-3.5" />
+                        Rename
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        onSelect={() => handleDelete(c)}
+                        className="gap-2 text-xs text-destructive focus:bg-destructive/10 focus:text-destructive"
+                      >
+                        <Trash2 className="size-3.5" />
+                        Delete
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       </aside>
 
-      <div className="flex min-w-0 flex-1 flex-col gap-6">
-        <PageHeader
-          eyebrow="Recruiter"
-          title="AI Recruiter Agent"
-          description="Chat to search your owned jobs, shortlist applicants, and draft outreach through HireHub’s Supervisor. Ownership stays on the server — emails are never sent from this page."
-          actions={
-            <Button variant="outline" size="sm" asChild>
-              <Link to="/recruiter/applicants">
-                <Users /> Applicants
-              </Link>
-            </Button>
-          }
-        />
-
-        {/* Context strip */}
-        <section className="space-y-4 rounded-2xl border bg-card p-5 shadow-sm">
-          <div className="flex flex-wrap items-center gap-2 text-sm font-semibold text-foreground">
-            <Bot className="size-4 text-signal" aria-hidden />
-            Context — owned jobs & applicants
-          </div>
-
-          {jobs.isLoading ? (
-            <CardSkeleton rows={2} />
-          ) : jobs.isError ? (
-            <ErrorState onRetry={() => void jobs.refetch()} />
-          ) : !jobs.data?.length ? (
-            <div className="space-y-3">
-              <RecruiterAgentEmpty
-                title="No jobs yet"
-                description="Post a job you own before using the Recruiter Agent."
-              />
-              <Button variant="signal" size="sm" asChild>
-                <Link to="/recruiter/jobs/new">
-                  <Briefcase /> Post a job
-                </Link>
-              </Button>
-            </div>
-          ) : (
-            <div className="grid gap-4 lg:grid-cols-2">
-              <div className="space-y-2">
-                <label className="text-xs font-medium text-muted-foreground" htmlFor="job-search">
-                  Search owned jobs
-                </label>
-                <div className="relative">
-                  <Search className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    id="job-search"
-                    className="pl-9"
-                    placeholder="Filter by title or status…"
-                    value={jobSearch}
-                    onChange={(e) => setJobSearch(e.target.value)}
-                  />
-                </div>
-                <ul className="max-h-40 divide-y overflow-y-auto rounded-xl border">
-                  {filteredJobs.length === 0 ? (
-                    <li className="px-3 py-2 text-xs text-muted-foreground">No jobs match.</li>
-                  ) : (
-                    filteredJobs.map((j) => (
-                      <li key={j.id}>
-                        <button
-                          type="button"
-                          className={cn(
-                            "flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-signal-soft/40",
-                            jobId === j.id && "bg-signal-soft/50",
-                          )}
-                          onClick={() => selectJob(j.id)}
-                        >
-                          <span className="truncate font-medium">{j.title}</span>
-                          <span className="flex shrink-0 items-center gap-1.5 text-[10px] uppercase text-muted-foreground">
-                            {j.applicantCount > 0 ? (
-                              <span className="rounded-full bg-signal/10 px-1.5 py-0.5 font-medium normal-case tracking-normal text-signal">
-                                {j.applicantCount} app{j.applicantCount === 1 ? "" : "s"}
-                              </span>
-                            ) : null}
-                            <span>{j.status}</span>
-                          </span>
-                        </button>
-                      </li>
-                    ))
-                  )}
-                </ul>
+      {/* Main workspace — fills remaining height */}
+      <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[#f8faf9]">
+        <header className="shrink-0 border-b border-border/80 bg-white px-4 py-4 sm:px-6 sm:py-5">
+          <div className="flex flex-col justify-between gap-3 md:flex-row md:items-end">
+            <div className="min-w-0 space-y-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="inline-flex items-center gap-1.5 rounded-md border border-signal/25 bg-signal-soft px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider text-signal">
+                  <Zap className="size-3.5" aria-hidden />
+                  Recruiter Supervisor
+                </span>
+                <span className="text-xs text-muted-foreground">Autonomous Copilot</span>
               </div>
-
-              <div className="space-y-2">
-                <label className="text-xs font-medium text-muted-foreground" htmlFor="app-search">
-                  Search applicants {jobId ? "for this job" : "across owned jobs"}
-                </label>
-                <div className="relative">
-                  <Search className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    id="app-search"
-                    className="pl-9"
-                    placeholder="Name, email, status, job title…"
-                    value={applicantSearch}
-                    onChange={(e) => setApplicantSearch(e.target.value)}
-                  />
-                </div>
-                {applicantStatusFilter ? (
-                  <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                    <span>
-                      Filter:{" "}
-                      {applicantStatusFilter.kind === "exclude"
-                        ? `not ${applicantStatusFilter.statuses.join(", ")}`
-                        : `only ${applicantStatusFilter.statuses.join(", ")}`}
-                    </span>
-                    <button
-                      type="button"
-                      className="underline hover:text-foreground"
-                      onClick={() => setApplicantStatusFilter(null)}
-                    >
-                      Clear
-                    </button>
-                  </div>
-                ) : null}
-                {applicantsLoading ? (
-                  <RecruiterAgentLoading label="Loading applicants…" />
-                ) : applicantsError ? (
-                  <ErrorState
-                    onRetry={() => {
-                      void appsForJob.refetch();
-                      void appsAcrossOwned.refetch();
-                    }}
-                  />
-                ) : filteredApplicants.length === 0 ? (
-                  <RecruiterAgentEmpty
-                    title={jobId ? "No applicants for this job" : "No applicants found"}
-                    description={
-                      jobId
-                        ? "When seekers apply, they will appear here for shortlisting."
-                        : "Select a job or adjust search. Only applicants on jobs you own are shown."
-                    }
-                  />
-                ) : (
-                  <ul className="max-h-40 divide-y overflow-y-auto rounded-xl border">
-                    {filteredApplicants.map((app) => {
-                      const name = app.profiles?.full_name?.trim() || "Applicant";
-                      const active = selectedAppId === app.id;
-                      return (
-                        <li key={app.id}>
-                          <button
-                            type="button"
-                            className={cn(
-                              "flex w-full items-center justify-between gap-2 px-3 py-2 text-left transition-colors hover:bg-signal-soft/40",
-                              active && "bg-signal-soft/50",
-                            )}
-                            onClick={() => selectApplicant(app)}
-                          >
-                            <div className="min-w-0">
-                              <p className="truncate text-sm font-medium">{name}</p>
-                              <p className="truncate text-[11px] text-muted-foreground">
-                                {app.jobs?.title ?? "Job"} · Applied {fmtDate(app.created_at)}
-                              </p>
-                            </div>
-                            <StatusBadge status={app.status} />
-                          </button>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                )}
-              </div>
-            </div>
-          )}
-
-          <div className="flex flex-wrap items-center gap-2">
-            {selectedJob && (
-              <span className="inline-flex items-center gap-1.5 rounded-full border bg-muted/40 px-2.5 py-1 text-xs">
-                <Briefcase className="size-3" aria-hidden />
-                Job: {selectedJob.title}
-                <button
-                  type="button"
-                  className="rounded-full p-0.5 hover:bg-muted"
-                  aria-label="Clear job"
-                  onClick={() => selectJob("")}
-                >
-                  <X className="size-3" />
-                </button>
-              </span>
-            )}
-            {selectedApp && (
-              <span className="inline-flex items-center gap-1.5 rounded-full border bg-muted/40 px-2.5 py-1 text-xs">
-                <Users className="size-3" aria-hidden />
-                Applicant: {selectedApp.profiles?.full_name?.trim() || "Selected"}
-                <button
-                  type="button"
-                  className="rounded-full p-0.5 hover:bg-muted"
-                  aria-label="Clear applicant"
-                  onClick={() => setSelectedAppId("")}
-                >
-                  <X className="size-3" />
-                </button>
-              </span>
-            )}
-            {!selectedJob && !selectedApp && (
-              <p className="text-xs text-muted-foreground">
-                Tip: search your jobs, select an applicant, then chat to shortlist or draft outreach.
+              <h1 className="text-xl font-bold tracking-tight text-foreground sm:text-2xl">
+                AI Recruiter Agent
+              </h1>
+              <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
+                Search owned jobs, shortlist applicants, and draft outreach. Emails are never sent
+                from this page.
               </p>
-            )}
-          </div>
-        </section>
-
-        {/* Chat */}
-        <section className="flex min-h-[420px] flex-col overflow-hidden rounded-2xl border bg-card shadow-sm">
-          <div className="flex items-center justify-between gap-2 border-b px-4 py-3">
-            <div className="flex items-center gap-2 text-sm font-semibold">
-              <Sparkles className="size-4 text-signal" aria-hidden />
-              Recruiter chat
             </div>
-            <p className="text-[11px] text-muted-foreground">Actions run via Supervisor</p>
+            <div className="flex items-center self-start rounded-xl border border-border/70 bg-muted/80 p-1 md:self-end">
+              <Link
+                to="/recruiter/jobs"
+                className="inline-flex items-center gap-2 rounded-lg px-3.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-white hover:text-foreground"
+              >
+                <Briefcase className="size-3.5" aria-hidden />
+                Job Posts
+              </Link>
+              <Link
+                to="/recruiter/applicants"
+                className="inline-flex items-center gap-2 rounded-lg bg-signal px-3.5 py-1.5 text-xs font-semibold text-signal-foreground shadow-xs"
+              >
+                <Users className="size-3.5 opacity-90" aria-hidden />
+                Applicants
+              </Link>
+            </div>
           </div>
+        </header>
 
-          <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
-            {turns.length === 0 && (
-              <div className="space-y-3">
-                <p className="text-sm text-muted-foreground">
-                  Ask me to list jobs, show applicants, propose a shortlist, or draft outreach.
-                  Shortlist needs your confirm; emails are never sent from this page.
+        <section
+          key={chatSwitchKey}
+          className="flex min-h-0 flex-1 animate-fade-up flex-col overflow-hidden bg-white"
+        >
+          <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-4 py-5 sm:px-6 lg:px-8">
+            {turns.length === 0 ? (
+              <div className="flex h-full min-h-[18rem] flex-col items-center justify-center text-center">
+                <div className="mb-5 flex size-14 items-center justify-center rounded-2xl border border-signal/25 bg-signal-soft text-signal shadow-sm">
+                  <Bot className="size-7" aria-hidden />
+                </div>
+                <h3 className="text-lg font-bold tracking-tight text-foreground">
+                  Ask your recruiter supervisor
+                </h3>
+                <p className="mt-2 max-w-md text-sm leading-relaxed text-muted-foreground">
+                  List owned jobs, review applicants, propose shortlists, or draft outreach.
+                  Shortlist needs your confirm.
                 </p>
-                <div className="flex flex-wrap gap-2">
-                  {STARTERS.map((s) => (
-                    <Button
-                      key={s}
+                <div className="mt-7 flex max-w-2xl flex-wrap items-center justify-center gap-2">
+                  {STARTERS.map((starter) => (
+                    <button
+                      key={starter}
                       type="button"
-                      size="sm"
-                      variant="outline"
                       disabled={busy || !jobs.data?.length}
-                      onClick={() => void submitChat(s)}
+                      onClick={() => void submitChat(starter)}
+                      className="rounded-xl border border-border bg-[#f8faf9] px-3.5 py-2.5 text-xs font-medium text-foreground shadow-xs transition-colors hover:border-signal/40 hover:bg-signal-soft hover:text-signal disabled:opacity-50"
                     >
-                      {s}
-                    </Button>
+                      {starter}
+                    </button>
                   ))}
                 </div>
               </div>
-            )}
+            ) : (
+              <div className="mx-auto w-full max-w-3xl space-y-5">
+                {turns.map((t, turnIndex) => {
+                  const editIdx = editingTurnId
+                    ? turns.findIndex((x) => x.id === editingTurnId)
+                    : -1;
+                  if (editIdx >= 0 && turnIndex > editIdx) return null;
 
-            {turns.map((t, turnIndex) => {
-              const editIdx = editingTurnId
-                ? turns.findIndex((x) => x.id === editingTurnId)
-                : -1;
-              if (editIdx >= 0 && turnIndex > editIdx) return null;
+                  return t.role === "user" ? (
+                    <div key={t.id} className="flex justify-end">
+                      <div className="group relative max-w-[min(100%,36rem)]">
+                        {editingTurnId === t.id ? (
+                          <div className="space-y-2 rounded-2xl rounded-br-md border border-signal/30 bg-background px-3 py-2 shadow-sm">
+                            <textarea
+                              ref={editInputRef}
+                              value={editDraft}
+                              onChange={(e) => setEditDraft(e.target.value)}
+                              rows={3}
+                              disabled={busy}
+                              className="w-full resize-y rounded-md border bg-background px-2 py-1.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-signal/40"
+                              aria-label="Edit message"
+                            />
+                            <div className="flex flex-wrap justify-end gap-2">
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                disabled={busy}
+                                onClick={cancelEditTurn}
+                              >
+                                Cancel
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="signal"
+                                disabled={busy || editDraft.trim().length < 3}
+                                onClick={() => void submitChat(editDraft, { editTurnId: t.id })}
+                              >
+                                Save & send
+                              </Button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="relative select-text rounded-2xl rounded-br-md bg-signal/15 px-4 py-3 text-sm leading-relaxed text-foreground">
+                            <p className="select-text">{t.text}</p>
+                            <button
+                              type="button"
+                              className="absolute -left-9 top-1 inline-flex size-7 items-center justify-center rounded-full border bg-background text-muted-foreground opacity-100 shadow-sm transition hover:text-foreground sm:opacity-0 sm:group-hover:opacity-100"
+                              aria-label="Edit message"
+                              disabled={busy}
+                              onClick={() => beginEditTurn(t)}
+                            >
+                              <Pencil className="size-3.5" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <div key={t.id} className="space-y-3">
+                      <div className="flex items-start gap-3">
+                        <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full bg-signal/10 text-signal">
+                          <Bot className="size-4" aria-hidden />
+                        </div>
+                        <div className="min-w-0 flex-1 space-y-3">
+                          <div
+                            className={cn(
+                              "rounded-2xl rounded-tl-md border px-4 py-3.5",
+                              t.error
+                                ? "border-destructive/20 bg-destructive/5"
+                                : "border-border/70 bg-[#fbfcfc]",
+                            )}
+                          >
+                            {t.error ? (
+                              <p className="text-sm text-destructive">{t.text}</p>
+                            ) : (
+                              <AssistantMessageBody
+                                text={t.text}
+                                selectedJobTitle={selectedJob?.title ?? null}
+                                onPickListItem={(title) => {
+                                  void (async () => {
+                                    const cleaned = title.replace(/\s*\([^)]*\)\s*$/, "").trim();
+                                    const owned = jobs.data ?? [];
+                                    const matched =
+                                      matchOwnedJobByTitle(owned, cleaned) ??
+                                      matchOwnedJobByTitle(owned, title);
+                                    if (!matched) {
+                                      toast.message("Couldn’t match that job", {
+                                        description:
+                                          "Try naming it in chat, e.g. shortlist from Tech Lead.",
+                                      });
+                                      return;
+                                    }
+                                    selectJob(matched.id);
+                                    toast.message(`Selected “${matched.title}”`);
+                                    if (busy) return;
+                                    setBusy(true);
+                                    try {
+                                      await replyListApplicants(
+                                        `show applicants for ${matched.title}`,
+                                        matched.id,
+                                      );
+                                    } catch (err) {
+                                      const message =
+                                        err instanceof Error
+                                          ? err.message
+                                          : "Could not load applicants.";
+                                      toast.error(message);
+                                    } finally {
+                                      setBusy(false);
+                                    }
+                                  })();
+                                }}
+                              />
+                            )}
+                          </div>
 
-              return t.role === "user" ? (
-                <div key={t.id} className="flex justify-end">
-                  <div className="group relative max-w-[85%]">
-                    {editingTurnId === t.id ? (
-                      <div className="space-y-2 rounded-2xl rounded-tr-md border border-signal/30 bg-background px-3 py-2 shadow-sm">
-                        <textarea
-                          ref={editInputRef}
-                          value={editDraft}
-                          onChange={(e) => setEditDraft(e.target.value)}
-                          rows={3}
-                          disabled={busy}
-                          className="w-full resize-y rounded-md border bg-background px-2 py-1.5 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-signal/40"
-                          aria-label="Edit message"
-                        />
-                        <div className="flex flex-wrap justify-end gap-2">
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="ghost"
-                            disabled={busy}
-                            onClick={cancelEditTurn}
-                          >
-                            Cancel
-                          </Button>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="signal"
-                            disabled={busy || editDraft.trim().length < 3}
-                            onClick={() => void submitChat(editDraft, { editTurnId: t.id })}
-                          >
-                            Save & send
-                          </Button>
+                          {t.applicantChoices && t.applicantChoices.length > 0 ? (
+                            <div className="grid gap-3 sm:grid-cols-2">
+                              {t.applicantChoices.map((choice) => {
+                                const active =
+                                  selectedAppId === choice.applicationId ||
+                                  pendingShortlistAppId === choice.applicationId;
+                                const hasResume = Boolean(
+                                  choice.resumeStoragePath || choice.resumeUrl,
+                                );
+                                return (
+                                  <div
+                                    key={choice.applicationId}
+                                    className={cn(
+                                      "rounded-xl border bg-white p-4 transition-colors",
+                                      active
+                                        ? "border-signal/40 bg-signal/5"
+                                        : "border-border hover:border-signal/30",
+                                    )}
+                                  >
+                                    <div className="flex items-start gap-3">
+                                      <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-signal/15 text-[11px] font-bold text-signal">
+                                        {personInitials(choice.label || "A")}
+                                      </div>
+                                      <div className="min-w-0 flex-1">
+                                        <p className="truncate text-sm font-semibold">
+                                          {choice.label}
+                                        </p>
+                                        <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                                          {choice.meta}
+                                          {choice.email ? ` · ${choice.email}` : ""}
+                                        </p>
+                                      </div>
+                                    </div>
+                                    <div className="mt-3 flex flex-wrap gap-2">
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        variant={active ? "signal" : "outline"}
+                                        disabled={busy || confirmShortlist.isPending}
+                                        onClick={() =>
+                                          void selectAndProposeShortlist(choice.applicationId)
+                                        }
+                                      >
+                                        {active ? "Selected" : "Propose Shortlist"}
+                                      </Button>
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="outline"
+                                        disabled={busy}
+                                        onClick={() => {
+                                          const ownedApps = [
+                                            ...(appsForJob.data ?? []),
+                                            ...(appsAcrossOwned.data ?? []),
+                                          ];
+                                          const row = ownedApps.find(
+                                            (a) => a.id === choice.applicationId,
+                                          );
+                                          const outreachJobId = row?.job_id || jobId;
+                                          setSelectedAppId(choice.applicationId);
+                                          if (row?.job_id) setJobId(row.job_id);
+                                          if (!outreachJobId) {
+                                            toast.error("Select a job first");
+                                            return;
+                                          }
+                                          void (async () => {
+                                            setBusy(true);
+                                            try {
+                                              await runOutreach(outreachJobId, {
+                                                applicationId: choice.applicationId,
+                                              });
+                                            } finally {
+                                              setBusy(false);
+                                            }
+                                          })();
+                                        }}
+                                      >
+                                        Draft Outreach
+                                      </Button>
+                                      {hasResume ? (
+                                        <ResumeOpenLink
+                                          storagePath={choice.resumeStoragePath ?? null}
+                                          legacyUrl={choice.resumeUrl ?? null}
+                                          fileName={choice.resumeFileName || "View"}
+                                        />
+                                      ) : null}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          ) : null}
+
+                          {t.draft && t.id === latestDraftTurnId ? (
+                            <div className="max-w-xl space-y-2 rounded-xl border border-border bg-white p-4">
+                              <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground">
+                                <Mail className="size-3.5" aria-hidden />
+                                Outreach draft (not sent)
+                              </div>
+                              <p className="text-sm font-medium">{t.draft.subject}</p>
+                              <p className="whitespace-pre-wrap font-mono text-xs text-muted-foreground">
+                                {t.draft.body.slice(0, 280)}
+                                {t.draft.body.length > 280 ? "…" : ""}
+                              </p>
+                            </div>
+                          ) : null}
                         </div>
                       </div>
-                    ) : (
-                      <div className="rounded-2xl rounded-tr-md bg-signal px-4 py-2.5 text-sm text-signal-foreground">
-                        {t.text}
-                        <button
-                          type="button"
-                          className="absolute -left-9 top-1 inline-flex size-7 items-center justify-center rounded-full border bg-background text-muted-foreground opacity-100 shadow-sm transition hover:text-foreground sm:opacity-0 sm:group-hover:opacity-100"
-                          aria-label="Edit message"
-                          title="Edit message"
-                          disabled={busy}
-                          onClick={() => beginEditTurn(t)}
-                        >
-                          <Pencil className="size-3.5" />
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ) : (
-                <div key={t.id} className="space-y-2">
-                  <div
-                    className={cn(
-                      "max-w-[90%] space-y-2 rounded-2xl rounded-tl-md border px-4 py-3 text-sm",
-                      t.error
-                        ? "border-destructive/20 bg-destructive/5"
-                        : "bg-muted/30",
-                    )}
-                  >
-                    <p className="whitespace-pre-wrap text-foreground">{t.text}</p>
-                    <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                      {normalizeRecruiterChatTurn(t).source === "supervisor"
-                        ? "via Supervisor"
-                        : "Local · owned data"}
-                    </p>
-                  </div>
-
-                  {t.applicantChoices && t.applicantChoices.length > 0 && (
-                    <div className="flex max-w-xl flex-col gap-2 rounded-2xl border bg-card p-3">
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                          Step: select applicant
-                        </p>
-                        <p className="text-[11px] text-muted-foreground">Then Confirm below</p>
-                      </div>
-                      <div className="flex flex-col gap-2">
-                        {t.applicantChoices.map((choice) => {
-                          const active =
-                            selectedAppId === choice.applicationId ||
-                            pendingShortlistAppId === choice.applicationId;
-                          const hasResume = Boolean(
-                            choice.resumeStoragePath || choice.resumeUrl,
-                          );
-                          return (
-                            <div
-                              key={choice.applicationId}
-                              className={cn(
-                                "rounded-xl border px-3 py-2.5 transition-colors",
-                                active
-                                  ? "border-signal/40 bg-signal/10"
-                                  : "hover:bg-muted/40",
-                              )}
-                            >
-                              <div className="flex items-start justify-between gap-2">
-                                <div className="min-w-0">
-                                  <p className="truncate text-sm font-medium">{choice.label}</p>
-                                  <p className="truncate text-[11px] text-muted-foreground">
-                                    {choice.meta}
-                                    {choice.email ? ` · ${choice.email}` : ""}
-                                  </p>
-                                </div>
-                                {active && (
-                                  <span className="shrink-0 rounded-full bg-signal/15 px-2 py-0.5 text-[10px] font-semibold uppercase text-signal">
-                                    Selected
-                                  </span>
-                                )}
-                              </div>
-                              <div className="mt-2 flex flex-wrap gap-2">
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant={active ? "signal" : "outline"}
-                                  disabled={busy || confirmShortlist.isPending}
-                                  onClick={() =>
-                                    void selectAndProposeShortlist(choice.applicationId)
-                                  }
-                                >
-                                  {active ? "Selected" : "Select"}
-                                </Button>
-                                {hasResume ? (
-                                  <ResumeOpenLink
-                                    storagePath={choice.resumeStoragePath}
-                                    legacyUrl={choice.resumeUrl}
-                                    fileName={choice.resumeFileName || "View resume"}
-                                  />
-                                ) : (
-                                  <span className="inline-flex items-center text-[11px] text-muted-foreground">
-                                    No resume on file
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
                     </div>
-                  )}
+                  );
+                })}
 
-                  {/* Only the latest outreach draft card — older ones are scrubbed / hidden. */}
-                  {t.draft && t.id === latestDraftTurnId && (
-                    <div className="max-w-xl space-y-2 rounded-2xl border bg-card p-4">
-                      <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground">
-                        <Mail className="size-3.5" aria-hidden />
-                        Outreach draft (not sent)
-                      </div>
-                      <p className="text-sm font-medium">{t.draft.subject}</p>
-                      <p className="whitespace-pre-wrap font-mono text-xs text-muted-foreground">
-                        {t.draft.body.slice(0, 280)}
-                        {t.draft.body.length > 280 ? "…" : ""}
-                      </p>
-                      <p className="text-[11px] text-muted-foreground">
-                        Edit the full draft in the editor below the chat.
-                      </p>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-
-            {busy && <RecruiterAgentLoading label="Running via Supervisor…" />}
-            <div ref={bottomRef} />
+                {busy ? <RecruiterAgentLoading label="Running via Supervisor…" /> : null}
+                <div ref={bottomRef} />
+              </div>
+            )}
           </div>
 
-          {showConfirmShortlistBar && pendingShortlistAppId && (
-            <div className="space-y-2 border-t border-signal/20 bg-signal/5 px-4 py-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-signal">
-                Step: confirm shortlist
+          {showConfirmShortlistBar && pendingShortlistAppId ? (
+            <div className="shrink-0 space-y-2 border-t border-signal/20 bg-signal/5 px-4 py-3 sm:px-6">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-signal">
+                Confirm shortlist
               </p>
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="text-sm">
@@ -1911,7 +2322,6 @@ function RecruiterAgentPage() {
                         })
                       : "Selected applicant"}
                   </span>
-                  . Status changes only after Confirm.
                 </p>
                 <div className="flex flex-wrap gap-2">
                   <Button
@@ -1946,56 +2356,37 @@ function RecruiterAgentPage() {
               {((pendingShortlistApp ?? selectedApp)?.resume_storage_path ||
                 (pendingShortlistApp ?? selectedApp)?.resume_url) && (
                 <ResumeOpenLink
-                  storagePath={(pendingShortlistApp ?? selectedApp)?.resume_storage_path}
-                  legacyUrl={(pendingShortlistApp ?? selectedApp)?.resume_url}
+                  storagePath={
+                    (pendingShortlistApp ?? selectedApp)?.resume_storage_path ?? null
+                  }
+                  legacyUrl={(pendingShortlistApp ?? selectedApp)?.resume_url ?? null}
                   fileName={
                     (pendingShortlistApp ?? selectedApp)?.resume_file_name || "View resume"
                   }
                 />
               )}
             </div>
-          )}
+          ) : null}
 
-          {/* Draft editor lives inside the agent column (not a disconnected block below). */}
           {(draftSubject || draftBody) && (
-            <div className="space-y-3 border-t bg-muted/20 px-4 py-3">
-              <div className="space-y-1">
-                <h2 className="flex items-center gap-2 text-sm font-semibold tracking-tight">
-                  <Mail className="size-4 text-signal" aria-hidden />
-                  Outreach draft editor
-                </h2>
-                <p className="text-xs text-muted-foreground">
-                  Draft only — nothing is emailed from this page.
-                </p>
-              </div>
-              <div className="space-y-1.5">
-                <label
-                  className="text-xs font-medium text-muted-foreground"
-                  htmlFor="outreach-subject"
-                >
-                  Subject
-                </label>
-                <Input
-                  id="outreach-subject"
-                  value={draftSubject}
-                  onChange={(e) => setDraftSubject(e.target.value)}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <label
-                  className="text-xs font-medium text-muted-foreground"
-                  htmlFor="outreach-body"
-                >
-                  Body (editable)
-                </label>
-                <Textarea
-                  id="outreach-body"
-                  rows={6}
-                  value={draftBody}
-                  onChange={(e) => setDraftBody(e.target.value)}
-                  className="font-mono text-xs"
-                />
-              </div>
+            <div className="shrink-0 space-y-3 border-t bg-muted/20 px-4 py-3 sm:px-6">
+              <h2 className="flex items-center gap-2 text-sm font-semibold">
+                <Mail className="size-4 text-signal" aria-hidden />
+                Outreach draft editor
+              </h2>
+              <Input
+                id="outreach-subject"
+                value={draftSubject}
+                onChange={(e) => setDraftSubject(e.target.value)}
+                placeholder="Subject"
+              />
+              <Textarea
+                id="outreach-body"
+                rows={5}
+                value={draftBody}
+                onChange={(e) => setDraftBody(e.target.value)}
+                className="font-mono text-xs"
+              />
               <div className="flex flex-wrap gap-2">
                 <Button
                   type="button"
@@ -2012,7 +2403,7 @@ function RecruiterAgentPage() {
                 >
                   <Copy /> Copy draft
                 </Button>
-                {jobId && (
+                {jobId ? (
                   <Button
                     type="button"
                     size="sm"
@@ -2034,7 +2425,7 @@ function RecruiterAgentPage() {
                   >
                     Redraft via Supervisor
                   </Button>
-                )}
+                ) : null}
                 <Button
                   type="button"
                   size="sm"
@@ -2052,32 +2443,59 @@ function RecruiterAgentPage() {
             </div>
           )}
 
-          <form
-            className="flex items-end gap-2 border-t p-3"
-            onSubmit={(e) => {
-              e.preventDefault();
-              void submitChat(question);
-            }}
-          >
-            <Input
-              value={question}
-              onChange={(e) => setQuestion(e.target.value)}
-              placeholder="Ask to search jobs, shortlist, or draft outreach…"
-              disabled={busy || !jobs.data?.length}
-              aria-label="Recruiter agent question"
-            />
-            <Button
-              type="submit"
-              size="icon"
-              variant="signal"
-              disabled={busy || question.trim().length < 2 || !jobs.data?.length}
-              aria-label="Send question"
+          <div className="shrink-0 border-t border-border/80 bg-[#f8faf9] px-4 py-3 sm:px-6">
+            {turns.length > 0 ? (
+              <div className="mb-2.5 flex gap-1.5 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                {STARTERS.map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    disabled={busy || !jobs.data?.length}
+                    onClick={() => void submitChat(s)}
+                    className="shrink-0 rounded-full border border-border bg-white px-3 py-1.5 text-[11px] font-medium text-foreground transition-colors hover:border-signal/40 hover:bg-signal-soft disabled:opacity-50"
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+            <form
+              className="mx-auto flex max-w-3xl items-center gap-2 rounded-2xl border border-border bg-white p-1.5 shadow-xs transition-shadow focus-within:border-signal focus-within:ring-2 focus-within:ring-signal/15"
+              onSubmit={(e) => {
+                e.preventDefault();
+                void submitChat(question);
+              }}
             >
-              {busy ? <Loader2 className="animate-spin" /> : <SendHorizontal />}
-            </Button>
-          </form>
+              <Input
+                value={question}
+                onChange={(e) => setQuestion(e.target.value)}
+                placeholder="Ask to search jobs, shortlist, or draft outreach..."
+                disabled={busy || !jobs.data?.length}
+                aria-label="Recruiter agent question"
+                className="h-10 flex-1 border-0 bg-transparent px-3 text-sm shadow-none focus-visible:ring-0"
+              />
+              <span className="hidden shrink-0 rounded-md bg-muted px-2 py-1 text-[10px] font-semibold text-muted-foreground sm:inline-flex">
+                Supervisor v2.4
+              </span>
+              <Button
+                type="submit"
+                size="icon"
+                variant="signal"
+                className="size-10 shrink-0 rounded-xl"
+                disabled={busy || question.trim().length < 2 || !jobs.data?.length}
+                aria-label="Send question"
+                title="Send to AI Recruiter"
+              >
+                {busy ? <Loader2 className="animate-spin" /> : <SendHorizontal className="size-4" />}
+              </Button>
+            </form>
+            <p className="mt-2 text-center text-[11px] text-muted-foreground">
+              Actions run via Supervisor. Emails &amp; updates require confirmation. History is local
+              to this browser only.
+            </p>
+          </div>
         </section>
-      </div>
+      </main>
     </div>
   );
 }
