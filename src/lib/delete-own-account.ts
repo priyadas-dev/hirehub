@@ -146,6 +146,18 @@ export async function performAccountDeletion(
     return { ok: false, message: STORAGE_CLEANUP_BLOCKED_MESSAGE };
   }
 
+  // A4 governance: clear agent memory tables before auth delete (CASCADE may also drop them).
+  for (const table of ["agent_sessions", "agent_memory_events", "agent_semantic_memories"] as const) {
+    try {
+      const t = admin.from(table) as {
+        delete: () => { eq: (col: string, val: string) => PromiseLike<{ error: { message: string } | null }> };
+      };
+      await t.delete().eq("user_id", userId);
+    } catch {
+      /* table may be absent before A4 migration; account delete still proceeds */
+    }
+  }
+
   const { error: deleteError } = await admin.auth.admin.deleteUser(userId);
   if (deleteError) {
     return {
