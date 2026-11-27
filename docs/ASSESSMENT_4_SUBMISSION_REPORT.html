@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>HireHub — Assessment 4 submission report</title>
+  <style>
+    @page { size: A4; margin: 14mm 12mm; }
+    :root {
+      --ink: #142033;
+      --muted: #4a5568;
+      --line: #d7dde8;
+      --accent: #0f6b5c;
+      --accent-soft: #e7f5f1;
+      --navy: #0b1b33;
+      --navy-2: #122a4a;
+      --sky: #7dd3fc;
+      --paper: #f7f8fb;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: #fff;
+      font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+      font-size: 14px;
+      line-height: 1.55;
+    }
+    h1, h2, h3, h4 { page-break-after: avoid; }
+    h2 {
+      margin: 1.4rem 0 0.55rem;
+      font-size: 22px;
+      color: var(--navy);
+      border-bottom: 2px solid var(--accent);
+      padding-bottom: 0.25rem;
+    }
+    h3 { margin: 1rem 0 0.4rem; font-size: 17px; color: var(--navy-2); }
+    p { margin: 0.4rem 0 0.55rem; }
+    a { color: #0b5cab; text-decoration: none; }
+    ul { margin: 0.4rem 0 0.8rem; padding-left: 1.2rem; }
+    li { margin: 0.25rem 0; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 0.55rem 0 0.9rem;
+      font-size: 13px;
+    }
+    th, td {
+      border: 1px solid var(--line);
+      padding: 0.45rem 0.55rem;
+      vertical-align: top;
+      text-align: left;
+    }
+    th { background: var(--accent-soft); color: var(--navy); }
+    code { font-family: Consolas, "Courier New", monospace; font-size: 12px; }
+    .cover {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      page-break-after: always;
+    }
+    .hero {
+      background: linear-gradient(145deg, #071526 0%, #12325a 55%, #0d4a45 100%);
+      color: #fff;
+      border-radius: 18px;
+      padding: 2.2rem 2rem 1.8rem;
+    }
+    .eyebrow {
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      font-size: 12px;
+      color: var(--sky);
+      font-weight: 600;
+      margin-bottom: 0.85rem;
+    }
+    .hero h1 {
+      margin: 0 0 0.7rem;
+      font-size: 34px;
+      line-height: 1.2;
+      font-weight: 700;
+    }
+    .hero .lede {
+      max-width: 42rem;
+      color: #d7e6f7;
+      font-size: 15px;
+      line-height: 1.55;
+      margin-bottom: 1.4rem;
+    }
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      margin: -0.35rem;
+    }
+    .meta-card {
+      flex: 1 1 10rem;
+      margin: 0.35rem;
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.14);
+      border-radius: 12px;
+      padding: 0.7rem 0.8rem;
+    }
+    .meta-card .k {
+      display: block;
+      font-size: 12px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: #9ec5e8;
+      margin-bottom: 0.25rem;
+    }
+    .meta-card .v { font-weight: 600; font-size: 14px; }
+    .intro {
+      margin-top: 1.2rem;
+      background: #fff;
+      border: 1px solid #cfe8e1;
+      border-radius: 14px;
+      padding: 1rem 1.15rem;
+      color: #243247;
+    }
+    .pills {
+      display: flex;
+      flex-wrap: wrap;
+      margin: 0.7rem -0.2rem 0;
+    }
+    .pill {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 0.28rem 0.7rem;
+      margin: 0.2rem;
+      font-size: 12px;
+      color: var(--navy-2);
+      font-weight: 600;
+    }
+    .note {
+      background: var(--accent-soft);
+      border-radius: 10px;
+      padding: 0.65rem 0.8rem;
+      color: #1d4d44;
+      font-size: 13px;
+    }
+    .footer {
+      margin-top: 1.6rem;
+      padding-top: 0.7rem;
+      border-top: 1px solid var(--line);
+      font-size: 12px;
+      color: var(--muted);
+    }
+    pre {
+      background: #0f172a;
+      color: #e2e8f0;
+      border-radius: 10px;
+      padding: 0.8rem 0.9rem;
+      overflow: auto;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    .status { font-weight: 700; color: var(--accent); }
+    .figure {
+      margin: 0.6rem 0 1rem;
+      page-break-inside: avoid;
+    }
+    .figure img {
+      display: block;
+      width: 100%;
+      height: auto;
+      border-radius: 12px;
+      border: 1px solid var(--line);
+      background: #f8faf9;
+    }
+    .figure .cap {
+      margin-top: 0.35rem;
+      font-size: 12px;
+      color: var(--muted);
+    }
+  </style>
+</head>
+<body>
+  <section class="cover">
+    <div class="hero">
+      <div class="eyebrow">SJ Innovation · Assessment Level 4 Capstone</div>
+      <h1>HireHub:<br/>Assessment 4<br/>Memory Layer</h1>
+      <p class="lede">Depth on one advanced layer — durable multi-layer agent memory with semantic recall, compaction, governance, and measured before/after proof on the live product.</p>
+      <div class="meta">
+        <div class="meta-card"><span class="k">Author</span><span class="v">Priya Das</span></div>
+        <div class="meta-card"><span class="k">Mentor</span><span class="v">Amol — Tech Manager</span></div>
+        <div class="meta-card"><span class="k">Chosen path</span><span class="v">Memory (not Orchestration)</span></div>
+        <div class="meta-card"><span class="k">Report date</span><span class="v">27 November 2026</span></div>
+      </div>
+    </div>
+    <div class="intro">
+      <p><strong>HireHub</strong> continues from Assessment 3 as a multi-role AI job portal. Assessment 4 ships a finished <strong>Memory Layer</strong>: Path B working memory, episodic events, semantic facts (gte-small / pgvector), rolling compaction, and a working forget-me path. Memory writes only through the Supervisor. Free tools only.</p>
+      <p>Public repo, live Vercel app, <code>assessment-4</code> tag, Decision Log, README metrics, and live Session1→Session2 seeker proof are included for DCT.</p>
+      <div class="pills">
+        <span class="pill">Public repo · live URL</span>
+        <span class="pill">Tokens 412 → 251 (−39.1%)</span>
+        <span class="pill">Personalization +50%</span>
+        <span class="pill">Forget-me · RLS · PII-on-write</span>
+        <span class="pill">Tag assessment-4</span>
+      </div>
+    </div>
+  </section>
+
+  <h2>Links &amp; submission checklist</h2>
+  <table>
+    <thead><tr><th>Link</th><th>URL</th></tr></thead>
+    <tbody>
+      <tr><td>Live app</td><td><a href="https://hirehub-dev.vercel.app/">https://hirehub-dev.vercel.app/</a></td></tr>
+      <tr><td>Public repo</td><td><a href="https://github.com/sjinnovation/hirehub">https://github.com/sjinnovation/hirehub</a></td></tr>
+      <tr><td>Release tag</td><td><a href="https://github.com/sjinnovation/hirehub/tree/assessment-4"><code>assessment-4</code></a> · commit <code>f897114</code></td></tr>
+      <tr><td>Demo video</td><td><a href="https://drive.google.com/drive/folders/1-YBMpo5wnSHDzEU4dHKXrC3ithZVy3Sn?usp=sharing">Google Drive — internship demos</a> (A4 Memory walkthrough)</td></tr>
+      <tr><td>Decision Log</td><td><code>docs/ASSESSMENT_4_DECISION_LOG.md</code></td></tr>
+      <tr><td>Before/after metrics</td><td>README · Assessment 4 section</td></tr>
+      <tr><td>Supabase</td><td><code>munqgybiuqpncxbgfvdp</code></td></tr>
+    </tbody>
+  </table>
+  <table>
+    <thead><tr><th>#</th><th>DCT / brief item</th><th>Status</th><th>Where</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>Live URL + public repo</td><td><span class="status">Delivered</span></td><td>Table above</td></tr>
+      <tr><td>2</td><td>Memory layer end-to-end on live app</td><td><span class="status">Delivered</span></td><td>§2 seeker path</td></tr>
+      <tr><td>3</td><td>Recall, compaction, governance depth</td><td><span class="status">Delivered</span></td><td>§1 · §4</td></tr>
+      <tr><td>4</td><td>Before/after numbers in README</td><td><span class="status">Delivered</span></td><td>§3</td></tr>
+      <tr><td>5</td><td>PII · RLS · forget-me</td><td><span class="status">Delivered</span></td><td>§4</td></tr>
+      <tr><td>6</td><td>Decision Log</td><td><span class="status">Delivered</span></td><td>Linked above</td></tr>
+      <tr><td>7</td><td>Write-up + 3–5 min demo</td><td><span class="status">Delivered</span></td><td>This report · Drive video</td></tr>
+      <tr><td>8</td><td><code>assessment-4</code> tag</td><td><span class="status">Delivered</span></td><td>Table above</td></tr>
+    </tbody>
+  </table>
+
+  <h2>1. What shipped — Memory Layer</h2>
+  <ul>
+    <li><strong>Path B working memory</strong> — durable <code>agent_sessions</code> (JWT + RLS)</li>
+    <li><strong>Episodic</strong> — <code>agent_memory_events</code></li>
+    <li><strong>Semantic</strong> — <code>agent_semantic_memories</code> + <code>match_agent_semantic_memories</code> (gte-small 384-d), top-k=5 into Supervisor</li>
+    <li><strong>Compaction</strong> — rolling redacted summary; fidelity preserved</li>
+    <li><strong>Governance</strong> — PII on write, write policy, own-row RLS, Settings forget-me, account-delete clears memory</li>
+    <li><strong>Discovery polish</strong> — broaden past empty location; clarify vague cold asks; reliable forget toast</li>
+  </ul>
+  <p class="note">Chosen path: <strong>Memory</strong> (not Orchestration). Decision Log documents trade-off: recall quality vs context budget (top-k=5 + rolling summary).</p>
+
+  <h2>2. Live proof — Session1 → Session2 → forget-me</h2>
+  <p><strong>App:</strong> <a href="https://hirehub-dev.vercel.app/">hirehub-dev.vercel.app</a> · <strong>Demo role:</strong> Job Seeker</p>
+  <table>
+    <thead><tr><th>Step</th><th>Action</th><th>Result</th></tr></thead>
+    <tbody>
+      <tr><td>Auth gate</td><td><code>/settings</code> logged out</td><td>Redirects to <code>/auth</code></td></tr>
+      <tr><td>Session 1</td><td>“I want React frontend jobs in Dhaka”</td><td>Preferences learned; durable memory written</td></tr>
+      <tr><td>Session 2</td><td>New chat — “Find jobs for me”</td><td>Recalled skills; <strong>2</strong> React-matched jobs</td></tr>
+      <tr><td>Forget me</td><td>Settings → Forget my agent memory</td><td>Cleared <strong>6</strong> sessions / <strong>28</strong> events / <strong>8</strong> semantic facts</td></tr>
+      <tr><td>Cold start</td><td>New chat after forget</td><td>Colder / less personalized results</td></tr>
+      <tr><td>Recruiter Settings</td><td>Forget-me control</td><td>Present for recruiter role</td></tr>
+    </tbody>
+  </table>
+  <p>Evidence: <code>docs/evidence/a4-memory-smoke/</code> · narrative <code>docs/ASSESSMENT_4_LIVE_UI_FULFILLMENT.md</code>.</p>
+  <div class="figure">
+    <img src="evidence/a4-memory-smoke/02-session2-recall.png" alt="Session 2 recall — React-matched jobs" />
+    <div class="cap">Figure 1 — Session 2 recall: personalized React job cards without re-asking skills</div>
+  </div>
+  <div class="figure">
+    <img src="evidence/a4-memory-smoke/03-settings-forget-me.png" alt="Forget my agent memory in Settings" />
+    <div class="cap">Figure 2 — Settings → Forget my agent memory</div>
+  </div>
+
+  <h2>3. Measured before/after (README)</h2>
+  <table>
+    <thead><tr><th>Metric</th><th>Before (cold / raw)</th><th>After (warm / compact)</th></tr></thead>
+    <tbody>
+      <tr><td>Clarifying signals</td><td>2</td><td>1</td></tr>
+      <tr><td>Personalization lift</td><td>—</td><td><strong>50%</strong> fewer clarify signals</td></tr>
+      <tr><td>Context tokens</td><td>412</td><td>251 (<strong>39.1%↓</strong>)</td></tr>
+      <tr><td>Fact fidelity</td><td>—</td><td><strong>pass</strong> (4/4)</td></tr>
+      <tr><td>Ideal-term overlap</td><td>0.00</td><td>0.24</td></tr>
+    </tbody>
+  </table>
+  <pre>npm run a4:memory-eval
+npm run a4:recall-trace
+npm test -- src/test/a4-memory-layer.test.ts</pre>
+
+  <h2>4. Governance &amp; safety</h2>
+  <table>
+    <thead><tr><th>Control</th><th>Evidence</th></tr></thead>
+    <tbody>
+      <tr><td>Supervisor-only writes</td><td><code>supervisor-memory-layer</code> + seeker/recruiter entrypoints</td></tr>
+      <tr><td>PII on write</td><td>Redaction in semantic/episodic upsert + session payload</td></tr>
+      <tr><td>Own-row RLS</td><td>Live policies on three memory tables</td></tr>
+      <tr><td>Forget me</td><td>Settings UI → <code>forgetMyAgentMemory</code> (live delete counts in §2)</td></tr>
+      <tr><td>Account delete</td><td>Clears sessions / events / semantic memories</td></tr>
+    </tbody>
+  </table>
+
+  <h2>5. Demo and credentials</h2>
+  <table>
+    <thead><tr><th>Item</th><th>Detail</th></tr></thead>
+    <tbody>
+      <tr><td>Live app</td><td><a href="https://hirehub-dev.vercel.app/">https://hirehub-dev.vercel.app/</a></td></tr>
+      <tr><td>Demo video</td><td><a href="https://drive.google.com/drive/folders/1-YBMpo5wnSHDzEU4dHKXrC3ithZVy3Sn?usp=sharing">Drive folder</a> — A4 Memory Layer walkthrough (3–5 min)</td></tr>
+      <tr><td>Tag</td><td><a href="https://github.com/sjinnovation/hirehub/tree/assessment-4"><code>assessment-4</code></a></td></tr>
+      <tr><td>Role credentials</td><td>Shared via Dev Control Tower / DM only</td></tr>
+    </tbody>
+  </table>
+  <p>Emails and passwords are <strong>not</strong> published in this report.</p>
+
+  <h2>6. How to reproduce</h2>
+  <pre>npm test -- src/test/a4-memory-layer.test.ts
+npm run a4:memory-eval
+npm run a4:recall-trace</pre>
+  <p>Live: open <a href="https://hirehub-dev.vercel.app/">hirehub-dev.vercel.app</a> as Job Seeker and walk Session1 → Session2 → Forget me → cold start.</p>
+
+  <div class="footer">
+    <strong>Delivery summary:</strong> Finished Memory Layer on public HireHub — Path B + episodic + semantic recall, compaction with fidelity, forget-me governance, README before/after numbers, Decision Log, live seeker Session1→Session2 proof, <code>assessment-4</code> tag, and DCT demo pack.
+    <br/>SJ Innovation · Internship Program — Assessment 4 Capstone for Priya Das · HireHub.
+  </div>
+</body>
+</html>

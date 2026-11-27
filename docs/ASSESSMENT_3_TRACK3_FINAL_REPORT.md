@@ -139,7 +139,7 @@ UI: `src/routes/_app.recruiter.agent.tsx`
 | Recruiter tools | Ownership from DB job/application `recruiter_id` |
 | Resume Storage | Private `resumes` bucket + RLS; app mirror in `resume-access.ts` |
 
-**Resume evidence classification:** policy + unit **mirror** — see §9.  
+**Resume evidence classification:** policy + unit **mirror**, plus **live browser proof** (2026-11-25) for Recruiter Agent NL deny/open and seeker upload — see resume ACL doc §9.  
 **Doc:** [`ASSESSMENT_3_TRACK3_RESUME_ACCESS_CONTROL.md`](./ASSESSMENT_3_TRACK3_RESUME_ACCESS_CONTROL.md)
 
 ---
@@ -236,7 +236,7 @@ Includes:
 | Outreach draft | Yes | Yes (draft only) | — | Send / CRM persist |
 | Shared memory Path A | Yes | Path A UI script earlier | Restart emptiness unit | Durable Path B live |
 | Idempotent apply | Yes + live UNIQUE SQL | — | **Concurrency mock** | Live parallel stress |
-| Resume ACL | Design + RLS in migrations | — | **Policy mirror Vitest** | Live Storage JWT matrix |
+| Resume ACL | Design + RLS in migrations | NL deny/open + View resume (2026-11-25) | **Policy mirror Vitest** + NL unit tests | Full live Storage JWT matrix (still optional) |
 
 ---
 
@@ -250,6 +250,7 @@ Includes:
 | Guardrails | `docs/ASSESSMENT_3_TRACK3_GUARDRAILS.md` |
 | Idempotency | `docs/ASSESSMENT_3_TRACK3_IDEMPOTENT_APPLICATIONS.md` |
 | Resume ACL | `docs/ASSESSMENT_3_TRACK3_RESUME_ACCESS_CONTROL.md` |
+| Resume ACL live screenshots (2026-11-25) | `docs/evidence/resume-access-2026-11-25/` |
 | Memory Path A | `docs/ASSESSMENT_3_TRACK3_SHARED_MEMORY_PATH_A.md` |
 | Memory Path B | `docs/ASSESSMENT_3_TRACK3_SHARED_MEMORY_PATH_B.md` |
 | Browser 3F (canonical) | `docs/ASSESSMENT_3_TRACK3_BROWSER_VERIFICATION.md` |
@@ -266,7 +267,7 @@ Includes:
 3. **Save Job / Confirm apply / Confirm shortlist / Send email** — intentionally skipped in Mode A.  
 4. **Propose-shortlist click** — skipped in latest Mode A run (no applicant on selected owned job).  
 5. **Concurrency** — mocked UNIQUE race, not live Postgres stress.  
-6. **Resume ACL** — policy mirror / unit tests; not live Storage RLS browser proof.  
+6. **Resume ACL** — policy mirror / unit tests remain; **live NL deny + owned open + seeker upload screenshots** added 2026-11-25 (see resume ACL §9). Full three-JWT Storage `createSignedUrl` matrix still optional.  
 7. Optional mentor UX polish (e.g. “which agent ran” badge) — not required by brief.
 
 ---
@@ -283,13 +284,14 @@ Includes:
 - [x] Shared memory Path A (skills/prefs/recent jobs across agents)  
 - [x] Idempotent applications (UNIQUE + handler + mock concurrency)  
 - [x] Resume privacy design + policy-mirror tests  
+- [x] Recruiter Agent NL resume open ownership (Access Denied vs owned open) + live screenshots (2026-11-25)  
 - [x] Focused unit suite: **67 + 33 = 100** tests passed (2026-11-09 re-check)  
 - [x] Task **3F Mode A** browser verification: **14/0/4** (pass/fail/skip)
 
 ### Remaining limitations (honest)
 
 - [ ] Mode B mutating browser E2E on isolated DB  
-- [ ] Live resume Storage JWT denial matrix  
+- [ ] Full live Storage JWT denial matrix (seeker / hiring recruiter / other recruiter `createSignedUrl`) — NL agent deny/open already screenshotted  
 - [ ] Path B durable memory migration apply (optional / approval-gated)  
 - [ ] Live PostgreSQL concurrency stress (optional)
 
@@ -309,4 +311,5 @@ Includes:
 
 | Date | Change |
 |---|---|
+| 2026-11-25 | Resume ACL: linked live browser proof screenshots (NL Access Denied + owned open + seeker upload) under `docs/evidence/resume-access-2026-11-25/`; updated resume ACL doc §9. |
 | 2026-11-09 | Task **3G** — final Track 3 evidence report created from existing implementation + Mode A browser re-verification + focused Vitest counts. |

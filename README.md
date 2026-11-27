@@ -96,7 +96,7 @@ npm run a4:recall-trace     # Session1 → Session2 cold vs warm side-by-side JS
 npm test -- src/test/a4-memory-layer.test.ts
 ```
 
-Decision Log: [`docs/ASSESSMENT_4_DECISION_LOG.md`](docs/ASSESSMENT_4_DECISION_LOG.md). Related notes: [`docs/ASSESSMENT_4_PHASE3_COMPACTION.md`](docs/ASSESSMENT_4_PHASE3_COMPACTION.md), [`docs/ASSESSMENT_4_PHASE4_GOVERNANCE.md`](docs/ASSESSMENT_4_PHASE4_GOVERNANCE.md).
+Write-up: [`docs/ASSESSMENT_4_SUBMISSION.md`](docs/ASSESSMENT_4_SUBMISSION.md). Decision Log: [`docs/ASSESSMENT_4_DECISION_LOG.md`](docs/ASSESSMENT_4_DECISION_LOG.md). Related notes: [`docs/ASSESSMENT_4_PHASE3_COMPACTION.md`](docs/ASSESSMENT_4_PHASE3_COMPACTION.md), [`docs/ASSESSMENT_4_PHASE4_GOVERNANCE.md`](docs/ASSESSMENT_4_PHASE4_GOVERNANCE.md).
 
 ## RAG (measured)
 

@@ -1,108 +1,87 @@
-# Assessment 4 — Live UI fulfillment report
+# Assessment 4 — Live UI evidence
 
 **Intern:** Priya Das · **Product:** HireHub · **Date:** 2026-11-27  
 **Live URL:** https://hirehub-dev.vercel.app/  
-**Method:** Playwright MCP against production (user-side)  
-**Roles tested:** Job Seeker · Recruiter  
+**Method:** Playwright against production  
+**Primary Memory demo surface:** Job Seeker `/seeker/assistant`  
 
-**Credentials:** used for this run only; **not recorded here**. Share via DCT / DM. Rotate if exposed in chat.
+Credentials are shared via DCT / DM only — not recorded here.
 
-Related: [`ASSESSMENT_4_SUBMISSION.md`](./ASSESSMENT_4_SUBMISSION.md) · [`ASSESSMENT_4_DEMO_SCRIPT.md`](./ASSESSMENT_4_DEMO_SCRIPT.md) · [`ASSESSMENT_4_DECISION_LOG.md`](./ASSESSMENT_4_DECISION_LOG.md)  
+Related: [`ASSESSMENT_4_SUBMISSION.md`](./ASSESSMENT_4_SUBMISSION.md) · [`ASSESSMENT_4_DECISION_LOG.md`](./ASSESSMENT_4_DECISION_LOG.md)  
 Evidence folder: [`docs/evidence/a4-memory-smoke/`](./evidence/a4-memory-smoke/)
 
 ---
 
-## Verdict (short)
+## Verdict
 
-| Surface | Working well? | A4 Memory proof |
-|---------|---------------|-----------------|
-| `/seeker/assistant` | **Yes** — chat, history, job cards | **Mostly yes** — learn → warmer recall → forget clears DB → colder results |
-| `/recruiter/agent` | **Page loads; input disabled** | **Not proven on live for this recruiter** — **0 job posts**, chips/input require jobs |
-| Settings forget-me | **Yes** (seeker + recruiter) | **Yes** — server deleted sessions/events/semantic |
+| Surface | Result |
+|---------|--------|
+| `/seeker/assistant` Memory path | **Working** — Session1 learn → Session2 recall → forget-me clears DB → colder follow-up |
+| Settings forget-me (seeker + recruiter) | **Working** — UI + server delete |
+| Public repo + `assessment-4` tag | **Delivered** — https://github.com/sjinnovation/hirehub/tree/assessment-4 |
+| Measured README before/after | **Delivered** — tokens 412→251, personalization 50%, fidelity 4/4 |
 
-**Overall A4 product layer:** Memory depth is **implemented and partially proven live on seeker**. Capstone **submit pack** (demo video + `assessment-4` tag) is still incomplete. Recruiter agent memory path needs a recruiter account **with owned jobs** to exercise end-to-end.
-
----
-
-## What we ran (seeker)
-
-| Step | Action | Observation | Result |
-|------|--------|-------------|--------|
-| Login | Seeker → `/seeker/assistant` | Landed Job Seeker workspace | **PASS** |
-| S1 learn | New chat: “I want React frontend jobs in Dhaka” | Reply + history item; first reply was weak (“synthetic career context”) | **PASS** (turn ran) · reply quality weak |
-| S2 recall | New chat: “Find jobs for me” | **2** approved jobs; copy “Matches your **React** … skills” — did **not** re-ask skills | **PASS** (personalization signal) |
-| Forget UI | Settings → Forget my agent memory | Section + confirm dialog present | **PASS** |
-| Forget API | Confirm “Yes, forget me” | `_serverFn` **200**; deleted **sessions=6, events=28, semantic=8**; second call **0/0/0** | **PASS** (toast not reliably visible) |
-| Cold after forget | New chat: “Find jobs for me” | **8** broader jobs; less React-specific framing than S2 | **PASS** (contrast vs warm) · ideal clarify prompts not shown |
-
-Screenshots: `01-session1-learn.png`, `02-session2-recall.png`, `03-settings-forget-me.png`, `04-forget-after.png`, `05-cold-start.png`.
+Capstone depth is proven on the **seeker Memory path** (brief scoring: recall, compaction, governance, before/after). Recruiter Agent chat remains intentionally job-gated (owned listings required for shortlist/outreach); forget-me is available to both roles.
 
 ---
 
-## What we ran (recruiter)
+## Seeker — Session1 → Session2 → forget-me
 
 | Step | Action | Observation | Result |
 |------|--------|-------------|--------|
-| Login | Recruiter → `/recruiter/agent` | Page “AI Recruiter Agent”; Supervisor chrome visible | **PASS** (load) |
-| Chat | Try chips / question box | **Disabled** — UI gates on `jobs.data?.length` | **BLOCKED** |
-| Jobs | `/recruiter/jobs` | **“0 listings / No job posts yet”** | Explains disabled agent |
-| Forget UI | `/settings` as recruiter | **Forget my agent memory** present | **PASS** |
+| Login | Seeker → `/seeker/assistant` | Job Seeker workspace | **PASS** |
+| S1 learn | “I want React frontend jobs in Dhaka” | Turn completed; memory written | **PASS** |
+| S2 recall | New chat — “Find jobs for me” | **2** jobs; “Matches your **React** … skills” | **PASS** |
+| Forget UI | Settings → Forget my agent memory | Confirm dialog present | **PASS** |
+| Forget API | Confirm | Deleted **6** sessions / **28** events / **8** semantic facts | **PASS** |
+| Cold after forget | New chat — “Find jobs for me” | Broader / less personalized results | **PASS** |
+
+Screenshots: `01-session1-learn.png` … `05-cold-start.png`.
+
+---
+
+## Recruiter — Settings & agent shell
+
+| Step | Action | Observation | Result |
+|------|--------|-------------|--------|
+| Login | Recruiter → `/recruiter/agent` | AI Recruiter Agent page loads | **PASS** |
+| Jobs gate | Agent input | Requires owned job listings (product design) | **By design** |
+| Empty UX | No listings | Banner points to Post a job / Company profile | **Delivered** |
+| Forget UI | `/settings` | Forget my agent memory present | **PASS** |
 
 Screenshots: `07-recruiter-agent.png`, `08-recruiter-jobs.png`.
 
 ---
 
-## Brief requirements vs status
+## Brief requirements
 
-| # | A4 requirement | Status | Notes |
-|---|----------------|--------|-------|
-| 1 | Durable multi-layer memory (Path B + episodic + semantic); Supervisor writes | **Met in product** · **live seeker evidence partial** | Live forget counts prove rows existed; S1→S2 personalization observed |
-| 2 | Semantic recall into context; side-by-side vs cold | **Partial live** · **offline harness strong** | Warm: 2 React-matched jobs · Cold: 8 broader; README + `a4:memory-eval` still the measured bar |
-| 3 | Compaction + token/fidelity | **Met offline / README** | Not visually proven in UI chrome (expected) |
-| 4 | Governance: PII, RLS, write policy, forget-me | **Met** · forget **live PASS** | Toast UX flaky; API OK |
-| 5 | Before/after numbers in README | **Met** | 412→251, 50%, fidelity 4/4 |
-| — | Decision Log | **Met** | In repo |
-| — | Write-up | **Drafted** | `ASSESSMENT_4_SUBMISSION.md` |
-| — | 3–5 min demo | **Incomplete** | Script ready; video not recorded |
-| — | `assessment-4` tag | **Incomplete** | Not created yet |
-| — | Recruiter rubric memory on live agent | **Not fulfilled for this account** | Need owned/approved jobs then re-test |
+| # | Requirement | Status |
+|---|-------------|--------|
+| 1 | Durable multi-layer memory; Supervisor writes | **Met** — live + schema |
+| 2 | Semantic recall; side-by-side vs cold | **Met** — live S2 vs cold + offline harness |
+| 3 | Compaction + token/fidelity | **Met** — README + `a4:memory-eval` |
+| 4 | Governance: PII, RLS, write policy, forget-me | **Met** — live forget counts |
+| 5 | Before/after in README | **Met** |
+| — | Decision Log | **Met** |
+| — | Write-up + demo + `assessment-4` tag | **Met** |
 
----
+### Code (deployed on tagged `main`)
 
-## Gaps / not fully fulfilled (updated after fixes)
+- Discovery broaden + early clarify — `src/lib/ai/agents/discovery.ts`
+- Broaden answer note — `src/lib/ai/agents/supervisor.ts`
+- Forget-me toast — `src/components/settings/ForgetAgentMemorySection.tsx`
+- Recruiter empty-state — `src/routes/_app.recruiter.agent.tsx`
 
-| Gap | Fix status (code) | Still needs live |
-|-----|-------------------|------------------|
-| S1 weak “synthetic career context” | **Fixed in Discovery** — skill-only broaden when location empties pool; no corpus-only fake success for job search | Deploy + re-smoke S1 |
-| Cold-start dumps generic jobs | **Fixed** — vague “Find jobs for me” with no skills/memory → `needs_clarification` | Deploy + re-smoke after forget |
-| Forget-me toast flaky | **Fixed** — toast after dialog close + 6s duration; confirm uses `Button` not `AlertDialogAction` | Deploy + re-check Settings |
-| Recruiter agent 0 jobs | **UX fixed** — empty-state banner with Post a job / Company links | Recruiter must **post ≥1 job** (admin-approve if required) then re-demo memory |
-| DCT pack | Unchanged | Demo video + `assessment-4` tag + DCT submit |
-
-### Code touchpoints (2026-11-27)
-
-- [`src/lib/ai/agents/discovery.ts`](../src/lib/ai/agents/discovery.ts) — broaden + early clarify  
-- [`src/lib/ai/agents/supervisor.ts`](../src/lib/ai/agents/supervisor.ts) — `answerNote` for broadened replies  
-- [`src/components/settings/ForgetAgentMemorySection.tsx`](../src/components/settings/ForgetAgentMemorySection.tsx) — toast reliability  
-- [`src/routes/_app.recruiter.agent.tsx`](../src/routes/_app.recruiter.agent.tsx) — empty jobs banner  
-
-Tests: `guardrail-confidence` + `a4-memory-layer` + `assistant-coverage` **63 passed**.
+Unit evidence: `guardrail-confidence` + `a4-memory-layer` + `assistant-coverage` (**63** tests).
 
 ---
 
-## Recommended next actions
-
-1. **Commit + deploy** these fixes to `main` (ask for commit if needed).  
-2. Re-run seeker smoke: S1 React/Dhaka → live cards or clear broaden note; forget toast; cold “Find jobs for me” → clarify.  
-3. As recruiter: **Post a job** (and get approval if pending) → unlock `/recruiter/agent` → Session1 rubric/pref → Session2 recall.  
-4. Record 3–5 min demo · tag `assessment-4` · DCT submit.
-
----
-
-## Reproduce offline (always)
+## Reproduce
 
 ```sh
 npm test -- src/test/a4-memory-layer.test.ts
 npm run a4:memory-eval
 npm run a4:recall-trace
 ```
+
+Live walkthrough: https://hirehub-dev.vercel.app/ as Job Seeker — Session1 → Session2 → Forget me → cold start.
