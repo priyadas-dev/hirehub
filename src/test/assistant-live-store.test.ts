@@ -1,11 +1,29 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  readAssistantHistory,
+  renameConversation,
+  titleFromQuestion,
+  writeAssistantHistory,
+} from "@/lib/ai/assistant-history";
+import {
   ensureAssistantLiveState,
   getAssistantLiveState,
   resetAssistantLiveConversation,
   runAssistantLiveAsk,
   subscribeAssistantLive,
 } from "@/lib/ai/assistant-live-store";
+
+const okAnswer = (answer: string) =>
+  ({
+    ok: true as const,
+    answer,
+    insufficientContext: false as const,
+    ragAvailable: true as const,
+    liveJobsAvailable: true as const,
+    soughtLiveJobs: false as const,
+    corpusCitations: [] as const,
+    liveCitations: [] as const,
+  }) as never;
 
 describe("assistant live store", () => {
   afterEach(() => {
@@ -75,20 +93,56 @@ describe("assistant live store", () => {
 
     await runAssistantLiveAsk(userId, {
       question: "Explain OOP briefly.",
-      ask: async () =>
-        ({
-          ok: true,
-          answer: "OOP groups data and behaviour into objects.",
-          insufficientContext: false,
-          ragAvailable: true,
-          liveJobsAvailable: true,
-          soughtLiveJobs: false,
-          corpusCitations: [],
-          liveCitations: [],
-        }) as never,
+      ask: async () => okAnswer("OOP groups data and behaviour into objects."),
     });
 
     expect(listener.mock.calls.length).toBeGreaterThan(0);
     unsub();
+  });
+
+  it("keeps the first-message History title across follow-ups and renames", async () => {
+    const userId = "seeker-live-title-1";
+    ensureAssistantLiveState(userId);
+
+    const firstQuestion = "I know React, JavaScript and SQL. Find suitable jobs";
+    const firstTitle = titleFromQuestion(firstQuestion);
+
+    await runAssistantLiveAsk(userId, {
+      question: firstQuestion,
+      ask: async () => okAnswer("Here are matching jobs."),
+    });
+
+    const afterFirst = readAssistantHistory(userId).conversations[0];
+    expect(afterFirst?.title).toBe(firstTitle);
+    const conversationId = afterFirst?.id;
+    expect(conversationId).toBeTruthy();
+
+    await runAssistantLiveAsk(userId, {
+      question: "Show me remote jobs",
+      ask: async () => okAnswer("Here are remote jobs."),
+    });
+
+    const afterFollowUp = readAssistantHistory(userId).conversations.find(
+      (c) => c.id === conversationId,
+    );
+    expect(afterFollowUp?.title).toBe(firstTitle);
+    expect(afterFollowUp?.messages.length).toBeGreaterThanOrEqual(2);
+
+    const renamed = renameConversation(
+      readAssistantHistory(userId),
+      conversationId!,
+      "My React search",
+    );
+    writeAssistantHistory(userId, renamed);
+
+    await runAssistantLiveAsk(userId, {
+      question: "What about full-time roles?",
+      ask: async () => okAnswer("Here are full-time roles."),
+    });
+
+    const afterRename = readAssistantHistory(userId).conversations.find(
+      (c) => c.id === conversationId,
+    );
+    expect(afterRename?.title).toBe("My React search");
   });
 });

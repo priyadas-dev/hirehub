@@ -11,6 +11,7 @@ import {
   Pencil,
   Plus,
   RefreshCw,
+  Search,
   SendHorizontal,
   Sparkles,
   Trash2,
@@ -78,6 +79,34 @@ const STARTERS = [
   "Show me remote jobs",
 ] as const;
 
+function formatHistoryWhen(iso: string): string {
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return "";
+  const d = new Date(t);
+  const now = new Date();
+  const sameDay =
+    d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth() &&
+    d.getDate() === now.getDate();
+  if (sameDay) {
+    return d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  }
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  if (
+    d.getFullYear() === yesterday.getFullYear() &&
+    d.getMonth() === yesterday.getMonth() &&
+    d.getDate() === yesterday.getDate()
+  ) {
+    return "Yesterday";
+  }
+  const weekAgo = now.getTime() - 6 * 24 * 60 * 60 * 1000;
+  if (t >= weekAgo) {
+    return d.toLocaleDateString(undefined, { weekday: "short" });
+  }
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
 function useAssistantLive(userId: string) {
   return useSyncExternalStore(
     subscribeAssistantLive,
@@ -94,6 +123,7 @@ function SeekerAssistantPage() {
 
   const [question, setQuestion] = useState("");
   const [conversations, setConversations] = useState<AssistantConversation[]>([]);
+  const [historyQuery, setHistoryQuery] = useState("");
   const [editingTurnId, setEditingTurnId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState("");
   const [attachment, setAttachment] = useState<{
@@ -110,6 +140,12 @@ function SeekerAssistantPage() {
   const conversationId = live?.conversationId ?? "";
   const formError = live?.formError ?? null;
   const attachStatus = live?.attachStatus ?? null;
+
+  const filteredHistory = useMemo(() => {
+    const q = historyQuery.trim().toLowerCase();
+    if (!q) return conversations;
+    return conversations.filter((c) => c.title.toLowerCase().includes(q));
+  }, [conversations, historyQuery]);
 
   /** Job id → title for hiding UUIDs in chat bubbles. */
   const jobTitleById = useMemo(() => {
@@ -273,244 +309,284 @@ function SeekerAssistantPage() {
   }
 
   return (
-    <div className="flex min-h-[calc(100vh-8rem)] flex-col gap-4 lg:flex-row">
-      <aside className="surface-card flex w-full shrink-0 flex-col overflow-hidden lg:w-64">
-        <div className="flex items-center justify-between gap-2 border-b px-3 py-3">
-          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+    <div className="-mx-4 -my-6 flex h-[calc(100dvh-4rem)] flex-col overflow-hidden bg-[#f4f7f6] sm:-mx-6 sm:-my-8 lg:-mx-10 lg:-my-12 lg:flex-row">
+      <aside className="flex max-h-[40vh] w-full shrink-0 flex-col border-b border-border bg-white lg:max-h-none lg:h-full lg:w-72 lg:border-b-0 lg:border-r lg:border-border">
+        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border/70 px-3.5 py-3">
+          <h2 className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
             History
-          </p>
-          <Button
+          </h2>
+          <button
             type="button"
-            size="sm"
-            variant="outline"
             onClick={startNewConversation}
             disabled={busy}
+            className="inline-flex items-center gap-1 rounded-full bg-signal/12 px-2.5 py-1 text-[11px] font-semibold text-signal transition-[background-color,transform] duration-150 hover:bg-signal/20 active:scale-[0.98] disabled:opacity-50"
+            title="Start a new chat"
           >
-            <Plus /> New
-          </Button>
+            <Plus className="size-3.5" aria-hidden />
+            New
+          </button>
         </div>
-        <div className="flex-1 space-y-1 overflow-y-auto p-2">
+        <div className="shrink-0 border-b border-border/60 px-2.5 py-2.5">
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={historyQuery}
+              onChange={(e) => setHistoryQuery(e.target.value)}
+              placeholder="Search conversations…"
+              aria-label="Search conversations"
+              className="h-8 rounded-lg border-border/80 bg-muted/40 pl-8 text-xs"
+            />
+          </div>
+        </div>
+        <div className="min-h-0 flex-1 space-y-1 overflow-y-auto p-2" role="list">
           {conversations.length === 0 ? (
-            <p className="px-2 py-6 text-center text-xs text-muted-foreground">
-              Conversations stay on this device/browser for your account. No secrets are stored.
+            <p className="px-2 py-8 text-center text-xs leading-relaxed text-muted-foreground">
+              Past chats stay on this device. No secrets are stored.
             </p>
+          ) : filteredHistory.length === 0 ? (
+            <p className="px-2 py-6 text-center text-xs text-muted-foreground">No matches.</p>
           ) : (
-            conversations.map((c) => (
-              <div
-                key={c.id}
-                className={cn(
-                  "group rounded-xl border px-2 py-2 transition-colors",
-                  c.id === conversationId
-                    ? "border-signal/40 bg-signal/10"
-                    : "border-transparent hover:bg-muted/50",
-                )}
-              >
-                <button
-                  type="button"
-                  className="w-full truncate text-left text-sm font-medium text-foreground"
-                  onClick={() => openConversation(c)}
-                  disabled={busy}
+            filteredHistory.map((c) => {
+              const active = c.id === conversationId;
+              return (
+                <div
+                  key={c.id}
+                  role="listitem"
+                  className={cn(
+                    "group relative flex items-start gap-0.5 rounded-xl border px-2 py-2.5 transition-[background-color,border-color,box-shadow] duration-200 ease-out",
+                    active
+                      ? "border-border bg-signal/10 shadow-xs"
+                      : "border-transparent hover:border-border/70 hover:bg-muted/40",
+                  )}
                 >
-                  {c.title}
-                </button>
-                <div className="mt-1 flex items-center gap-1 opacity-80 group-hover:opacity-100">
                   <button
                     type="button"
-                    className="rounded p-1 text-muted-foreground hover:bg-background hover:text-foreground"
-                    aria-label="Rename conversation"
-                    onClick={() => handleRename(c)}
+                    className="min-w-0 flex-1 rounded-lg px-1 py-0.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-signal/30 disabled:opacity-50"
+                    aria-current={active ? "true" : undefined}
+                    onClick={() => openConversation(c)}
+                    disabled={busy}
                   >
-                    <Pencil className="size-3.5" />
+                    <p
+                      className={cn(
+                        "line-clamp-2 text-[12px] leading-snug tracking-tight",
+                        active ? "font-semibold text-foreground" : "font-medium text-foreground/85",
+                      )}
+                      title={c.title}
+                    >
+                      {c.title}
+                    </p>
+                    <p
+                      className={cn(
+                        "mt-1 text-[10px] tabular-nums",
+                        active ? "text-signal/80" : "text-muted-foreground",
+                      )}
+                    >
+                      {formatHistoryWhen(c.updatedAt)}
+                    </p>
                   </button>
-                  <button
-                    type="button"
-                    className="rounded p-1 text-muted-foreground hover:bg-background hover:text-destructive"
-                    aria-label="Delete conversation"
-                    onClick={() => handleDelete(c)}
-                  >
-                    <Trash2 className="size-3.5" />
-                  </button>
+                  <div className="mt-0.5 flex shrink-0 flex-col gap-0.5 opacity-90 group-hover:opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100">
+                    <button
+                      type="button"
+                      className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                      aria-label="Rename conversation"
+                      onClick={() => handleRename(c)}
+                    >
+                      <Pencil className="size-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                      aria-label="Delete conversation"
+                      onClick={() => handleDelete(c)}
+                    >
+                      <Trash2 className="size-3.5" />
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       </aside>
 
-      <div className="flex min-w-0 flex-1 flex-col gap-4">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2 text-signal">
-              <Sparkles className="size-4" />
-              <p className="text-xs font-medium uppercase tracking-[0.14em]">Job Seeker</p>
+      <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[#f8faf9]">
+        <header className="shrink-0 border-b border-border/80 bg-white px-4 py-4 sm:px-6 sm:py-5">
+          <div className="flex flex-col justify-between gap-3 md:flex-row md:items-end">
+            <div className="min-w-0 space-y-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="inline-flex items-center gap-1.5 rounded-md border border-signal/25 bg-signal-soft px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider text-signal">
+                  <Sparkles className="size-3.5" aria-hidden />
+                  Job Seeker
+                </span>
+                <span className="text-xs text-muted-foreground">Career Copilot</span>
+              </div>
+              <h1 className="text-xl font-bold tracking-tight text-foreground sm:text-2xl">
+                AI Job Assistant
+              </h1>
+              <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
+                Ask anything — career advice, interview prep, concepts, or approved HireHub jobs.
+                Answers keep going if you navigate away and come back.
+              </p>
             </div>
-            <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
-              AI Job Assistant
-            </h1>
-            <p className="max-w-2xl text-sm text-muted-foreground">
-              Ask anything — career advice, interview prep, concepts, or approved HireHub jobs.
-              Answers keep going if you navigate away and come back.
-            </p>
+            <Button variant="outline" size="sm" asChild className="self-start md:self-end">
+              <Link to="/seeker/jobs">
+                <Briefcase /> Browse jobs
+              </Link>
+            </Button>
           </div>
-          <Button variant="outline" size="sm" asChild>
-            <Link to="/seeker/jobs">
-              <Briefcase /> Browse jobs
-            </Link>
-          </Button>
-        </div>
+        </header>
 
-        <div className="surface-card flex min-h-[28rem] flex-1 flex-col overflow-hidden">
-          <div className="flex-1 space-y-4 overflow-y-auto px-4 py-5 sm:px-6">
+        <section className="flex min-h-0 flex-1 animate-fade-up flex-col overflow-hidden bg-white">
+          <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-4 py-5 sm:px-6 lg:px-8">
             {turns.length === 0 ? (
-              <div className="flex h-full min-h-[16rem] flex-col items-center justify-center gap-4 text-center">
-                <div className="flex size-12 items-center justify-center rounded-2xl bg-signal/10 text-signal">
-                  <Bot className="size-6" />
+              <div className="flex h-full min-h-[18rem] flex-col items-center justify-center text-center">
+                <div className="mb-5 flex size-14 items-center justify-center rounded-2xl border border-signal/25 bg-signal-soft text-signal shadow-sm">
+                  <Bot className="size-7" aria-hidden />
                 </div>
-                <div className="space-y-1">
-                  <p className="font-medium text-foreground">Ask your first career question</p>
-                  <p className="max-w-md text-sm text-muted-foreground">
-                    Matching approved jobs appear as cards. Attach a PDF, DOCX, or image when
-                    useful, or type skills and filters in your question.
-                  </p>
-                </div>
-                <div className="flex max-w-xl flex-wrap justify-center gap-2">
+                <h3 className="text-lg font-bold tracking-tight text-foreground">
+                  Ask your first career question
+                </h3>
+                <p className="mt-2 max-w-md text-sm leading-relaxed text-muted-foreground">
+                  Matching approved jobs appear as cards. Attach a PDF, DOCX, or image when useful,
+                  or type skills and filters in your question.
+                </p>
+                <div className="mt-7 flex max-w-2xl flex-wrap items-center justify-center gap-2">
                   {STARTERS.map((starter) => (
-                    <Button
+                    <button
                       key={starter}
                       type="button"
-                      variant="outline"
-                      size="sm"
                       disabled={busy}
                       onClick={() => void submit(starter)}
+                      className="rounded-xl border border-border bg-[#f8faf9] px-3.5 py-2.5 text-xs font-medium text-foreground shadow-xs transition-colors hover:border-signal/40 hover:bg-signal-soft hover:text-signal disabled:opacity-50"
                     >
                       {starter}
-                    </Button>
+                    </button>
                   ))}
                 </div>
               </div>
             ) : (
-              turns.map((turn, turnIndex) => {
-                const editIdx = editingTurnId
-                  ? turns.findIndex((t) => t.id === editingTurnId)
-                  : -1;
-                if (editIdx >= 0 && turnIndex > editIdx) return null;
+              <div className="mx-auto w-full max-w-3xl space-y-5">
+                {turns.map((turn, turnIndex) => {
+                  const editIdx = editingTurnId
+                    ? turns.findIndex((t) => t.id === editingTurnId)
+                    : -1;
+                  if (editIdx >= 0 && turnIndex > editIdx) return null;
 
-                return (
-                <div key={turn.id} className="space-y-3">
-                  <div className="flex justify-end">
-                    <div className="group max-w-[85%] space-y-2">
-                      {editingTurnId === turn.id ? (
-                        <div className="space-y-2 rounded-2xl rounded-br-md border border-signal/30 bg-background px-3 py-2 shadow-sm">
-                          <textarea
-                            ref={editInputRef}
-                            value={editDraft}
-                            onChange={(e) => setEditDraft(e.target.value)}
-                            rows={3}
-                            disabled={busy}
-                            className="w-full resize-y rounded-md border bg-background px-2 py-1.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-signal/40"
-                            aria-label="Edit message"
-                          />
-                          <div className="flex flex-wrap justify-end gap-2">
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="ghost"
-                              disabled={busy}
-                              onClick={cancelEditTurn}
-                            >
-                              Cancel
-                            </Button>
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="signal"
-                              disabled={busy || editDraft.trim().length < 3}
-                              onClick={() =>
-                                void submit(editDraft, { editTurnId: turn.id })
-                              }
-                            >
-                              Save & send
-                            </Button>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="relative space-y-2 rounded-2xl rounded-br-md bg-signal/15 px-4 py-3 text-sm text-foreground">
-                          <p>{formatSeekerChatUserQuestion(turn.question, jobTitleById)}</p>
-                          {turn.attachment && (
-                            <p className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
-                              <Paperclip className="size-3" />
-                              {turn.attachment.name}
-                            </p>
+                  return (
+                    <div key={turn.id} className="space-y-3">
+                      <div className="flex justify-end">
+                        <div className="group max-w-[85%] space-y-2">
+                          {editingTurnId === turn.id ? (
+                            <div className="space-y-2 rounded-2xl rounded-br-md border border-signal/30 bg-background px-3 py-2 shadow-sm">
+                              <textarea
+                                ref={editInputRef}
+                                value={editDraft}
+                                onChange={(e) => setEditDraft(e.target.value)}
+                                rows={3}
+                                disabled={busy}
+                                className="w-full resize-y rounded-md border bg-background px-2 py-1.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-signal/40"
+                                aria-label="Edit message"
+                              />
+                              <div className="flex flex-wrap justify-end gap-2">
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  disabled={busy}
+                                  onClick={cancelEditTurn}
+                                >
+                                  Cancel
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="signal"
+                                  disabled={busy || editDraft.trim().length < 3}
+                                  onClick={() => void submit(editDraft, { editTurnId: turn.id })}
+                                >
+                                  Save & send
+                                </Button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="relative space-y-2 rounded-2xl rounded-br-md bg-signal/15 px-4 py-3 text-sm text-foreground">
+                              <p>{formatSeekerChatUserQuestion(turn.question, jobTitleById)}</p>
+                              {turn.attachment && (
+                                <p className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
+                                  <Paperclip className="size-3" />
+                                  {turn.attachment.name}
+                                </p>
+                              )}
+                              <button
+                                type="button"
+                                className="absolute -left-9 top-1 inline-flex size-7 items-center justify-center rounded-full border bg-background text-muted-foreground opacity-100 shadow-sm transition hover:text-foreground sm:opacity-0 sm:group-hover:opacity-100"
+                                aria-label="Edit message"
+                                title="Edit message"
+                                disabled={busy || turn.pending}
+                                onClick={() => beginEditTurn(turn)}
+                              >
+                                <Pencil className="size-3.5" />
+                              </button>
+                            </div>
                           )}
-                          <button
-                            type="button"
-                            className="absolute -left-9 top-1 inline-flex size-7 items-center justify-center rounded-full border bg-background text-muted-foreground opacity-100 shadow-sm transition hover:text-foreground sm:opacity-0 sm:group-hover:opacity-100"
-                            aria-label="Edit message"
-                            title="Edit message"
-                            disabled={busy || turn.pending}
-                            onClick={() => beginEditTurn(turn)}
-                          >
-                            <Pencil className="size-3.5" />
-                          </button>
+                        </div>
+                      </div>
+                      {editingTurnId !== turn.id && (
+                        <div className="flex items-start gap-3">
+                          <div className="mt-1 flex size-8 shrink-0 items-center justify-center rounded-full bg-signal/10 text-signal">
+                            <Bot className="size-4" />
+                          </div>
+                          <div className="min-w-0 flex-1 space-y-3">
+                            {turn.pending || !turn.result ? (
+                              <div
+                                className="rounded-2xl rounded-tl-md border bg-muted/40 px-4 py-3 text-sm text-muted-foreground"
+                                aria-busy="true"
+                              >
+                                <span className="inline-flex items-center gap-2">
+                                  <Loader2 className="size-4 animate-spin" /> Thinking…
+                                </span>
+                              </div>
+                            ) : (
+                              <AssistantMessage
+                                result={turn.result}
+                                busy={busy}
+                                onRetry={() => void submit(turn.question, { retryTurnId: turn.id })}
+                                onConfirmApply={(jobId) => {
+                                  // Show job title in chat — never the UUID. Identity travels via
+                                  // conversationContext in the live store; applyJobId is the real id.
+                                  const title =
+                                    (turn.result?.ok && turn.result.pendingApply?.title) ||
+                                    jobTitleById.get(jobId) ||
+                                    "this job";
+                                  void runAssistantLiveAsk(userId, {
+                                    question: `Please confirm apply to ${title}`.slice(0, 200),
+                                    applyJobId: jobId,
+                                    confirmApply: true,
+                                    ask: async ({ data }) =>
+                                      ask({ data: data as AskJobAssistantInput }),
+                                  });
+                                }}
+                              />
+                            )}
+                          </div>
                         </div>
                       )}
                     </div>
-                  </div>
-                  {editingTurnId !== turn.id && (
-                    <div className="flex items-start gap-3">
-                      <div className="mt-1 flex size-8 shrink-0 items-center justify-center rounded-full bg-signal/10 text-signal">
-                        <Bot className="size-4" />
-                      </div>
-                      <div className="min-w-0 flex-1 space-y-3">
-                        {turn.pending || !turn.result ? (
-                          <div
-                            className="rounded-2xl rounded-tl-md border bg-muted/40 px-4 py-3 text-sm text-muted-foreground"
-                            aria-busy="true"
-                          >
-                            <span className="inline-flex items-center gap-2">
-                              <Loader2 className="size-4 animate-spin" /> Thinking…
-                            </span>
-                          </div>
-                        ) : (
-                          <AssistantMessage
-                            result={turn.result}
-                            busy={busy}
-                            onRetry={() => void submit(turn.question, { retryTurnId: turn.id })}
-                            onConfirmApply={(jobId) => {
-                              // Show job title in chat — never the UUID. Identity travels via
-                              // conversationContext in the live store; applyJobId is the real id.
-                              const title =
-                                (turn.result?.ok && turn.result.pendingApply?.title) ||
-                                jobTitleById.get(jobId) ||
-                                "this job";
-                              void runAssistantLiveAsk(userId, {
-                                question: `Please confirm apply to ${title}`.slice(0, 200),
-                                applyJobId: jobId,
-                                confirmApply: true,
-                                ask: async ({ data }) =>
-                                  ask({ data: data as AskJobAssistantInput }),
-                              });
-                            }}
-                          />
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-              })
+                  );
+                })}
+              </div>
             )}
             <div ref={bottomRef} />
           </div>
 
-          <div className="border-t bg-background/80 px-4 py-3 sm:px-6">
+          <div className="shrink-0 border-t border-border/80 bg-[#f8faf9] px-4 py-3 sm:px-6">
             {formError && (
-              <p className="mb-2 text-sm text-destructive" role="alert">
+              <p className="mb-2 text-center text-sm text-destructive" role="alert">
                 {formError}
               </p>
             )}
             {(attachment || attachStatus) && (
-              <div className="mb-2 flex flex-wrap items-center gap-2">
+              <div className="mx-auto mb-2 flex max-w-3xl flex-wrap items-center gap-2">
                 {attachment && (
                   <span className="inline-flex max-w-full items-center gap-1.5 rounded-full border bg-muted/40 px-2.5 py-1 text-xs text-foreground">
                     <Paperclip className="size-3 shrink-0 text-muted-foreground" />
@@ -533,8 +609,23 @@ function SeekerAssistantPage() {
                 )}
               </div>
             )}
+            {turns.length > 0 ? (
+              <div className="mx-auto mb-2.5 flex max-w-3xl gap-1.5 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                {STARTERS.map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void submit(s)}
+                    className="shrink-0 rounded-full border border-border bg-white px-3 py-1.5 text-[11px] font-medium text-foreground transition-colors hover:border-signal/40 hover:bg-signal-soft disabled:opacity-50"
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
+            ) : null}
             <form
-              className="flex items-center gap-2"
+              className="mx-auto flex max-w-3xl items-center gap-2 rounded-2xl border border-border bg-white p-1.5 shadow-xs transition-shadow focus-within:border-signal focus-within:ring-2 focus-within:ring-signal/15"
               onSubmit={(e) => {
                 e.preventDefault();
                 void submit(question);
@@ -554,12 +645,12 @@ function SeekerAssistantPage() {
                 type="button"
                 size="icon"
                 variant="outline"
-                className="size-11 shrink-0 rounded-full"
+                className="size-10 shrink-0 rounded-xl border-0 bg-transparent shadow-none hover:bg-muted"
                 aria-label="Attach file"
                 disabled={busy}
                 onClick={() => fileRef.current?.click()}
               >
-                <Paperclip />
+                <Paperclip className="size-4" />
               </Button>
               <Input
                 ref={inputRef}
@@ -568,27 +659,31 @@ function SeekerAssistantPage() {
                 placeholder="Ask anything — jobs, skills, concepts…"
                 disabled={busy}
                 maxLength={1500}
-                className="h-11 flex-1 rounded-full border-border/80 bg-background px-4"
+                className="h-10 flex-1 border-0 bg-transparent px-1 text-sm shadow-none focus-visible:ring-0"
                 aria-label="Follow-up question"
               />
               <Button
                 type="submit"
                 variant="signal"
                 size="icon"
-                className="size-11 shrink-0 rounded-full"
+                className="size-10 shrink-0 rounded-xl"
                 disabled={busy || question.trim().length < 3}
                 aria-label="Send question"
               >
-                {busy ? <Loader2 className="animate-spin" /> : <SendHorizontal />}
+                {busy ? (
+                  <Loader2 className="animate-spin" />
+                ) : (
+                  <SendHorizontal className="size-4" />
+                )}
               </Button>
             </form>
-            <p className="mt-2 text-[11px] text-muted-foreground">
+            <p className="mt-2 text-center text-[11px] text-muted-foreground">
               PDF, DOCX, and images are processed on the server. File contents are not saved in
               history. History is local to this browser only.
             </p>
           </div>
-        </div>
-      </div>
+        </section>
+      </main>
     </div>
   );
 }

@@ -112,17 +112,19 @@ export function patchAssistantLive(partial: Partial<AssistantLiveState>): void {
   emit();
 }
 
-function persistCompleted(
-  userId: string,
-  conversationId: string,
-  turns: LiveChatTurn[],
-  titleSeed?: string,
-) {
+function persistCompleted(userId: string, conversationId: string, turns: LiveChatTurn[]) {
   const completed = turns.filter((t) => t.result && !t.pending);
   if (!completed.length) return;
+
+  // ChatGPT-style titles: lock to the first message (or a manual rename). Never overwrite
+  // with later turns — follow-ups / confirm-apply text must not rename the thread.
+  const existing = readAssistantHistory(userId).conversations.find((c) => c.id === conversationId);
+  const preservedTitle = existing?.title?.replace(/\s+/g, " ").trim();
+  const title = preservedTitle || titleFromQuestion(completed[0]?.question ?? "New conversation");
+
   const conversation = {
     id: conversationId,
-    title: titleFromQuestion(titleSeed ?? completed[0]?.question ?? "New conversation"),
+    title,
     updatedAt: new Date().toISOString(),
     messages: completed.map((t) => ({
       id: t.id,
@@ -494,7 +496,7 @@ export function runAssistantLiveAsk(userId: string, payload: AssistantAskPayload
         formError,
         attachStatus,
       };
-      persistCompleted(userId, conversationId, updatedTurns, trimmed);
+      persistCompleted(userId, conversationId, updatedTurns);
       emit();
     } catch (err) {
       const raw = err instanceof Error ? err.message : "";
@@ -521,7 +523,7 @@ export function runAssistantLiveAsk(userId: string, payload: AssistantAskPayload
         busy: false,
         formError: message,
       };
-      persistCompleted(userId, conversationId, updatedTurns, trimmed);
+      persistCompleted(userId, conversationId, updatedTurns);
       emit();
     } finally {
       inflight = null;
