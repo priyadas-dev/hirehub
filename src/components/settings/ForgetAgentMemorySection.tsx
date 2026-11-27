@@ -5,7 +5,6 @@ import { Brain, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import {
   AlertDialog,
-  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -29,13 +28,22 @@ export function ForgetAgentMemorySection() {
       return result;
     },
     onSuccess: (result) => {
+      // Close dialog first; toast after Radix focus restore so Sonner stays visible.
       setConfirmOpen(false);
-      toast.success("Agent memory cleared", {
-        description: `Removed ${result.deleted.sessions} sessions, ${result.deleted.events} events, ${result.deleted.semantic} facts.`,
-      });
+      window.setTimeout(() => {
+        toast.success("Agent memory cleared", {
+          id: "a4-forget-agent-memory",
+          duration: 6000,
+          description: `Removed ${result.deleted.sessions} sessions, ${result.deleted.events} events, ${result.deleted.semantic} facts.`,
+        });
+      }, 50);
     },
     onError: (e: Error) => {
-      toast.error("Could not clear memory", { description: e.message });
+      toast.error("Could not clear memory", {
+        id: "a4-forget-agent-memory-error",
+        duration: 6000,
+        description: e.message,
+      });
     },
   });
 
@@ -69,15 +77,15 @@ export function ForgetAgentMemorySection() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={mutation.isPending}>Cancel</AlertDialogCancel>
-            <AlertDialogAction
+            {/* Prefer Button over AlertDialogAction — avoids auto-close racing the mutation toast. */}
+            <Button
+              type="button"
+              variant="default"
               disabled={mutation.isPending}
-              onClick={(e) => {
-                e.preventDefault();
-                mutation.mutate();
-              }}
+              onClick={() => mutation.mutate()}
             >
               {mutation.isPending ? "Clearing…" : "Yes, forget me"}
-            </AlertDialogAction>
+            </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

@@ -218,6 +218,73 @@ describe("Discovery agent empty / clarify / success paths", () => {
     expect(result.inventedJobs).toBe(false);
   });
 
+  it("clarifies vague Find jobs for me even when a broad job pool exists", async () => {
+    const result = await runDiscoveryAgent(
+      { question: "Find jobs for me" },
+      {
+        listLiveJobs: async () => ({
+          ok: true,
+          jobs: [
+            {
+              id: "job-a",
+              title: "HR Associate",
+              description: "hire people",
+              location: "sylhet",
+              company_name: "ACM",
+              job_type: "full_time",
+              status: "approved",
+            },
+          ],
+        }),
+        retrieveCorpus: async () => ({ ok: true, matches: [] }),
+      },
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.code).toBe("needs_clarification");
+  });
+
+  it("broadens past empty location using extracted skills (React + Dhaka)", async () => {
+    const calls: string[] = [];
+    const reactJob = {
+      id: "job-react",
+      title: "Frontend React",
+      description: "React TypeScript",
+      location: "sylhet",
+      company_name: "Manor",
+      job_type: "full_time",
+      status: "approved",
+    };
+    const result = await runDiscoveryAgent(
+      { question: "I want React frontend jobs in Dhaka" },
+      {
+        listLiveJobs: async (q) => {
+          calls.push(q);
+          // First NL+location call returns empty; skills-only returns React job.
+          if (/\bdhaka\b/i.test(q)) return { ok: true, jobs: [] };
+          return { ok: true, jobs: [reactJob] };
+        },
+        retrieveCorpus: async () => ({
+          ok: true,
+          matches: [
+            {
+              corpus_key: "c1",
+              title: "React",
+              company: "x",
+              description: "frontend",
+              similarity: 0.9,
+            },
+          ],
+        }),
+      },
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.liveJobs.map((j) => j.id)).toContain("job-react");
+    expect(result.answerNote ?? "").toMatch(/Dhaka|broadened/i);
+    expect(calls.some((c) => /\bReact\b/i.test(c) && !/\bdhaka\b/i.test(c))).toBe(true);
+  });
+
   it("returns live jobs for high-confidence Discovery", async () => {
     const result = await runDiscoveryAgent(
       { question: "Find React developer jobs in Dhaka" },

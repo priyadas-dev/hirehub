@@ -2443,7 +2443,33 @@ function RecruiterAgentPage() {
             </div>
           )}
 
-          <div className="shrink-0 border-t border-border/80 bg-[#f8faf9] px-4 py-3 sm:px-6">
+              <div className="shrink-0 border-t border-border/80 bg-[#f8faf9] px-4 py-3 sm:px-6">
+            {!jobs.isLoading && !jobs.data?.length ? (
+              <div
+                className="mx-auto mb-3 max-w-3xl rounded-xl border border-amber-200/80 bg-amber-50 px-3.5 py-3 text-sm text-amber-950"
+                role="status"
+              >
+                <p className="font-medium">Post a job to unlock the Recruiter Agent</p>
+                <p className="mt-1 text-xs text-amber-900/80">
+                  Shortlist, outreach drafts, and memory demos need at least one owned job listing
+                  (pending or approved). Create a company if needed, then post a role.
+                </p>
+                <div className="mt-2.5 flex flex-wrap gap-2">
+                  <Link
+                    to="/recruiter/jobs/new"
+                    className="inline-flex h-8 items-center rounded-lg bg-signal px-3 text-xs font-semibold text-white hover:opacity-90"
+                  >
+                    Post a job
+                  </Link>
+                  <Link
+                    to="/recruiter/company"
+                    className="inline-flex h-8 items-center rounded-lg border border-amber-300 bg-white px-3 text-xs font-medium text-amber-950 hover:bg-amber-50"
+                  >
+                    Company profile
+                  </Link>
+                </div>
+              </div>
+            ) : null}
             {turns.length > 0 ? (
               <div className="mb-2.5 flex gap-1.5 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 {STARTERS.map((s) => (
