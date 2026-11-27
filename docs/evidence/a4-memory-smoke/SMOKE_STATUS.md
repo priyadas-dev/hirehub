@@ -25,4 +25,5 @@
 
 ## Screenshots
 
-`01`–`05` seeker · `07` recruiter agent · `08` recruiter jobs
+`01`–`05` seeker · `07` recruiter agent · `08` recruiter jobs · `09` live demo Session2 recall (2026-11-27, “Matches your React skills”)  
+Figure 1 in the submission report uses `02-session2-recall.png` (same live capture).
