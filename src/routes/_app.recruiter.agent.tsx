@@ -2512,8 +2512,8 @@ function RecruiterAgentPage() {
               </Button>
             </form>
             <p className="mt-2 text-center text-[11px] text-muted-foreground">
-              Actions run via Supervisor. Emails &amp; updates require confirmation. History is local
-              to this browser only.
+              Actions run via Supervisor. Emails &amp; updates require confirmation. Thread list is
+              local to this browser; agent memory stays on the server until Forget me.
             </p>
           </div>
         </section>

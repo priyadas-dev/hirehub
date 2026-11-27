@@ -12,7 +12,7 @@ HireHub’s Assessment 4 is a finished depth build on one advanced layer: durabl
 |------|-----|
 | Live app | https://hirehub-dev.vercel.app/ |
 | Public repo | https://github.com/sjinnovation/hirehub |
-| Release tag | [`assessment-4`](https://github.com/sjinnovation/hirehub/tree/assessment-4) · commit `f897114` |
+| Release tag | [`assessment-4`](https://github.com/sjinnovation/hirehub/tree/assessment-4) |
 | Demo video (3–5 min) | [Google Drive — internship demos](https://drive.google.com/drive/folders/1-YBMpo5wnSHDzEU4dHKXrC3ithZVy3Sn?usp=sharing) — A4 Memory: Session1 → Session2 → forget-me → cold start |
 | Decision Log | [`ASSESSMENT_4_DECISION_LOG.md`](./ASSESSMENT_4_DECISION_LOG.md) |
 | Live evidence | [`ASSESSMENT_4_LIVE_UI_FULFILLMENT.md`](./ASSESSMENT_4_LIVE_UI_FULFILLMENT.md) · [`docs/evidence/a4-memory-smoke/`](./evidence/a4-memory-smoke/) |

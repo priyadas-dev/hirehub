@@ -679,7 +679,8 @@ function SeekerAssistantPage() {
             </form>
             <p className="mt-2 text-center text-[11px] text-muted-foreground">
               PDF, DOCX, and images are processed on the server. File contents are not saved in
-              history. History is local to this browser only.
+              chat threads. Thread list is local to this browser; learned preferences stay in
+              server memory until you use Forget me.
             </p>
           </div>
         </section>
