@@ -1245,7 +1245,7 @@ function finalizeDiscovery(
   const corpusCitations = toCorpusCitations(discovery.corpusMatches as CorpusMatch[]);
   const answer =
     liveCitations.length > 0
-      ? liveJobsFoundAnswer(liveCitations.length)
+      ? (discovery.answerNote?.trim() || liveJobsFoundAnswer(liveCitations.length))
       : discovery.corpusMatches.length > 0
         ? "I found related synthetic career context (not real vacancies). Browse Jobs for live openings, or ask with a clearer role or skill."
         : noLiveJobsMatchAnswer();

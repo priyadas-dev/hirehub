@@ -8,6 +8,7 @@ import {
   assessDiscoveryConfidence,
   decideDiscoveryConfidence,
   isVagueJobSearchQuery,
+  CLARIFY_JOB_SEARCH_MESSAGE,
   redactPii,
 } from "@/lib/ai/guardrails";
 import type { CorpusMatch } from "@/lib/ai/corpus";
@@ -45,6 +46,8 @@ export type DiscoveryAgentResult =
       liveJobs: Array<LiveApprovedJob | SkillMatchedJob>;
       corpusMatches: CorpusMatch[];
       inventedJobs: false;
+      /** Optional seeker-facing note (e.g. location broadened). */
+      answerNote?: string;
       fairness: { action: "pass" | "neutralize"; reasons: string[] };
       piiRedacted: boolean;
       confidence: { score: number; refused: false };
@@ -105,9 +108,25 @@ export async function runDiscoveryAgent(
   );
 
   const hints = (input.memory?.searchHints ?? "").trim();
+  const intentNeedsJobs = classified.searchJobs || classified.useSkillRanking;
+  const queryTooVague = isVagueJobSearchQuery(questionUsed);
+  const parsedAsk = parseLiveJobQuery(questionUsed);
+
+  // Vague “find jobs” with no skills/memory/hints → clarify before dumping a random job pool.
+  if (intentNeedsJobs && queryTooVague && skills.length === 0 && !hints) {
+    return {
+      ok: false,
+      code: "needs_clarification",
+      message: CLARIFY_JOB_SEARCH_MESSAGE,
+      inventedJobs: false,
+      piiRedacted: pii.redacted,
+      confidence: { score: 0.2, refused: true, action: "clarify" },
+    };
+  }
+
   // Skill searches must put skills first so live ILIKE can find React/SQL/etc.
   const questionForSearch = (
-    classified.useSkillRanking && skills.length
+    (classified.useSkillRanking || skills.length > 0) && skills.length
       ? `${skills.join(" ")} ${questionUsed} ${hints}`
       : hints
         ? `${questionUsed} ${hints}`
@@ -119,6 +138,8 @@ export async function runDiscoveryAgent(
   let liveJobs: Array<LiveApprovedJob | SkillMatchedJob> = [];
   let corpusMatches: CorpusMatch[] = [];
   let ragAvailable = true;
+  let answerNote: string | undefined;
+  let broadenedPastLocation = false;
 
   if (classified.searchJobs || classified.useSkillRanking) {
     let live = await deps.listLiveJobs(questionForSearch, {
@@ -135,13 +156,18 @@ export async function runDiscoveryAgent(
       };
     }
 
-    // Retry with skills-only query when the natural-language ask returned an empty pool.
-    if (classified.useSkillRanking && live.jobs.length === 0 && skills.length > 0) {
+    // Retry with skills-only when NL (+ location) returned an empty pool.
+    // Not gated on useSkillRanking — "React frontend jobs in Dhaka" often has skills
+    // but classifyAssistantIntent leaves useSkillRanking false.
+    if (live.jobs.length === 0 && skills.length > 0) {
       const skillOnly = await deps.listLiveJobs(skills.join(" "), {
         skillHint: skills[0] ?? null,
         skillTerms: skills,
       });
-      if (skillOnly.ok) live = skillOnly;
+      if (skillOnly.ok && skillOnly.jobs.length > 0) {
+        live = skillOnly;
+        if (parsedAsk.locations.length > 0) broadenedPastLocation = true;
+      }
     }
 
     // Empty live hit: use corpus RAG only to expand search terms (never as applyable cards).
@@ -158,6 +184,17 @@ export async function runDiscoveryAgent(
             skillTerms: skills,
           });
           if (retry.ok && retry.jobs.length > 0) live = retry;
+          // Still empty after expand + location: try skills + expand terms without location.
+          if (live.jobs.length === 0 && skills.length > 0) {
+            const broad = await deps.listLiveJobs(`${skills.join(" ")} ${extra.join(" ")}`.trim(), {
+              skillHint: skills[0] ?? null,
+              skillTerms: skills,
+            });
+            if (broad.ok && broad.jobs.length > 0) {
+              live = broad;
+              if (parsedAsk.locations.length > 0) broadenedPastLocation = true;
+            }
+          }
         }
       } else if (!corpusExpand.ok) {
         ragAvailable = !corpusExpand.unavailable;
@@ -168,22 +205,32 @@ export async function runDiscoveryAgent(
     // Never dump unrelated "recent approved" cards for a software/role ask.
     const roleHeavy = isRoleHeavyLiveQuery(parseLiveJobQuery(questionUsed));
     const roleSafePool = filterLiveJobsByRoleRelevance(live.jobs, questionUsed);
+    const rankWithSkills = classified.useSkillRanking || skills.length > 0;
+    // After a location broaden, do not re-apply Dhaka/etc. filters that emptied the first pool.
+    const poolBase = broadenedPastLocation
+      ? live.jobs
+      : roleHeavy
+        ? roleSafePool
+        : live.jobs;
 
-    if (classified.useSkillRanking && skills.length > 0) {
-      const pool = roleHeavy ? roleSafePool : live.jobs;
-      const strict = rankJobsBySkills(pool, skills, { limit: 8, requireSkillHit: true });
+    if (rankWithSkills && skills.length > 0) {
+      const strict = rankJobsBySkills(poolBase, skills, { limit: 8, requireSkillHit: true });
       if (strict.length > 0) {
         liveJobs = strict;
-      } else if (!roleHeavy) {
-        // Soft skill rank only when the ask is skill-led (not "software engineer jobs").
-        const soft = rankJobsBySkills(pool, skills, { limit: 8, requireSkillHit: false });
+      } else if (!roleHeavy || broadenedPastLocation) {
+        // Soft skill rank when skill-led, or after we intentionally dropped location.
+        const soft = rankJobsBySkills(poolBase, skills, { limit: 8, requireSkillHit: false });
         liveJobs = soft.filter((j) => j.matchedSkills.length > 0).slice(0, 8);
       } else {
-        liveJobs = pool.slice(0, 8);
+        liveJobs = poolBase.slice(0, 8);
       }
     } else {
       // Industry / title searches must not be emptied by leftover session skills.
-      liveJobs = (roleHeavy ? roleSafePool : live.jobs).slice(0, 8);
+      liveJobs = poolBase.slice(0, 8);
+    }
+
+    if (broadenedPastLocation && liveJobs.length > 0 && parsedAsk.locations[0]) {
+      answerNote = `No approved jobs matched ${parsedAsk.locations[0]} with those filters, so I broadened the search. Here are the closest HireHub matches — open a card to view or apply.`;
     }
   }
 
@@ -198,8 +245,6 @@ export async function runDiscoveryAgent(
 
   // Never fabricate rows. Empty job-seeking turns refuse or clarify — they must
   // not look like confident recommendations (heuristic score, not calibrated).
-  const intentNeedsJobs = classified.searchJobs || classified.useSkillRanking;
-  const queryTooVague = isVagueJobSearchQuery(questionUsed);
   const assessment = assessDiscoveryConfidence({
     liveJobCount: liveJobs.length,
     corpusCount: corpusMatches.length,
@@ -212,17 +257,12 @@ export async function runDiscoveryAgent(
     queryTooVague,
   });
 
-  if (
-    intentNeedsJobs &&
-    liveJobs.length === 0 &&
-    corpusMatches.length === 0 &&
-    decision.action !== "allow"
-  ) {
+  // Job search with 0 live cards: do not fall through to “synthetic career context”.
+  if (intentNeedsJobs && liveJobs.length === 0) {
     const emptyMessage =
       decision.action === "clarify"
         ? decision.message
-        : // Specific empty asks (Atlantis / unmatched skills) get a clear no-match, not the vague grounding line.
-          noLiveJobsMatchAnswer();
+        : noLiveJobsMatchAnswer({ location: parsedAsk.locations[0] ?? null });
     return {
       ok: false,
       code: decision.action === "clarify" ? "needs_clarification" : "low_confidence",
@@ -244,6 +284,7 @@ export async function runDiscoveryAgent(
     liveJobs,
     corpusMatches,
     inventedJobs: false,
+    answerNote,
     fairness: {
       action: fairness.flagged ? "neutralize" : "pass",
       reasons: fairness.flagged ? fairness.reasons : [],
