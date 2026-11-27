@@ -54,6 +54,8 @@ AI / RAG helpers:
 npm run rag:classify
 npm run rag:eval -- --provider=gte   # also writes clean-vs-noisy.md — does not reseed
 npm run rag:embed -- --provider=gte --limit=200   # smoke; bulk needs --confirm-gte-bulk
+npm run a4:memory-eval               # Assessment 4 memory before/after metrics
+npm run a4:recall-trace              # Assessment 4 session1→session2 recall side-by-side
 ```
 
 Deploy checklist: [`docs/deploy-assessment-2.md`](docs/deploy-assessment-2.md).
@@ -71,6 +73,30 @@ Deploy checklist: [`docs/deploy-assessment-2.md`](docs/deploy-assessment-2.md).
 Synthetic `job_corpus` rows are **never** shown as real vacancies. Full detail: [`docs/ai-job-assistant.md`](docs/ai-job-assistant.md).
 
 Manual verification checklist: [`docs/assessment-2-verification.md`](docs/assessment-2-verification.md).
+
+## Assessment 4 — Memory Layer (before / after)
+
+HireHub remembers across sessions via durable **Path B** (`agent_sessions`) plus **episodic** (`agent_memory_events`) and **semantic** (`agent_semantic_memories` + `match_agent_semantic_memories`, gte-small 384-d). Memory is written only through the Supervisor (never the browser). Settings → **Forget my agent memory** clears all three layers for the signed-in user.
+
+**Capstone proof — measured before/after** (reproducible offline harness; last run reflected below):
+
+| Metric | Before (cold / raw) | After (warm / compact) |
+|--------|--------------------:|-----------------------:|
+| Clarifying signals | 2 | 1 |
+| Personalization lift | — | **50%** fewer clarify signals |
+| Context tokens (session blob) | 412 | 251 (**39.1%↓**) |
+| Fact fidelity after compact | — | **pass** (4/4 key facts kept) |
+| Ideal-term overlap (role/skills/location) | 0.00 | 0.24 |
+
+Reproduce:
+
+```sh
+npm run a4:memory-eval      # writes scripts/rag/out/a4-memory-eval.json + prints this table
+npm run a4:recall-trace     # Session1 → Session2 cold vs warm side-by-side JSON
+npm test -- src/test/a4-memory-layer.test.ts
+```
+
+Decision Log: [`docs/ASSESSMENT_4_DECISION_LOG.md`](docs/ASSESSMENT_4_DECISION_LOG.md). Related notes: [`docs/ASSESSMENT_4_PHASE3_COMPACTION.md`](docs/ASSESSMENT_4_PHASE3_COMPACTION.md), [`docs/ASSESSMENT_4_PHASE4_GOVERNANCE.md`](docs/ASSESSMENT_4_PHASE4_GOVERNANCE.md).
 
 ## RAG (measured)
 
